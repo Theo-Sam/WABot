@@ -1,0 +1,33 @@
+services:
+  - type: worker
+    name: wabot
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: SESSION_ID
+        sync: false
+      - key: SQLITE_PATH
+        value: ./data/bot.db
+      - key: BOT_NAME
+        value: Desam Tech Bot
+      - key: PREFIX
+        value: .
+      - key: MODE
+        value: public
+      - key: TIMEZONE
+        value: Africa/Accra
+      - key: AUTO_READ
+        value: off
+      - key: AUTO_STATUS_VIEW
+        value: off
+      - key: ANTI_CALL
+        value: on
+      - key: CHATBOT
+        value: off
+      - key: DEVICE_MODE
+        value: Android

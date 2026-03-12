@@ -1,0 +1,290 @@
+const config = require("../config");
+const { getGroupSettings, updateGroupSetting } = require("../lib/database");
+
+const commands = [
+  {
+    name: ["antiviewonce", "antivo"],
+    category: "settings",
+    desc: "Auto-repost view once media",
+    group: true,
+    admin: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        updateGroupSetting(m.chat, "antiviewonce", 1);
+        await m.reply("✅ Anti-ViewOnce enabled! View once messages will be reposted.");
+      } else if (text === "off") {
+        updateGroupSetting(m.chat, "antiviewonce", 0);
+        await m.reply("✅ Anti-ViewOnce disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}antiviewonce on/off`);
+      }
+    },
+  },
+  {
+    name: ["antidelete", "antidel"],
+    category: "settings",
+    desc: "Repost deleted messages",
+    group: true,
+    admin: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        updateGroupSetting(m.chat, "antidelete", 1);
+        await m.reply("✅ Anti-Delete enabled! Deleted messages will be reposted.");
+      } else if (text === "off") {
+        updateGroupSetting(m.chat, "antidelete", 0);
+        await m.reply("✅ Anti-Delete disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}antidelete on/off`);
+      }
+    },
+  },
+  {
+    name: ["antispam"],
+    category: "settings",
+    desc: "Toggle anti-spam protection",
+    group: true,
+    admin: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        updateGroupSetting(m.chat, "antispam", 1);
+        await m.reply("✅ Anti-Spam enabled!");
+      } else if (text === "off") {
+        updateGroupSetting(m.chat, "antispam", 0);
+        await m.reply("✅ Anti-Spam disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}antispam on/off`);
+      }
+    },
+  },
+  {
+    name: ["setautoread", "autoread"],
+    category: "settings",
+    desc: "Toggle auto-read messages",
+    owner: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        config.AUTO_READ = "on";
+        await m.reply("✅ Auto-read enabled!");
+      } else if (text === "off") {
+        config.AUTO_READ = "off";
+        await m.reply("✅ Auto-read disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}autoread on/off\nCurrent: ${config.AUTO_READ}`);
+      }
+    },
+  },
+  {
+    name: ["setautostatus", "autostatus"],
+    category: "settings",
+    desc: "Toggle auto view status",
+    owner: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        config.AUTO_STATUS_VIEW = "on";
+        await m.reply("✅ Auto-status view enabled!");
+      } else if (text === "off") {
+        config.AUTO_STATUS_VIEW = "off";
+        await m.reply("✅ Auto-status view disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}autostatus on/off\nCurrent: ${config.AUTO_STATUS_VIEW}`);
+      }
+    },
+  },
+  {
+    name: ["setanticall", "anticall"],
+    category: "settings",
+    desc: "Toggle anti-call",
+    owner: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        config.ANTI_CALL = "on";
+        await m.reply("✅ Anti-call enabled! All calls will be rejected.");
+      } else if (text === "off") {
+        config.ANTI_CALL = "off";
+        await m.reply("✅ Anti-call disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}anticall on/off\nCurrent: ${config.ANTI_CALL}`);
+      }
+    },
+  },
+  {
+    name: ["setautobio", "autobio"],
+    category: "settings",
+    desc: "Toggle auto bio update",
+    owner: true,
+    handler: async (sock, m, { text }) => {
+      if (text === "on") {
+        config.AUTO_BIO = "on";
+        await m.reply("✅ Auto-bio enabled!");
+      } else if (text === "off") {
+        config.AUTO_BIO = "off";
+        await m.reply("✅ Auto-bio disabled!");
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}autobio on/off\nCurrent: ${config.AUTO_BIO}`);
+      }
+    },
+  },
+  {
+    name: ["block"],
+    category: "settings",
+    desc: "Block a user",
+    owner: true,
+    handler: async (sock, m) => {
+      const target = m.mentions[0] || m.quoted?.sender;
+      if (!target) return m.reply("Tag or reply to someone to block.");
+      await sock.updateBlockStatus(target, "block").catch(() => {});
+      await m.reply(`🚫 Blocked @${target.split("@")[0]}`, { mentions: [target] });
+    },
+  },
+  {
+    name: ["unblock"],
+    category: "settings",
+    desc: "Unblock a user",
+    owner: true,
+    handler: async (sock, m) => {
+      const target = m.mentions[0] || m.quoted?.sender;
+      if (!target) return m.reply("Tag or reply to someone to unblock.");
+      await sock.updateBlockStatus(target, "unblock").catch(() => {});
+      await m.reply(`✅ Unblocked @${target.split("@")[0]}`, { mentions: [target] });
+    },
+  },
+  {
+    name: ["disappear", "ephemeral"],
+    category: "settings",
+    desc: "Set disappearing messages",
+    group: true,
+    admin: true,
+    botAdmin: true,
+    handler: async (sock, m, { text }) => {
+      const durations = { off: 0, "24h": 86400, "7d": 604800, "90d": 7776000 };
+      if (!text || !durations.hasOwnProperty(text)) {
+        return m.reply(`Usage: ${config.PREFIX}disappear off/24h/7d/90d`);
+      }
+      await sock.sendMessage(m.chat, { disappearingMessagesInChat: durations[text] || false });
+      await m.reply(`✅ Disappearing messages ${text === "off" ? "disabled" : `set to ${text}`}!`);
+    },
+  },
+  {
+    name: ["setpp", "setprofilepic", "setbotpp"],
+    category: "settings",
+    desc: "Set bot profile picture",
+    owner: true,
+    handler: async (sock, m) => {
+      const media = m.isImage ? m : m.quoted?.isImage ? m.quoted : null;
+      if (!media) return m.reply(`Reply to an image with ${config.PREFIX}setpp`);
+      m.react("⏳");
+      try {
+        const buffer = await media.download();
+        await sock.updateProfilePicture(sock.user.id, buffer);
+        await m.reply("✅ Profile picture updated!");
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to update profile picture.");
+      }
+    },
+  },
+  {
+    name: ["setgrouppp", "setgpp"],
+    category: "settings",
+    desc: "Set group profile picture",
+    group: true,
+    admin: true,
+    botAdmin: true,
+    handler: async (sock, m) => {
+      const media = m.isImage ? m : m.quoted?.isImage ? m.quoted : null;
+      if (!media) return m.reply(`Reply to an image with ${config.PREFIX}setgrouppp`);
+      m.react("⏳");
+      try {
+        const buffer = await media.download();
+        await sock.updateProfilePicture(m.chat, buffer);
+        await m.reply("✅ Group picture updated!");
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to update group picture.");
+      }
+    },
+  },
+  {
+    name: ["setgroupname", "setgname", "setsubject"],
+    category: "settings",
+    desc: "Set group name",
+    group: true,
+    admin: true,
+    botAdmin: true,
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}setgroupname <new name>`);
+      await sock.groupUpdateSubject(m.chat, text);
+      await m.reply(`✅ Group name changed to: *${text}*`);
+    },
+  },
+  {
+    name: ["setgroupdesc", "setgdesc", "setdesc"],
+    category: "settings",
+    desc: "Set group description",
+    group: true,
+    admin: true,
+    botAdmin: true,
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}setgroupdesc <description>`);
+      await sock.groupUpdateDescription(m.chat, text);
+      await m.reply("✅ Group description updated!");
+    },
+  },
+  {
+    name: ["getpp", "profilepic", "pp"],
+    category: "settings",
+    desc: "Get profile picture",
+    handler: async (sock, m) => {
+      const target = m.mentions[0] || m.quoted?.sender || m.sender;
+      m.react("⏳");
+      try {
+        const ppUrl = await sock.profilePictureUrl(target, "image");
+        const buffer = await require("../lib/helpers").fetchBuffer(ppUrl);
+        await sock.sendMessage(m.chat, { image: buffer, caption: `👤 Profile picture of @${target.split("@")[0]}`, mentions: [target] });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Could not get profile picture. It may be hidden.");
+      }
+    },
+  },
+  {
+    name: ["revoke", "resetlink"],
+    category: "settings",
+    desc: "Reset group invite link",
+    group: true,
+    admin: true,
+    botAdmin: true,
+    handler: async (sock, m) => {
+      await sock.groupRevokeInvite(m.chat);
+      const newCode = await sock.groupInviteCode(m.chat);
+      await m.reply(`✅ Group link reset!\n\nNew link: https://chat.whatsapp.com/${newCode}`);
+    },
+  },
+  {
+    name: ["link", "grouplink", "invite"],
+    category: "settings",
+    desc: "Get group invite link",
+    group: true,
+    admin: true,
+    handler: async (sock, m) => {
+      const code = await sock.groupInviteCode(m.chat);
+      await m.reply(`🔗 *Group Invite Link*\n\nhttps://chat.whatsapp.com/${code}`);
+    },
+  },
+  {
+    name: ["leave", "bye"],
+    category: "settings",
+    desc: "Leave the group",
+    owner: true,
+    group: true,
+    handler: async (sock, m) => {
+      await m.reply("👋 Goodbye!");
+      await sock.groupLeave(m.chat);
+    },
+  },
+];
+
+module.exports = { commands };

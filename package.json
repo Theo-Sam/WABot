@@ -1,0 +1,48 @@
+{
+  "name": "desam-wabot",
+  "version": "2.0.0",
+  "description": "Desam WABot - Multi-Device WhatsApp Bot with 200+ commands",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "doctor": "node scripts/doctor.js",
+    "backup:state": "node scripts/backup-state.js",
+    "restore:state": "node scripts/restore-state.js",
+    "start:24x7": "pm2 start ecosystem.config.cjs --only wabot",
+    "stop:24x7": "pm2 stop wabot && pm2 delete wabot",
+    "status:24x7": "pm2 status wabot",
+    "logs:24x7": "pm2 logs wabot --lines 100",
+    "save:24x7": "pm2 save"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "baileys",
+    "multi-device",
+    "desam"
+  ],
+  "author": "Desam Tech",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "axios": "^1.7.9",
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^16.4.7",
+    "file-type": "16.5.4",
+    "fluent-ffmpeg": "^2.1.3",
+    "form-data": "^4.0.1",
+    "mime-types": "^2.1.35",
+    "moment-timezone": "^0.5.46",
+    "node-cache": "^5.1.2",
+    "pino": "^9.6.0",
+    "pm2": "^5.4.3",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.33.5"
+  }
+}

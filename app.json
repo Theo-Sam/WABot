@@ -1,0 +1,48 @@
+{
+  "name": "desam-wabot",
+  "description": "Desam WhatsApp bot worker process",
+  "repository": "https://github.com/Theo-Sam/WABot",
+  "stack": "heroku-24",
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "env": {
+    "SESSION_ID": {
+      "description": "WhatsApp auth payload (base64 JSON or raw JSON)",
+      "required": true
+    },
+    "SQLITE_PATH": {
+      "value": "./data/bot.db"
+    },
+    "BOT_NAME": {
+      "value": "Desam Tech Bot"
+    },
+    "PREFIX": {
+      "value": "."
+    },
+    "MODE": {
+      "value": "public"
+    },
+    "TIMEZONE": {
+      "value": "Africa/Accra"
+    },
+    "AUTO_READ": {
+      "value": "off"
+    },
+    "AUTO_STATUS_VIEW": {
+      "value": "off"
+    },
+    "ANTI_CALL": {
+      "value": "on"
+    },
+    "CHATBOT": {
+      "value": "off"
+    },
+    "DEVICE_MODE": {
+      "value": "Android"
+    }
+  }
+}
