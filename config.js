@@ -4,7 +4,7 @@ const path = require("path");
 const envPath = path.join(__dirname, ".env");
 if (fs.existsSync(envPath)) {
   console.log(`[DESAM] Found .env at ${envPath}`);
-  require("dotenv").config({ path: envPath });
+  require("dotenv").config({ path: envPath, override: true });
 } else {
   console.log(`[DESAM] No .env found at ${envPath}`);
 }
