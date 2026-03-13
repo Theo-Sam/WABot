@@ -50,14 +50,29 @@ const commands = [
       if (text) {
         const page = parseInt(text);
         if (!isNaN(page)) {
-          const fullList = getFullList(cmds, page);
+          const fullList = getFullList(cmds, page) + CHANNEL_FOOTER;
+          const img = getBotImage();
+          if (img) {
+            return await sendImageOrText(sock, m.chat, img, fullList, m);
+          }
           return m.reply(fullList);
         }
         const catMenu = getCategoryMenu(text.toLowerCase(), cmds);
-        if (catMenu) return m.reply(catMenu);
+        if (catMenu) {
+          const img = getBotImage();
+          if (img) {
+            return await sendImageOrText(sock, m.chat, img, catMenu + CHANNEL_FOOTER, m);
+          }
+          return m.reply(catMenu + CHANNEL_FOOTER);
+        }
       }
-      const fullList = getFullList(cmds, 1);
-      await m.reply(fullList);
+      const fullList = getFullList(cmds, 1) + CHANNEL_FOOTER;
+      const img = getBotImage();
+      if (img) {
+        await sendImageOrText(sock, m.chat, img, fullList, m);
+      } else {
+        await m.reply(fullList);
+      }
     },
   },
   {
@@ -152,7 +167,13 @@ ${CHANNEL_FOOTER}`;
     desc: "Show bot uptime",
     handler: async (sock, m) => {
       m.react("⏱️");
-      await m.reply(`⏱️ *Uptime:* ${runtime()}${CHANNEL_FOOTER}`);
+      const text = `⏱️ *Uptime:* ${runtime()}${CHANNEL_FOOTER}`;
+      const img = getBotImage();
+      if (img) {
+        await sendImageOrText(sock, m.chat, img, text, m);
+      } else {
+        await m.reply(text);
+      }
     },
   },
   {
@@ -161,11 +182,18 @@ ${CHANNEL_FOOTER}`;
     desc: "Show bot owner",
     handler: async (sock, m) => {
       m.react("👑");
-      const ownerJid = config.OWNER_NUMBER.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+      const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, "");
+      const text = `╔══════════════════════════╗\n║    *${config.BOT_NAME}*    ║\n╚══════════════════════════╝\n\n👑 *Bot Owner / Creator*\n\n📞 Number: +${ownerNum}\n🔗 Contact: wa.me/${ownerNum}\n${CHANNEL_FOOTER}`;
+      const img = getBotImage();
+      if (img) {
+        await sendImageOrText(sock, m.chat, img, text, m);
+      } else {
+        await m.reply(text);
+      }
       await sock.sendMessage(m.chat, {
         contacts: {
           displayName: "Desam Tech",
-          contacts: [{ vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:Desam Tech\nTEL;type=CELL;waid=${config.OWNER_NUMBER.replace(/[^0-9]/g, "")}:+${config.OWNER_NUMBER.replace(/[^0-9]/g, "")}\nEND:VCARD` }],
+          contacts: [{ vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:Desam Tech\nTEL;type=CELL;waid=${ownerNum}:+${ownerNum}\nEND:VCARD` }],
         },
       }, { quoted: { key: m.key, message: m.message } });
     },
