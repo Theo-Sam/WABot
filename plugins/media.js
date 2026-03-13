@@ -77,7 +77,10 @@ const commands = [
         const caption = m.quoted.message[mediaType]?.caption || "";
         const ownerNum = config.OWNER_NUMBER?.replace(/[^0-9]/g, "") || "";
         const ownerJid = ownerNum ? `${ownerNum}@s.whatsapp.net` : getSelfJid(sock);
-        if (!ownerJid) return m.reply("❌ Could not determine owner number. Set OWNER_NUMBER or pair the bot first.");
+        if (!ownerJid) {
+          m.react("❌");
+          return m.reply("❌ Could not determine owner number. Set OWNER_NUMBER or pair the bot first.");
+        }
         const fromLabel = m.pushName || m.sender.split("@")[0];
         const fullCaption = `👁️ *View Once from ${fromLabel}*\n${m.isGroup ? `Group: ${m.chat}` : "DM"}\n\n${caption}`;
 
