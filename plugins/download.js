@@ -245,6 +245,7 @@ const commands = [
     desc: "Download Instagram post/reel",
     handler: async (sock, m, { text }) => {
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
+      if (!/instagram\.com|instagr\.am/i.test(text)) return m.reply("❌ Please provide a valid Instagram URL.");
       m.react("⏳");
       try {
         let mediaBuffer = await igDownload(text);
@@ -263,6 +264,7 @@ const commands = [
     desc: "Download Facebook video",
     handler: async (sock, m, { text }) => {
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
+      if (!/facebook\.com|fb\.watch|fb\.com/i.test(text)) return m.reply("❌ Please provide a valid Facebook URL.");
       m.react("⏳");
       try {
         let videoBuffer = await fbDownload(text);
@@ -281,6 +283,7 @@ const commands = [
     desc: "Download Twitter/X video",
     handler: async (sock, m, { text }) => {
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
+      if (!/twitter\.com|x\.com/i.test(text)) return m.reply("❌ Please provide a valid Twitter/X URL.");
       m.react("⏳");
       try {
         let videoBuffer = await twitterDownload(text);
