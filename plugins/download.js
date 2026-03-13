@@ -2,6 +2,7 @@ const config = require("../config");
 const { fetchJson, fetchBuffer, isUrl, tempFile } = require("../lib/helpers");
 const fs = require("fs");
 const axios = require("axios");
+const play = require("play-dl");
 
 const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
@@ -11,6 +12,20 @@ const INVIDIOUS_INSTANCES = [
 ];
 
 async function ytSearch(query) {
+  try {
+    const results = await play.search(query, { limit: 5, source: { youtube: "video" } });
+    if (results.length) {
+      return results.map(v => ({
+        url: v.url,
+        title: v.title || query,
+        thumbnail: v.thumbnails?.[0]?.url || "",
+        duration: v.durationRaw || "",
+        views: v.views?.toLocaleString() || "",
+        author: v.channel?.name || "",
+        videoId: v.id,
+      }));
+    }
+  } catch {}
   for (const inst of INVIDIOUS_INSTANCES) {
     try {
       const data = await fetchJson(`${inst}/api/v1/search?q=${encodeURIComponent(query)}&type=video`, { timeout: 10000 });
@@ -29,6 +44,30 @@ async function ytSearch(query) {
     } catch {}
   }
   return [];
+}
+
+async function ytDownloadAudio(url) {
+  try {
+    const info = await play.video_info(url);
+    const format = info.format.filter(f => f.mimeType?.startsWith("audio/")).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+    if (format?.url) {
+      const res = await axios.get(format.url, { responseType: "arraybuffer", timeout: 60000 });
+      if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+    }
+  } catch {}
+  return null;
+}
+
+async function ytDownloadVideo(url) {
+  try {
+    const info = await play.video_info(url);
+    const format = info.format.filter(f => f.mimeType?.startsWith("video/") && f.hasAudio).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+    if (format?.url) {
+      const res = await axios.get(format.url, { responseType: "arraybuffer", timeout: 60000, maxContentLength: 50 * 1024 * 1024 });
+      if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+    }
+  } catch {}
+  return null;
 }
 
 async function cobaltDownload(url, audioOnly = false) {
@@ -63,7 +102,8 @@ const commands = [
         const results = await ytSearch(text);
         if (!results.length) return m.reply("❌ No results found. Try a different search term.");
         const { url: videoUrl, title } = results[0];
-        const audioBuffer = await cobaltDownload(videoUrl, true);
+        let audioBuffer = await ytDownloadAudio(videoUrl);
+        if (!audioBuffer) audioBuffer = await cobaltDownload(videoUrl, true);
         if (!audioBuffer) {
           let msg = `🎵 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`;
           return m.reply(msg);
@@ -97,7 +137,8 @@ const commands = [
           videoUrl = results[0].url;
           title = results[0].title;
         }
-        const videoBuffer = await cobaltDownload(videoUrl, false);
+        let videoBuffer = await ytDownloadVideo(videoUrl);
+        if (!videoBuffer) videoBuffer = await cobaltDownload(videoUrl, false);
         if (!videoBuffer) {
           return m.reply(`🎬 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`);
         }
@@ -117,7 +158,8 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ytmp3 <YouTube URL>`);
       m.react("⏳");
       try {
-        const audioBuffer = await cobaltDownload(text, true);
+        let audioBuffer = await ytDownloadAudio(text);
+        if (!audioBuffer) audioBuffer = await cobaltDownload(text, true);
         if (!audioBuffer) return m.reply("⏳ Audio download failed. The download servers may be busy.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -283,19 +325,35 @@ const commands = [
       m.react("⏳");
       try {
         let imgBuffer = null;
+        let imgSource = "Pinterest";
         try {
-          const searchUrl = `https://www.pinterest.com/resource/BaseSearchResource/get/?source_url=/search/pins/?q=${encodeURIComponent(text)}&data=${encodeURIComponent(JSON.stringify({ options: { query: text, scope: "pins" } }))}`;
-          imgBuffer = await fetchBuffer(`https://source.unsplash.com/random/1080x1080/?${encodeURIComponent(text)}`);
+          const pinterestUrl = `https://www.pinterest.com/resource/BaseSearchResource/get/?source_url=${encodeURIComponent("/search/pins/?q=" + text)}&data=${encodeURIComponent(JSON.stringify({ options: { query: text, scope: "pins", page_size: 10 }, context: {} }))}`;
+          const res = await axios.get(pinterestUrl, {
+            timeout: 10000,
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "Accept": "application/json",
+            },
+          });
+          const results = res.data?.resource_response?.data?.results || [];
+          const images = results.filter(r => r.images?.orig?.url).map(r => r.images.orig.url);
+          if (images.length) {
+            const randomImg = images[Math.floor(Math.random() * Math.min(images.length, 10))];
+            imgBuffer = await fetchBuffer(randomImg);
+          }
         } catch {}
         if (!imgBuffer || imgBuffer.length < 1000) {
-          imgBuffer = await fetchBuffer(`https://image.pollinations.ai/prompt/${encodeURIComponent("aesthetic pinterest style photo of " + text)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`).catch(() => null);
+          try {
+            imgBuffer = await fetchBuffer(`https://source.unsplash.com/random/1080x1080/?${encodeURIComponent(text)}`);
+            imgSource = "Unsplash";
+          } catch {}
         }
-        if (!imgBuffer) return m.reply("❌ No images found.");
-        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `📌 Pinterest: ${text}\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        if (!imgBuffer || imgBuffer.length < 1000) return m.reply("❌ No images found for that query.");
+        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `📌 *${text}* (via ${imgSource})\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to search Pinterest.");
+        await m.reply("❌ Failed to search images.");
       }
     },
   },

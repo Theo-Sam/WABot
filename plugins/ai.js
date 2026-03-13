@@ -2,11 +2,14 @@ const config = require("../config");
 const { fetchJson, fetchBuffer } = require("../lib/helpers");
 const axios = require("axios");
 
-async function pollinate(prompt, model) {
-  const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}${model ? "?model=" + model : ""}`;
-  const res = await axios.get(url, { timeout: 60000, responseType: "text" });
-  if (!res.data || typeof res.data !== "string" || res.data.length < 2) throw new Error("empty");
-  return res.data;
+async function pollinate(prompt, model = "openai") {
+  const res = await axios.post("https://text.pollinations.ai/openai", {
+    model,
+    messages: [{ role: "user", content: prompt }],
+  }, { timeout: 60000, headers: { "Content-Type": "application/json" } });
+  const answer = res.data?.choices?.[0]?.message?.content;
+  if (!answer || answer.length < 2) throw new Error("empty");
+  return answer;
 }
 
 const commands = [
@@ -244,7 +247,8 @@ const commands = [
         form.append("image", buffer, { filename: "image.png", contentType: "image/png" });
         let resultBuffer;
         try {
-          const rbgKey = process.env.REMOVEBG_API_KEY || "SU6Mu47dFw8RPyZYK6FFgnpA";
+          const rbgKey = process.env.REMOVEBG_API_KEY;
+          if (!rbgKey) throw new Error("No REMOVEBG_API_KEY configured");
           const res = await axios.post("https://api.remove.bg/v1.0/removebg", form, {
             headers: { ...form.getHeaders(), "X-Api-Key": rbgKey },
             responseType: "arraybuffer",
@@ -299,7 +303,9 @@ const commands = [
         const FormData = require("form-data");
         const form = new FormData();
         form.append("file", buffer, { filename: "image.png", contentType: "image/png" });
-        form.append("apikey", process.env.OCR_API_KEY || "K82296058288957");
+        const ocrKey = process.env.OCR_API_KEY;
+        if (!ocrKey) return m.reply("❌ OCR API key not configured. Set OCR_API_KEY in environment.");
+        form.append("apikey", ocrKey);
         form.append("language", "eng");
         const res = await axios.post("https://api.ocr.space/parse/image", form, { headers: form.getHeaders(), timeout: 30000 });
         const text = res.data?.ParsedResults?.[0]?.ParsedText || "";
