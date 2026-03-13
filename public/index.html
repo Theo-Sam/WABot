@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desam Tech Bot — Pair WhatsApp</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #25D366;
+      --dark-green: #128C7E;
+      --deeper-green: #075E54;
+      --light-green: #dcf8c6;
+      --bg: #f0f2f5;
+      --card: #ffffff;
+      --text: #111b21;
+      --muted: #667781;
+      --border: #e9edef;
+      --code-bg: #f0f4fa;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      color: var(--text);
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo {
+      width: 64px;
+      height: 64px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 14px;
+      box-shadow: 0 4px 20px rgba(37,211,102,0.35);
+    }
+    .logo svg { width: 36px; height: 36px; fill: #fff; }
+    .header h1 { font-size: 22px; font-weight: 700; color: var(--deeper-green); }
+    .header p  { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 2px 24px rgba(0,0,0,0.08);
+    }
+
+    /* ── States ── */
+    .state { display: none; }
+    .state.active { display: block; }
+
+    /* Loading */
+    .spinner-wrap { text-align: center; padding: 24px 0; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-wrap p { color: var(--muted); font-size: 15px; }
+
+    /* Pairing code */
+    .code-section { text-align: center; }
+    .code-label {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .code-box {
+      background: var(--code-bg);
+      border: 2px dashed var(--green);
+      border-radius: 16px;
+      padding: 24px 20px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .code-value {
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: 8px;
+      color: var(--deeper-green);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .code-hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* Copy button */
+    .btn-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1.5px solid var(--green);
+      color: var(--dark-green);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-copy:hover { background: var(--green); color: #fff; }
+    .btn-copy svg { width: 14px; height: 14px; fill: currentColor; }
+
+    /* Steps */
+    .steps { margin-top: 28px; }
+    .steps h3 { font-size: 14px; font-weight: 700; color: var(--deeper-green); margin-bottom: 14px; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      min-width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--deeper-green);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-text { font-size: 14px; color: var(--text); line-height: 1.4; }
+    .step-text strong { color: var(--deeper-green); }
+
+    /* Waiting pill */
+    .waiting-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff8e1;
+      color: #f57f17;
+      border: 1px solid #ffe082;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 22px;
+    }
+    .dot-pulse {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #f57f17;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+
+    /* Success / Connected */
+    .success-wrap { text-align: center; padding: 12px 0; }
+    .checkmark {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+      animation: pop 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes pop { from{transform:scale(0)} to{transform:scale(1)} }
+    .checkmark svg { width: 38px; height: 38px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .success-wrap h2 { font-size: 22px; font-weight: 700; color: var(--deeper-green); margin-bottom: 6px; }
+    .success-wrap p  { font-size: 14px; color: var(--muted); }
+
+    /* Bot info grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .info-item {
+      background: var(--code-bg);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .info-item .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 4px; }
+    .info-item .value { font-size: 15px; font-weight: 700; color: var(--deeper-green); word-break: break-all; }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #e8f5e9;
+      color: #2e7d32;
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 18px;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+    /* Disconnected */
+    .disc-wrap { text-align: center; padding: 12px 0; }
+    .disc-icon {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: #fff3e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .disc-icon svg { width: 32px; height: 32px; fill: #f57f17; }
+    .disc-wrap h2 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .disc-wrap p  { font-size: 14px; color: var(--muted); }
+
+    /* Footer */
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .refresh-note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 14px; }
+    .refresh-note span { font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.557 4.117 1.533 5.845L0 24l6.312-1.516A11.942 11.942 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.897 0-3.673-.503-5.2-1.378l-.373-.217-3.873.93.979-3.769-.243-.389A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+      </svg>
+    </div>
+    <h1>Desam Tech Bot</h1>
+    <p>WhatsApp Pairing Dashboard</p>
+  </div>
+
+  <div class="card">
+
+    <!-- LOADING -->
+    <div id="state-loading" class="state active">
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <p>Connecting to WhatsApp…</p>
+      </div>
+    </div>
+
+    <!-- SHOW CODE -->
+    <div id="state-show_code" class="state">
+      <div class="code-section">
+        <div class="code-label">Your pairing code</div>
+        <div class="code-box">
+          <div class="code-value" id="code-value">—</div>
+          <div class="code-hint">Valid for a few minutes · refreshes automatically</div>
+        </div>
+        <button class="btn-copy" onclick="copyCode()">
+          <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          Copy Code
+        </button>
+      </div>
+
+      <div class="steps">
+        <h3>How to link your WhatsApp</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-text">Open <strong>WhatsApp</strong> on your phone</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-text">Tap <strong>⋮</strong> (top right) → <strong>Linked Devices</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-text">Tap <strong>"Link a Device"</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-text">Tap <strong>"Link with phone number instead"</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-text">Enter the code shown above</div>
+        </div>
+      </div>
+
+      <div style="text-align:center">
+        <div class="waiting-pill">
+          <div class="dot-pulse"></div>
+          Waiting for you to enter the code…
+        </div>
+      </div>
+    </div>
+
+    <!-- WAITING FOR PAIRING REQUEST -->
+    <div id="state-waiting_pairing" class="state">
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <p>Requesting pairing code from WhatsApp…</p>
+      </div>
+    </div>
+
+    <!-- PAIRING SUCCESS (brief transition state) -->
+    <div id="state-pairing_success" class="state">
+      <div class="success-wrap">
+        <div class="checkmark">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h2>Device Linked!</h2>
+        <p>Reconnecting and setting up the bot…</p>
+      </div>
+    </div>
+
+    <!-- CONNECTED -->
+    <div id="state-connected" class="state">
+      <div class="success-wrap">
+        <div class="checkmark">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h2>Bot is Online</h2>
+        <p>WhatsApp is connected and ready to receive commands</p>
+        <div class="status-badge"><div class="status-dot"></div> Active</div>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">Bot Name</div>
+          <div class="value" id="info-name">—</div>
+        </div>
+        <div class="info-item">
+          <div class="label">Prefix</div>
+          <div class="value" id="info-prefix">—</div>
+        </div>
+        <div class="info-item">
+          <div class="label">Commands</div>
+          <div class="value" id="info-commands">—</div>
+        </div>
+        <div class="info-item">
+          <div class="label">Number</div>
+          <div class="value" id="info-jid">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISCONNECTED -->
+    <div id="state-disconnected" class="state">
+      <div class="disc-wrap">
+        <div class="disc-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        </div>
+        <h2>Disconnected</h2>
+        <p>The bot lost connection. It will reconnect automatically.</p>
+      </div>
+    </div>
+
+    <!-- ERROR -->
+    <div id="state-error" class="state">
+      <div class="disc-wrap">
+        <div class="disc-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        </div>
+        <h2>Something went wrong</h2>
+        <p>Failed to generate a pairing code. Restart the bot and try again.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="refresh-note">Auto-refreshing every <span>3s</span></div>
+  <div class="footer">Desam Tech WhatsApp Bot v3.0</div>
+
+  <script>
+    let currentState = 'loading';
+    const STATES = ['loading','waiting_pairing','show_code','pairing_success','connected','disconnected','error'];
+
+    function showState(name) {
+      STATES.forEach(s => {
+        const el = document.getElementById('state-' + s);
+        if (el) el.classList.toggle('active', s === name);
+      });
+      currentState = name;
+    }
+
+    function copyCode() {
+      const code = document.getElementById('code-value').textContent.replace(/\s|-/g, '');
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+          const btn = document.querySelector('.btn-copy');
+          const orig = btn.innerHTML;
+          btn.textContent = '✓ Copied!';
+          btn.style.background = 'var(--green)';
+          btn.style.color = '#fff';
+          setTimeout(() => { btn.innerHTML = orig; btn.style.background=''; btn.style.color=''; }, 2000);
+        });
+      }
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        applyState(data);
+      } catch (e) {
+        // server might be starting — keep showing current state
+      }
+    }
+
+    function applyState(data) {
+      const s = data.status || 'loading';
+
+      if (s === 'show_code' && data.pairingCode) {
+        document.getElementById('code-value').textContent = data.pairingCode;
+      }
+
+      if (s === 'connected') {
+        document.getElementById('info-name').textContent     = data.botName    || '—';
+        document.getElementById('info-prefix').textContent   = data.prefix     || '—';
+        document.getElementById('info-commands').textContent = data.commandCount != null ? data.commandCount : '—';
+        const jid = (data.jid || '').replace(/:.*@/, '@');
+        document.getElementById('info-jid').textContent      = jid || '—';
+      }
+
+      // Map unknown states to 'loading'
+      const mapped = STATES.includes(s) ? s : 'loading';
+      if (mapped !== currentState) showState(mapped);
+    }
+
+    // Poll immediately then every 3 s
+    poll();
+    setInterval(poll, 3000);
+  </script>
+</body>
+</html>

@@ -15,6 +15,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const config = require('./config');
 const { startBot } = require('./lib/bot');
 const { ensureDatabaseReady, closeDb, getDatabasePath } = require('./lib/database');
+const { startServer } = require('./lib/server');
 
 console.clear();
 console.log(`
@@ -83,6 +84,7 @@ process.on('SIGTERM', () => {
 (async () => {
   try {
     verifyStartupRequirements();
+    startServer();
     console.log('🚀 Starting bot...\n');
     await startBot();
     console.log('\n✅ Bot is ready!');
