@@ -1,7 +1,7 @@
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
-const { runtime, getSystemInfo, getTimeGreeting, formatBytes } = require("../lib/helpers");
+const { runtime, getSystemInfo, getTimeGreeting, formatBytes, sendImageOrText } = require("../lib/helpers");
 const config = require("../config");
 
 const CHANNEL_LINK = "https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h";
@@ -35,7 +35,7 @@ const commands = [
       const menuText = getMenu() + CHANNEL_FOOTER;
       const img = getBotImage();
       if (img) {
-        await sock.sendMessage(m.chat, { image: img, caption: menuText }, { quoted: { key: m.key, message: m.message } });
+        await sendImageOrText(sock, m.chat, img, menuText, m);
       } else {
         await m.reply(menuText);
       }
@@ -98,7 +98,7 @@ ${greeting}! 👋
 ${CHANNEL_FOOTER}`;
       const img = getBotImage();
       if (img) {
-        await sock.sendMessage(m.chat, { image: img, caption: text }, { quoted: { key: m.key, message: m.message } });
+        await sendImageOrText(sock, m.chat, img, text, m);
       } else {
         await m.reply(text);
       }
@@ -140,7 +140,7 @@ ${CHANNEL_FOOTER}`;
 ${CHANNEL_FOOTER}`;
       const img = getBotImage();
       if (img) {
-        await sock.sendMessage(m.chat, { image: img, caption: text }, { quoted: { key: m.key, message: m.message } });
+        await sendImageOrText(sock, m.chat, img, text, m);
       } else {
         await m.reply(text);
       }

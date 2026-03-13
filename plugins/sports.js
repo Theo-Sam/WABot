@@ -219,9 +219,7 @@ const commands = [
         }
 
         if (p.strDescriptionEN) {
-          msg += `📝 *Biography:*\n${p.strDescriptionEN.substring(0, 3000)}`;
-          if (p.strDescriptionEN.length > 3000) msg += "\n_(truncated)_";
-          msg += `\n\n`;
+          msg += `📝 *Biography:*\n${p.strDescriptionEN}\n\n`;
         }
 
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;

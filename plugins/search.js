@@ -51,7 +51,10 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}wiki <query>`);
       m.react("📚");
       try {
-        const data = await fetchJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(text)}`);
+        const [data, catData] = await Promise.all([
+          fetchJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(text)}`),
+          fetchJson(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(text)}&prop=categories&cllimit=20&format=json`).catch(() => null),
+        ]);
         if (!data?.extract) return m.reply("⏳ No Wikipedia article found or the API is busy.");
         let msg = `╔══════════════════════════╗\n`;
         msg += `║ 📚 *WIKIPEDIA* ║\n`;
@@ -62,10 +65,15 @@ const commands = [
         if (data.type) msg += `📂 Type: ${data.type}\n`;
         if (data.timestamp) msg += `📅 Last Updated: ${new Date(data.timestamp).toLocaleDateString()}\n`;
         if (data.coordinates) msg += `📍 Coordinates: ${data.coordinates.lat}, ${data.coordinates.lon}\n`;
+
+        if (catData?.query?.pages) {
+          const pages = Object.values(catData.query.pages);
+          const cats = pages[0]?.categories?.map(c => c.title?.replace("Category:", "")).filter(Boolean) || [];
+          if (cats.length) msg += `🏷️ Categories: ${cats.join(", ")}\n`;
+        }
+
         msg += `\n`;
-        const fullExtract = data.extract ? data.extract.substring(0, 4000) : "";
-        msg += fullExtract;
-        if (data.extract && data.extract.length > 4000) msg += "\n\n_(article truncated)_";
+        msg += data.extract || "";
         if (data.content_urls?.desktop?.page) msg += `\n\n🔗 *Read More:* ${data.content_urls.desktop.page}`;
         if (data.content_urls?.mobile?.page) msg += `\n📱 *Mobile:* ${data.content_urls.mobile.page}`;
         msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -150,19 +158,19 @@ const commands = [
 
         entry.meanings?.forEach((meaning) => {
           msg += `┌─── *${meaning.partOfSpeech.toUpperCase()}* ───\n`;
-          meaning.definitions?.slice(0, 5).forEach((def, i) => {
+          meaning.definitions?.forEach((def, i) => {
             msg += `│ ${i + 1}. ${def.definition}\n`;
             if (def.example) msg += `│    _Example: "${def.example}"_\n`;
           });
-          if (meaning.synonyms?.length) msg += `│\n│ 🔗 Synonyms: ${meaning.synonyms.slice(0, 10).join(", ")}\n`;
-          if (meaning.antonyms?.length) msg += `│ 🔗 Antonyms: ${meaning.antonyms.slice(0, 10).join(", ")}\n`;
+          if (meaning.synonyms?.length) msg += `│\n│ 🔗 Synonyms: ${meaning.synonyms.join(", ")}\n`;
+          if (meaning.antonyms?.length) msg += `│ 🔗 Antonyms: ${meaning.antonyms.join(", ")}\n`;
           msg += `└──────────────────\n\n`;
         });
 
         const allSyn = data.flatMap(e => e.meanings?.flatMap(m => m.synonyms || []) || []);
         const allAnt = data.flatMap(e => e.meanings?.flatMap(m => m.antonyms || []) || []);
-        if (allSyn.length > 0) msg += `📗 *All Synonyms:* ${[...new Set(allSyn)].slice(0, 15).join(", ")}\n`;
-        if (allAnt.length > 0) msg += `📕 *All Antonyms:* ${[...new Set(allAnt)].slice(0, 15).join(", ")}\n`;
+        if (allSyn.length > 0) msg += `📗 *All Synonyms:* ${[...new Set(allSyn)].join(", ")}\n`;
+        if (allAnt.length > 0) msg += `📕 *All Antonyms:* ${[...new Set(allAnt)].join(", ")}\n`;
 
         if (entry.sourceUrls?.length) msg += `\n🔗 Source: ${entry.sourceUrls[0]}`;
         msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -603,15 +611,24 @@ const commands = [
         const query = text || "world";
         let articles = [];
 
-        const gnewsData = await fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&apikey=a]`).catch(() => null);
+        const gnewsData = await fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&token=a`).catch(() => null);
         if (gnewsData?.articles?.length) {
           articles = gnewsData.articles;
         }
 
         if (!articles.length) {
-          const newsApiData = await fetchJson(`https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&pageSize=10&apiKey=e8de3e55f4ec4ce1aa94eacf41d5ecfa`).catch(() => null);
-          if (newsApiData?.articles?.length) {
-            articles = newsApiData.articles;
+          const currentsData = await fetchJson(`https://api.currentsapi.services/v1/search?keywords=${encodeURIComponent(query)}&language=en&apiKey=null`).catch(() => null);
+          if (currentsData?.news?.length) {
+            articles = currentsData.news.map(item => ({
+              title: item.title,
+              description: item.description || "",
+              url: item.url,
+              source: { name: item.author || "Currents" },
+              author: item.author,
+              publishedAt: item.published,
+              image: item.image,
+              category: item.category?.join(", "),
+            }));
           }
         }
 
@@ -631,7 +648,8 @@ const commands = [
 
         articles = articles.filter(a =>
           a.title && a.title !== "[Removed]" &&
-          (!a.description || a.description !== "[Removed]")
+          (!a.description || a.description !== "[Removed]") &&
+          (!a.url || !a.url.includes("[Removed]"))
         );
 
         if (!articles.length) return m.reply("❌ No news found. Try a different search term.");
@@ -642,7 +660,7 @@ const commands = [
         msg += `🔎 Topic: *${query}*\n`;
         msg += `📅 ${new Date().toLocaleDateString()}\n\n`;
 
-        articles.slice(0, 7).forEach((a, i) => {
+        articles.slice(0, 5).forEach((a, i) => {
           msg += `┌─── *${i + 1}. ${a.title}* ───\n`;
           const sourceName = a.source?.name || a.source || "";
           if (sourceName) msg += `│ 📰 Source: ${sourceName}\n`;
@@ -651,11 +669,12 @@ const commands = [
             const pubDate = new Date(a.publishedAt);
             msg += `│ 📅 Published: ${pubDate.toLocaleDateString()} ${pubDate.toLocaleTimeString()}\n`;
           }
+          if (a.category) msg += `│ 📂 Category: ${a.category}\n`;
           if (a.description && a.description !== "[Removed]") {
-            msg += `│ 📝 ${a.description.substring(0, 250)}\n`;
+            msg += `│ 📝 ${a.description.substring(0, 400)}\n`;
           }
           if (a.content && a.content !== "[Removed]" && !a.description) {
-            msg += `│ 📝 ${a.content.substring(0, 250)}\n`;
+            msg += `│ 📝 ${a.content.substring(0, 400)}\n`;
           }
           if (a.url) msg += `│ 🔗 ${a.url}\n`;
           msg += `└──────────────────\n\n`;
@@ -815,7 +834,9 @@ const commands = [
           if (data.security.vpn) flags.push("🛡️ VPN");
           if (data.security.tor) flags.push("🧅 Tor");
           if (data.security.hosting) flags.push("🖥️ Hosting");
+          if (data.security.mobile) flags.push("📱 Mobile");
         }
+        if (data.connection_type) msg += `📶 Connection: ${data.connection_type}\n`;
         if (flags.length) msg += `⚠️ *Flags:* ${flags.join(", ")}\n\n`;
 
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
