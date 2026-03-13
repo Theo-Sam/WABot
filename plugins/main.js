@@ -1,6 +1,24 @@
 const os = require("os");
+const path = require("path");
+const fs = require("fs");
 const { runtime, getSystemInfo, getTimeGreeting, formatBytes } = require("../lib/helpers");
 const config = require("../config");
+
+const CHANNEL_LINK = "https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h";
+const CHANNEL_FOOTER = `\n━━━━━━━━━━━━━━━━━━━━━━━━\n📢 *Join our WhatsApp Channel for updates:*\n${CHANNEL_LINK}\n\n_Powered by Desam Tech_ ⚡`;
+
+let _cachedBotImage = null;
+let _imageCacheChecked = false;
+
+function getBotImage() {
+  if (_imageCacheChecked) return _cachedBotImage;
+  const imgPath = path.join(__dirname, "..", "public", "desam-bot.png");
+  try {
+    if (fs.existsSync(imgPath)) _cachedBotImage = fs.readFileSync(imgPath);
+  } catch {}
+  _imageCacheChecked = true;
+  return _cachedBotImage;
+}
 
 const commands = [
   {
@@ -14,7 +32,13 @@ const commands = [
         if (catMenu) return m.reply(catMenu);
         return m.reply(`❌ Category *${text}* not found.\n\nUse ${config.PREFIX}menu to see all categories.`);
       }
-      await m.reply(getMenu());
+      const menuText = getMenu() + CHANNEL_FOOTER;
+      const img = getBotImage();
+      if (img) {
+        await sock.sendMessage(m.chat, { image: img, caption: menuText }, { quoted: { key: m.key, message: m.message } });
+      } else {
+        await m.reply(menuText);
+      }
     },
   },
   {
@@ -40,28 +64,44 @@ const commands = [
     name: ["alive", "ping", "bot"],
     category: "main",
     desc: "Check if bot is alive",
-    handler: async (sock, m) => {
+    handler: async (sock, m, { commands: cmds }) => {
       m.react("✅");
       const start = Date.now();
       const greeting = getTimeGreeting(config.TIMEZONE);
       const uptime = runtime();
       const latency = Date.now() - start;
-      const text = `╔══════════════════════╗
-║   *${config.BOT_NAME}*   ║
-╚══════════════════════╝
+      const totalCmds = cmds ? cmds.size : 0;
+      const sys = getSystemInfo();
+      const text = `╔══════════════════════════╗
+║    *${config.BOT_NAME}*    ║
+╚══════════════════════════╝
 
 ${greeting}! 👋
 
 ✅ *Bot is online and running!*
 
-⏱️ *Uptime:* ${uptime}
-⚡ *Speed:* ${latency}ms
-📡 *Mode:* ${config.MODE}
-🔑 *Prefix:* ${config.PREFIX}
-👤 *Owner:* ${config.OWNER_NUMBER}
+┌─── *Bot Details* ───
+│ ⏱️ Uptime: ${uptime}
+│ ⚡ Speed: ${latency}ms
+│ 📡 Mode: ${config.MODE}
+│ 🔑 Prefix: ${config.PREFIX}
+│ 🤖 Commands: ${totalCmds}
+│ 👤 Owner: ${config.OWNER_NUMBER}
+└──────────────────
 
-_Powered by Desam Tech_ ⚡`;
-      await m.reply(text);
+┌─── *System Info* ───
+│ 🖥️ Platform: ${sys.platform} ${sys.arch}
+│ 🧮 CPUs: ${sys.cpus}
+│ 💾 RAM: ${sys.freeMem} free / ${sys.totalMem}
+│ 📦 Node.js: ${sys.nodeVersion}
+└──────────────────
+${CHANNEL_FOOTER}`;
+      const img = getBotImage();
+      if (img) {
+        await sock.sendMessage(m.chat, { image: img, caption: text }, { quoted: { key: m.key, message: m.message } });
+      } else {
+        await m.reply(text);
+      }
     },
   },
   {
@@ -72,27 +112,38 @@ _Powered by Desam Tech_ ⚡`;
       m.react("ℹ️");
       const sys = getSystemInfo();
       const totalCmds = cmds ? cmds.size : 0;
-      const text = `🤖 *${config.BOT_NAME} - Info*
+      const categories = new Set();
+      if (cmds) for (const [, cmd] of cmds) categories.add((cmd.category || "misc").toLowerCase());
+      const text = `╔══════════════════════════╗
+║  *${config.BOT_NAME} - Info*  ║
+╚══════════════════════════╝
 
-📌 *Bot Details*
-▸ Name: ${config.BOT_NAME}
-▸ Prefix: ${config.PREFIX}
-▸ Mode: ${config.MODE}
-▸ Owner: ${config.OWNER_NUMBER}
-▸ Timezone: ${config.TIMEZONE}
-▸ Total Commands: ${totalCmds}
+┌─── 📌 *Bot Details* ───
+│ 📛 Name: ${config.BOT_NAME}
+│ 🔑 Prefix: ${config.PREFIX}
+│ 📡 Mode: ${config.MODE}
+│ 👤 Owner: ${config.OWNER_NUMBER}
+│ 🌍 Timezone: ${config.TIMEZONE}
+│ 🤖 Total Commands: ${totalCmds}
+│ 📂 Categories: ${categories.size}
+│ ⏱️ Uptime: ${sys.uptime}
+└──────────────────
 
-💻 *System Info*
-▸ Platform: ${sys.platform}
-▸ Architecture: ${sys.arch}
-▸ CPUs: ${sys.cpus}
-▸ Total RAM: ${sys.totalMem}
-▸ Free RAM: ${sys.freeMem}
-▸ Uptime: ${sys.uptime}
-▸ Node.js: ${sys.nodeVersion}
-
-_Powered by Desam Tech_ ⚡`;
-      await m.reply(text);
+┌─── 💻 *System Info* ───
+│ 🖥️ Platform: ${sys.platform}
+│ 🏗️ Architecture: ${sys.arch}
+│ 🧮 CPUs: ${sys.cpus}
+│ 💾 Total RAM: ${sys.totalMem}
+│ 💾 Free RAM: ${sys.freeMem}
+│ 📦 Node.js: ${sys.nodeVersion}
+└──────────────────
+${CHANNEL_FOOTER}`;
+      const img = getBotImage();
+      if (img) {
+        await sock.sendMessage(m.chat, { image: img, caption: text }, { quoted: { key: m.key, message: m.message } });
+      } else {
+        await m.reply(text);
+      }
     },
   },
   {
@@ -101,7 +152,7 @@ _Powered by Desam Tech_ ⚡`;
     desc: "Show bot uptime",
     handler: async (sock, m) => {
       m.react("⏱️");
-      await m.reply(`⏱️ *Uptime:* ${runtime()}`);
+      await m.reply(`⏱️ *Uptime:* ${runtime()}${CHANNEL_FOOTER}`);
     },
   },
   {
@@ -126,7 +177,8 @@ function getCategoryMenu(cat, cmds) {
     main: "🏠", group: "👥", sticker: "🎨", media: "🎵", tools: "🔧",
     fun: "🎮", owner: "👑", settings: "⚙️", misc: "📦", download: "📥",
     search: "🔍", ai: "🤖", religious: "🙏", sports: "⚽", education: "📚",
-    utility: "🔨", status: "📡", notes: "📝",
+    utility: "🔨", status: "📡", notes: "📝", reactions: "💫", privacy: "🔒",
+    anime: "🎌", converter: "🔄",
   };
 
   const seen = new Set();
@@ -146,24 +198,26 @@ function getCategoryMenu(cat, cmds) {
   if (catCmds.length === 0) return null;
 
   const emoji = catEmojis[cat] || "📌";
-  let msg = `${emoji} *${cat.toUpperCase()} COMMANDS* (${catCmds.length})\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  let msg = `╔══════════════════════════╗\n`;
+  msg += `║ ${emoji} *${cat.toUpperCase()} COMMANDS* (${catCmds.length}) ║\n`;
+  msg += `╚══════════════════════════╝\n\n`;
   catCmds.forEach((cmd, i) => {
     const tags = [];
     if (cmd.owner) tags.push("👑");
     if (cmd.admin) tags.push("⭐");
     if (cmd.group) tags.push("👥");
     const tagStr = tags.length ? " " + tags.join("") : "";
-    msg += `${i + 1}. ${config.PREFIX}${cmd.primary}${tagStr}\n`;
-    if (cmd.desc) msg += `   _${cmd.desc}_\n`;
+    msg += `┃ ${i + 1}. ${config.PREFIX}${cmd.primary}${tagStr}\n`;
+    if (cmd.desc) msg += `┃    _${cmd.desc}_\n`;
     if (cmd.aliases.length > 0) {
-      msg += `   Aliases: ${cmd.aliases.map(a => config.PREFIX + a).join(", ")}\n`;
+      msg += `┃    Aliases: ${cmd.aliases.map(a => config.PREFIX + a).join(", ")}\n`;
     }
-    msg += "\n";
+    msg += `┃\n`;
   });
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `👑 = Owner only | ⭐ = Admin | 👥 = Group only\n`;
-  msg += `_${config.BOT_NAME} | Powered by Desam Tech_`;
+  msg += `╔══════════════════════════╗\n`;
+  msg += `║ 👑 Owner | ⭐ Admin | 👥 Group ║\n`;
+  msg += `╚══════════════════════════╝`;
+  msg += CHANNEL_FOOTER;
   return msg;
 }
 
@@ -171,7 +225,7 @@ function getFullList(cmds, page) {
   const CMDS_PER_PAGE = 100;
   const seen = new Set();
   const allCmds = [];
-  const catOrder = ["main", "ai", "download", "media", "sticker", "fun", "group", "settings", "tools", "utility", "search", "education", "sports", "religious", "notes", "status", "misc", "owner"];
+  const catOrder = ["main", "ai", "download", "media", "sticker", "fun", "group", "settings", "tools", "utility", "search", "education", "sports", "religious", "notes", "status", "misc", "owner", "reactions", "privacy", "anime", "converter"];
 
   if (cmds) {
     for (const [name, cmd] of cmds) {
@@ -219,17 +273,18 @@ function getFullList(cmds, page) {
     main: "🏠", group: "👥", sticker: "🎨", media: "🎵", tools: "🔧",
     fun: "🎮", owner: "👑", settings: "⚙️", misc: "📦", download: "📥",
     search: "🔍", ai: "🤖", religious: "🙏", sports: "⚽", education: "📚",
-    utility: "🔨", status: "📡", notes: "📝",
+    utility: "🔨", status: "📡", notes: "📝", reactions: "💫", privacy: "🔒",
+    anime: "🎌", converter: "🔄",
   };
 
   pageCmds.forEach((cmd, i) => {
     if (cmd.category !== currentCat) {
       currentCat = cmd.category;
       const emoji = catEmojis[currentCat] || "📌";
-      msg += `\n${emoji} *${currentCat.toUpperCase()}*\n`;
+      msg += `\n┌─── ${emoji} *${currentCat.toUpperCase()}* ───\n`;
     }
     const num = start + i + 1;
-    msg += `${num}. ${config.PREFIX}${cmd.primary}`;
+    msg += `│ ${num}. ${config.PREFIX}${cmd.primary}`;
     if (cmd.aliases.length > 0) {
       msg += ` _(${cmd.aliases.join(", ")})_`;
     }
@@ -237,14 +292,15 @@ function getFullList(cmds, page) {
     msg += "\n";
   });
 
+  msg += `└──────────────────\n`;
   msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   if (totalPages > 1) {
     msg += `📄 Page ${safePage}/${totalPages}`;
     if (safePage < totalPages) msg += ` | Next: ${config.PREFIX}list ${safePage + 1}`;
     msg += "\n";
   }
-  msg += `💡 ${config.PREFIX}menu <category> for details\n`;
-  msg += `_${config.BOT_NAME} | Powered by Desam Tech_`;
+  msg += `💡 ${config.PREFIX}menu <category> for details`;
+  msg += CHANNEL_FOOTER;
   return msg;
 }
 
