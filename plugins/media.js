@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchBuffer, isUrl } = require("../lib/helpers");
+const { fetchBuffer, isUrl, getSelfJid } = require("../lib/helpers");
 
 const commands = [
   {
@@ -75,7 +75,9 @@ const commands = [
         const buffer = await m.quoted.download();
         const mediaType = m.quoted.type;
         const caption = m.quoted.message[mediaType]?.caption || "";
-        const ownerJid = config.OWNER_NUMBER.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+        const ownerNum = config.OWNER_NUMBER?.replace(/[^0-9]/g, "") || "";
+        const ownerJid = ownerNum ? `${ownerNum}@s.whatsapp.net` : getSelfJid(sock);
+        if (!ownerJid) return m.reply("❌ Could not determine owner number. Set OWNER_NUMBER or pair the bot first.");
         const fromLabel = m.pushName || m.sender.split("@")[0];
         const fullCaption = `👁️ *View Once from ${fromLabel}*\n${m.isGroup ? `Group: ${m.chat}` : "DM"}\n\n${caption}`;
 
