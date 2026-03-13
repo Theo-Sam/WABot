@@ -70,23 +70,50 @@ async function ytDownloadVideo(url) {
   return null;
 }
 
-async function cobaltDownload(url, audioOnly = false) {
-  const instances = [
-    "https://api.cobalt.tools",
-    "https://cobalt-api.hyper.lol",
-  ];
-  for (const inst of instances) {
-    try {
-      const body = { url };
-      if (audioOnly) body.downloadMode = "audio";
-      const res = await axios.post(inst, body, {
-        headers: { "Accept": "application/json", "Content-Type": "application/json" },
-        timeout: 30000,
-      });
-      const dlUrl = res.data?.url || (res.data?.picker?.[0]?.url);
+async function igDownload(url) {
+  const endpoints = [
+    async () => {
+      const res = await axios.post("https://fastdl.app/api/convert", new URLSearchParams({ url }), { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } });
+      const dlUrl = res.data?.url || res.data?.result?.[0]?.url;
       if (dlUrl) return await fetchBuffer(dlUrl);
-    } catch {}
+      return null;
+    },
+    async () => {
+      const res = await axios.get(`https://api.igdownloader.app/api/v1/download?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+      const dlUrl = res.data?.data?.[0]?.url;
+      if (dlUrl) return await fetchBuffer(dlUrl);
+      return null;
+    },
+  ];
+  for (const fn of endpoints) {
+    try { const buf = await fn(); if (buf?.length > 1000) return buf; } catch {}
   }
+  return null;
+}
+
+async function fbDownload(url) {
+  const endpoints = [
+    async () => {
+      const res = await axios.get(`https://api.fbdownloader.app/api/v1/download?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+      const dlUrl = res.data?.data?.hd || res.data?.data?.sd;
+      if (dlUrl) return await fetchBuffer(dlUrl);
+      return null;
+    },
+  ];
+  for (const fn of endpoints) {
+    try { const buf = await fn(); if (buf?.length > 1000) return buf; } catch {}
+  }
+  return null;
+}
+
+async function twitterDownload(url) {
+  try {
+    const tweetId = url.match(/status\/(\d+)/)?.[1];
+    if (!tweetId) return null;
+    const data = await fetchJson(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
+    const mediaUrl = data?.media_extended?.[0]?.url || data?.mediaURLs?.[0];
+    if (mediaUrl) return await fetchBuffer(mediaUrl);
+  } catch {}
   return null;
 }
 
@@ -103,7 +130,6 @@ const commands = [
         if (!results.length) return m.reply("❌ No results found. Try a different search term.");
         const { url: videoUrl, title } = results[0];
         let audioBuffer = await ytDownloadAudio(videoUrl);
-        if (!audioBuffer) audioBuffer = await cobaltDownload(videoUrl, true);
         if (!audioBuffer) {
           let msg = `🎵 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`;
           return m.reply(msg);
@@ -138,7 +164,6 @@ const commands = [
           title = results[0].title;
         }
         let videoBuffer = await ytDownloadVideo(videoUrl);
-        if (!videoBuffer) videoBuffer = await cobaltDownload(videoUrl, false);
         if (!videoBuffer) {
           return m.reply(`🎬 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`);
         }
@@ -159,7 +184,6 @@ const commands = [
       m.react("⏳");
       try {
         let audioBuffer = await ytDownloadAudio(text);
-        if (!audioBuffer) audioBuffer = await cobaltDownload(text, true);
         if (!audioBuffer) return m.reply("⏳ Audio download failed. The download servers may be busy.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -183,7 +207,6 @@ const commands = [
           const playUrl = data.data?.data?.hdplay || data.data?.data?.play;
           if (playUrl) videoBuffer = await fetchBuffer(playUrl);
         } catch {}
-        if (!videoBuffer) videoBuffer = await cobaltDownload(text, false);
         if (!videoBuffer) return m.reply("❌ Could not download TikTok video.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -207,7 +230,6 @@ const commands = [
           const musicUrl = data.data?.data?.music;
           if (musicUrl) audioBuffer = await fetchBuffer(musicUrl);
         } catch {}
-        if (!audioBuffer) audioBuffer = await cobaltDownload(text, true);
         if (!audioBuffer) return m.reply("❌ Could not download TikTok audio.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -225,14 +247,7 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
       m.react("⏳");
       try {
-        let mediaBuffer = await cobaltDownload(text, false);
-        if (!mediaBuffer) {
-          try {
-            const data = await fetchJson(`https://api.saveig.app/api/v1/instagram?url=${encodeURIComponent(text)}`, { timeout: 15000 });
-            const dlUrl = data?.data?.[0]?.url || data?.result?.[0]?.url;
-            if (dlUrl) mediaBuffer = await fetchBuffer(dlUrl);
-          } catch {}
-        }
+        let mediaBuffer = await igDownload(text);
         if (!mediaBuffer) return m.reply("❌ Could not download Instagram media. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `📸 Instagram Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -250,14 +265,7 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
       m.react("⏳");
       try {
-        let videoBuffer = await cobaltDownload(text, false);
-        if (!videoBuffer) {
-          try {
-            const data = await fetchJson(`https://api.savefrom.biz/api/convert?url=${encodeURIComponent(text)}`, { timeout: 15000 });
-            const dlUrl = data?.url || data?.result?.url;
-            if (dlUrl) videoBuffer = await fetchBuffer(dlUrl);
-          } catch {}
-        }
+        let videoBuffer = await fbDownload(text);
         if (!videoBuffer) return m.reply("❌ Could not download Facebook video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📘 Facebook Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -275,17 +283,7 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
       m.react("⏳");
       try {
-        let videoBuffer = await cobaltDownload(text, false);
-        if (!videoBuffer) {
-          try {
-            const tweetId = text.match(/status\/(\d+)/)?.[1];
-            if (tweetId) {
-              const data = await fetchJson(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
-              const mediaUrl = data?.media_extended?.[0]?.url || data?.mediaURLs?.[0];
-              if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl);
-            }
-          } catch {}
-        }
+        let videoBuffer = await twitterDownload(text);
         if (!videoBuffer) return m.reply("❌ Could not download Twitter video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🐦 Twitter/X Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -303,11 +301,19 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}spotify <Spotify URL>`);
       m.react("⏳");
       try {
+        if (!isUrl(text)) return m.reply("❌ Please provide a Spotify URL.");
         let audioBuffer = null;
-        if (isUrl(text)) {
-          audioBuffer = await cobaltDownload(text, true);
-        }
-        if (!audioBuffer) return m.reply("❌ Could not download Spotify track. Please provide a Spotify URL.");
+        try {
+          const trackMatch = text.match(/track\/([a-zA-Z0-9]+)/);
+          if (trackMatch) {
+            const searchQuery = text;
+            const results = await play.search(searchQuery, { limit: 1, source: { youtube: "video" } }).catch(() => []);
+            if (results.length) {
+              audioBuffer = await ytDownloadAudio(results[0].url);
+            }
+          }
+        } catch {}
+        if (!audioBuffer) return m.reply("❌ Could not download Spotify track. Try searching YouTube with .play instead.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -513,7 +519,6 @@ const commands = [
           const videoUrl = post?.secure_media?.reddit_video?.fallback_url || post?.url_overridden_by_dest;
           if (videoUrl) mediaBuffer = await fetchBuffer(videoUrl);
         } catch {}
-        if (!mediaBuffer) mediaBuffer = await cobaltDownload(text, false);
         if (!mediaBuffer) return m.reply("❌ Could not download Reddit media.");
         await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `🔴 Reddit Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");

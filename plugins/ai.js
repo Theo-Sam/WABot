@@ -2,10 +2,26 @@ const config = require("../config");
 const { fetchJson, fetchBuffer } = require("../lib/helpers");
 const axios = require("axios");
 
-async function pollinate(prompt, model = "openai") {
+const AI_PERSONAS = {
+  openai: null,
+  gemini: "You are Gemini, a helpful AI assistant created by Google. Respond naturally and helpfully.",
+  deepseek: "You are DeepSeek, an AI assistant known for deep reasoning and analysis. Respond thoughtfully.",
+  llama: "You are Llama, an open-source AI assistant by Meta. Respond helpfully and clearly.",
+  mistral: "You are Mistral, a fast and efficient AI assistant. Respond concisely and helpfully.",
+  claude: "You are Claude, an AI assistant known for being helpful, harmless, and honest. Respond thoughtfully.",
+  copilot: "You are Copilot, a helpful AI coding and productivity assistant. Respond helpfully.",
+  bard: "You are Bard, a creative and informative AI assistant by Google. Respond helpfully.",
+  blackbox: "You are Blackbox AI, specialized in code and technical questions. Respond helpfully.",
+};
+
+async function pollinate(prompt, persona = "openai") {
+  const messages = [];
+  const systemMsg = AI_PERSONAS[persona];
+  if (systemMsg) messages.push({ role: "system", content: systemMsg });
+  messages.push({ role: "user", content: prompt });
   const res = await axios.post("https://text.pollinations.ai/openai", {
-    model,
-    messages: [{ role: "user", content: prompt }],
+    model: "openai",
+    messages,
   }, { timeout: 60000, headers: { "Content-Type": "application/json" } });
   const answer = res.data?.choices?.[0]?.message?.content;
   if (!answer || answer.length < 2) throw new Error("empty");
