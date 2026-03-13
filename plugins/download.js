@@ -183,7 +183,14 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
       m.react("⏳");
       try {
-        const mediaBuffer = await cobaltDownload(text, false);
+        let mediaBuffer = await cobaltDownload(text, false);
+        if (!mediaBuffer) {
+          try {
+            const data = await fetchJson(`https://api.saveig.app/api/v1/instagram?url=${encodeURIComponent(text)}`, { timeout: 15000 });
+            const dlUrl = data?.data?.[0]?.url || data?.result?.[0]?.url;
+            if (dlUrl) mediaBuffer = await fetchBuffer(dlUrl);
+          } catch {}
+        }
         if (!mediaBuffer) return m.reply("❌ Could not download Instagram media. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `📸 Instagram Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -201,7 +208,14 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
       m.react("⏳");
       try {
-        const videoBuffer = await cobaltDownload(text, false);
+        let videoBuffer = await cobaltDownload(text, false);
+        if (!videoBuffer) {
+          try {
+            const data = await fetchJson(`https://api.savefrom.biz/api/convert?url=${encodeURIComponent(text)}`, { timeout: 15000 });
+            const dlUrl = data?.url || data?.result?.url;
+            if (dlUrl) videoBuffer = await fetchBuffer(dlUrl);
+          } catch {}
+        }
         if (!videoBuffer) return m.reply("❌ Could not download Facebook video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📘 Facebook Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -219,7 +233,17 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
       m.react("⏳");
       try {
-        const videoBuffer = await cobaltDownload(text, false);
+        let videoBuffer = await cobaltDownload(text, false);
+        if (!videoBuffer) {
+          try {
+            const tweetId = text.match(/status\/(\d+)/)?.[1];
+            if (tweetId) {
+              const data = await fetchJson(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
+              const mediaUrl = data?.media_extended?.[0]?.url || data?.mediaURLs?.[0];
+              if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl);
+            }
+          } catch {}
+        }
         if (!videoBuffer) return m.reply("❌ Could not download Twitter video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🐦 Twitter/X Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -301,16 +325,34 @@ const commands = [
   {
     name: ["apk"],
     category: "download",
-    desc: "Search APK on APKPure",
+    desc: "Search APK from app stores",
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}apk <app name>`);
       m.react("⏳");
       try {
-        const searchUrl = `https://apkpure.com/search?q=${encodeURIComponent(text)}`;
-        let msg = `📱 *APK Search: ${text}*\n\n`;
-        msg += `🔗 Search on APKPure:\n${searchUrl}\n\n`;
-        msg += `🔗 Search on APKCombo:\nhttps://apkcombo.com/search/${encodeURIComponent(text)}\n\n`;
-        msg += `🔗 Search on APKMirror:\nhttps://www.apkmirror.com/?s=${encodeURIComponent(text)}\n\n`;
+        let apps = [];
+        try {
+          const html = await axios.get(`https://apkpure.com/search?q=${encodeURIComponent(text)}`, { timeout: 10000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+          const matches = [...(html.data || "").matchAll(/class="p-detail"[^>]*>[\s\S]*?<p class="first-title[^"]*"[^>]*>([^<]+)<\/p>[\s\S]*?class="developer"[^>]*>([^<]*)/g)];
+          if (matches.length) {
+            apps = matches.slice(0, 5).map(m => ({ name: m[1]?.trim(), developer: m[2]?.trim() }));
+          }
+        } catch {}
+        let msg = `╔══════════════════════════╗\n`;
+        msg += `║ 📱 *APK SEARCH* ║\n`;
+        msg += `╚══════════════════════════╝\n\n`;
+        msg += `🔎 Query: *${text}*\n\n`;
+        if (apps.length) {
+          apps.forEach((app, i) => {
+            msg += `${i + 1}. *${app.name}*\n`;
+            if (app.developer) msg += `   👤 ${app.developer}\n`;
+          });
+          msg += `\n`;
+        }
+        msg += `🔗 *Download from:*\n`;
+        msg += `• APKPure: https://apkpure.com/search?q=${encodeURIComponent(text)}\n`;
+        msg += `• APKCombo: https://apkcombo.com/search/${encodeURIComponent(text)}\n`;
+        msg += `• APKMirror: https://www.apkmirror.com/?s=${encodeURIComponent(text)}\n\n`;
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");

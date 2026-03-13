@@ -142,6 +142,74 @@ const commands = [
     },
   },
   {
+    name: ["claude", "cl"],
+    category: "ai",
+    desc: "Chat with Claude AI",
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}claude <question>`);
+      m.react("🤖");
+      try {
+        const answer = await pollinate(text, "openai");
+        await m.reply(`🟠 *Claude AI*\n\n${answer}`);
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("⏳ The Claude AI server is busy. Please try again later!");
+      }
+    },
+  },
+  {
+    name: ["copilot", "bing", "cp"],
+    category: "ai",
+    desc: "Chat with Copilot AI",
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}copilot <question>`);
+      m.react("🤖");
+      try {
+        const answer = await pollinate(text, "openai");
+        await m.reply(`🔵 *Copilot AI*\n\n${answer}`);
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("⏳ The Copilot AI server is busy. Please try again later!");
+      }
+    },
+  },
+  {
+    name: ["bard", "bd"],
+    category: "ai",
+    desc: "Chat with Bard AI",
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}bard <question>`);
+      m.react("🤖");
+      try {
+        const answer = await pollinate(text, "gemini");
+        await m.reply(`🟡 *Bard AI*\n\n${answer}`);
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("⏳ The Bard AI server is busy. Please try again later!");
+      }
+    },
+  },
+  {
+    name: ["blackbox", "bb"],
+    category: "ai",
+    desc: "Chat with Blackbox AI (code expert)",
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}blackbox <question>`);
+      m.react("🤖");
+      try {
+        const answer = await pollinate(`You are a coding expert assistant. Answer this coding/technical question:\n\n${text}`, "openai");
+        await m.reply(`⬛ *Blackbox AI*\n\n${answer}`);
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("⏳ The Blackbox AI server is busy. Please try again later!");
+      }
+    },
+  },
+  {
     name: ["summarize", "summary", "tldr", "sum"],
     category: "ai",
     desc: "Summarize text with AI",
@@ -176,8 +244,9 @@ const commands = [
         form.append("image", buffer, { filename: "image.png", contentType: "image/png" });
         let resultBuffer;
         try {
+          const rbgKey = process.env.REMOVEBG_API_KEY || "SU6Mu47dFw8RPyZYK6FFgnpA";
           const res = await axios.post("https://api.remove.bg/v1.0/removebg", form, {
-            headers: { ...form.getHeaders(), "X-Api-Key": "SU6Mu47dFw8RPyZYK6FFgnpA" },
+            headers: { ...form.getHeaders(), "X-Api-Key": rbgKey },
             responseType: "arraybuffer",
             timeout: 30000,
           });
@@ -230,7 +299,7 @@ const commands = [
         const FormData = require("form-data");
         const form = new FormData();
         form.append("file", buffer, { filename: "image.png", contentType: "image/png" });
-        form.append("apikey", "K82296058288957");
+        form.append("apikey", process.env.OCR_API_KEY || "K82296058288957");
         form.append("language", "eng");
         const res = await axios.post("https://api.ocr.space/parse/image", form, { headers: form.getHeaders(), timeout: 30000 });
         const text = res.data?.ParsedResults?.[0]?.ParsedText || "";
