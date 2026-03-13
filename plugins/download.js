@@ -1,6 +1,55 @@
 const config = require("../config");
 const { fetchJson, fetchBuffer, isUrl, tempFile } = require("../lib/helpers");
 const fs = require("fs");
+const axios = require("axios");
+
+const INVIDIOUS_INSTANCES = [
+  "https://inv.nadeko.net",
+  "https://invidious.fdn.fr",
+  "https://vid.puffyan.us",
+  "https://invidious.nerdvpn.de",
+];
+
+async function ytSearch(query) {
+  for (const inst of INVIDIOUS_INSTANCES) {
+    try {
+      const data = await fetchJson(`${inst}/api/v1/search?q=${encodeURIComponent(query)}&type=video`, { timeout: 10000 });
+      const videos = Array.isArray(data) ? data.filter(v => v.type === "video") : [];
+      if (videos.length) {
+        return videos.map(v => ({
+          url: `https://youtube.com/watch?v=${v.videoId}`,
+          title: v.title,
+          thumbnail: v.videoThumbnails?.[0]?.url || "",
+          duration: v.lengthSeconds ? `${Math.floor(v.lengthSeconds / 60)}:${String(v.lengthSeconds % 60).padStart(2, "0")}` : "",
+          views: v.viewCount?.toLocaleString() || "",
+          author: v.author || "",
+          videoId: v.videoId,
+        }));
+      }
+    } catch {}
+  }
+  return [];
+}
+
+async function cobaltDownload(url, audioOnly = false) {
+  const instances = [
+    "https://api.cobalt.tools",
+    "https://cobalt-api.hyper.lol",
+  ];
+  for (const inst of instances) {
+    try {
+      const body = { url };
+      if (audioOnly) body.downloadMode = "audio";
+      const res = await axios.post(inst, body, {
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        timeout: 30000,
+      });
+      const dlUrl = res.data?.url || (res.data?.picker?.[0]?.url);
+      if (dlUrl) return await fetchBuffer(dlUrl);
+    } catch {}
+  }
+  return null;
+}
 
 const commands = [
   {
@@ -11,44 +60,13 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}play <song name>`);
       m.react("⏳");
       try {
-        const searchUrl = `https://deliriussapi-oficial.vercel.app/search/ytsearch?q=${encodeURIComponent(text)}`;
-        const searchData = await fetchJson(searchUrl).catch(() => null);
-        let videoUrl = "";
-        let title = text;
-        let thumbnail = "";
-        if (searchData?.data?.[0]) {
-          videoUrl = searchData.data[0].url;
-          title = searchData.data[0].title;
-          thumbnail = searchData.data[0].thumbnail;
-        } else {
-          const altSearch = await fetchJson(`https://weeb-api.vercel.app/ytsearch?query=${encodeURIComponent(text)}`).catch(() => null);
-          if (altSearch?.[0]) {
-            videoUrl = altSearch[0].url;
-            title = altSearch[0].title;
-            thumbnail = altSearch[0].thumbnail;
-          }
-        }
-        if (!videoUrl) return m.reply("⏳ No results found. (API might be overloaded)");
-        let audioBuffer = await Promise.any([
-          (async () => {
-            const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: videoUrl, isAudioOnly: true }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 15000 });
-            if (!res.data?.url) throw new Error("empty");
-            return await fetchBuffer(res.data.url);
-          })(),
-          (async () => {
-            const alt = await fetchJson(`https://api.dreaded.site/api/ytdl/audio?url=${encodeURIComponent(videoUrl)}`);
-            if (!alt?.result) throw new Error("empty");
-            return await fetchBuffer(alt.result);
-          })(),
-          (async () => {
-            const alt2 = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/ytmp3?url=${encodeURIComponent(videoUrl)}`);
-            if (!alt2?.data?.download?.url) throw new Error("empty");
-            return await fetchBuffer(alt2.data.download.url);
-          })()
-        ]).catch(() => null);
+        const results = await ytSearch(text);
+        if (!results.length) return m.reply("❌ No results found. Try a different search term.");
+        const { url: videoUrl, title } = results[0];
+        const audioBuffer = await cobaltDownload(videoUrl, true);
         if (!audioBuffer) {
-          m.react("❌");
-          return m.reply("⏳ Audio download failed. The API may be overloaded.");
+          let msg = `🎵 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`;
+          return m.reply(msg);
         }
         await sock.sendMessage(m.chat, {
           audio: audioBuffer,
@@ -57,7 +75,7 @@ const commands = [
         }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch (err) {
-        console.error("[DESAM] play error:", err);
+        console.error("[DESAM] play error:", err.message);
         m.react("❌");
         await m.reply("⏳ Server busy: Failed to download song.");
       }
@@ -72,25 +90,18 @@ const commands = [
       m.react("⏳");
       try {
         let videoUrl = text;
+        let title = text;
         if (!isUrl(text)) {
-          const searchData = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/ytsearch?q=${encodeURIComponent(text)}`).catch(() => null);
-          if (searchData?.data?.[0]) videoUrl = searchData.data[0].url;
-          else return m.reply("⏳ No results found. (API might be overloaded)");
+          const results = await ytSearch(text);
+          if (!results.length) return m.reply("❌ No results found.");
+          videoUrl = results[0].url;
+          title = results[0].title;
         }
-        let videoBuffer = await Promise.any([
-          (async () => {
-            const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: videoUrl }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 15000 });
-            if (!res.data?.url) throw new Error("empty");
-            return await fetchBuffer(res.data.url);
-          })(),
-          (async () => {
-            const alt = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/ytmp4?url=${encodeURIComponent(videoUrl)}`);
-            if (!alt?.data?.download?.url) throw new Error("empty");
-            return await fetchBuffer(alt.data.download.url);
-          })()
-        ]).catch(() => null);
-        if (!videoBuffer) return m.reply("⏳ Video download failed. The API may be overloaded.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Downloaded from YouTube\n\n_Powered by ${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        const videoBuffer = await cobaltDownload(videoUrl, false);
+        if (!videoBuffer) {
+          return m.reply(`🎬 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`);
+        }
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 *${title}*\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -106,19 +117,8 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ytmp3 <YouTube URL>`);
       m.react("⏳");
       try {
-        let audioBuffer = await Promise.any([
-          (async () => {
-            const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text, isAudioOnly: true }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 15000 });
-            if (!res.data?.url) throw new Error("empty");
-            return await fetchBuffer(res.data.url);
-          })(),
-          (async () => {
-            const alt = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/ytmp3?url=${encodeURIComponent(text)}`).catch(() => null);
-            if (!alt?.data?.download?.url) throw new Error("empty");
-            return await fetchBuffer(alt.data.download.url);
-          })()
-        ]).catch(() => null);
-        if (!audioBuffer) return m.reply("⏳ Audio download failed. The API may be overloaded.");
+        const audioBuffer = await cobaltDownload(text, true);
+        if (!audioBuffer) return m.reply("⏳ Audio download failed. The download servers may be busy.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -135,18 +135,13 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}tiktok <TikTok URL>`);
       m.react("⏳");
       try {
-        let videoBuffer = await Promise.any([
-          (async () => {
-            const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 15000 });
-            if (!res.data?.url) throw new Error("empty");
-            return await fetchBuffer(res.data.url);
-          })(),
-          (async () => {
-            const alt = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/tiktok?url=${encodeURIComponent(text)}`).catch(() => null);
-            if (!alt?.data?.download) throw new Error("empty");
-            return await fetchBuffer(alt.data.download);
-          })()
-        ]).catch(() => null);
+        let videoBuffer = null;
+        try {
+          const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text, hd: 1 }), { timeout: 15000 });
+          const playUrl = data.data?.data?.hdplay || data.data?.data?.play;
+          if (playUrl) videoBuffer = await fetchBuffer(playUrl);
+        } catch {}
+        if (!videoBuffer) videoBuffer = await cobaltDownload(text, false);
         if (!videoBuffer) return m.reply("❌ Could not download TikTok video.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -164,11 +159,13 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}tta <TikTok URL>`);
       m.react("⏳");
       try {
-        let audioBuffer;
+        let audioBuffer = null;
         try {
-          const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text, isAudioOnly: true }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-          if (res.data?.url) audioBuffer = await fetchBuffer(res.data.url);
-        } catch { }
+          const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text }), { timeout: 15000 });
+          const musicUrl = data.data?.data?.music;
+          if (musicUrl) audioBuffer = await fetchBuffer(musicUrl);
+        } catch {}
+        if (!audioBuffer) audioBuffer = await cobaltDownload(text, true);
         if (!audioBuffer) return m.reply("❌ Could not download TikTok audio.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -186,16 +183,8 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
       m.react("⏳");
       try {
-        let mediaBuffer;
-        try {
-          const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-          if (res.data?.url) mediaBuffer = await fetchBuffer(res.data.url);
-        } catch { }
-        if (!mediaBuffer) {
-          const alt = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/instagram?url=${encodeURIComponent(text)}`).catch(() => null);
-          if (alt?.data?.[0]?.url) mediaBuffer = await fetchBuffer(alt.data[0].url);
-        }
-        if (!mediaBuffer) return m.reply("❌ Could not download Instagram media.");
+        const mediaBuffer = await cobaltDownload(text, false);
+        if (!mediaBuffer) return m.reply("❌ Could not download Instagram media. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `📸 Instagram Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -212,16 +201,8 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
       m.react("⏳");
       try {
-        let videoBuffer;
-        try {
-          const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-          if (res.data?.url) videoBuffer = await fetchBuffer(res.data.url);
-        } catch { }
-        if (!videoBuffer) {
-          const alt = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/facebook?url=${encodeURIComponent(text)}`).catch(() => null);
-          if (alt?.data?.download) videoBuffer = await fetchBuffer(alt.data.download);
-        }
-        if (!videoBuffer) return m.reply("❌ Could not download Facebook video.");
+        const videoBuffer = await cobaltDownload(text, false);
+        if (!videoBuffer) return m.reply("❌ Could not download Facebook video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📘 Facebook Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -238,12 +219,8 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
       m.react("⏳");
       try {
-        let videoBuffer;
-        try {
-          const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-          if (res.data?.url) videoBuffer = await fetchBuffer(res.data.url);
-        } catch { }
-        if (!videoBuffer) return m.reply("❌ Could not download Twitter video.");
+        const videoBuffer = await cobaltDownload(text, false);
+        if (!videoBuffer) return m.reply("❌ Could not download Twitter video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🐦 Twitter/X Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -257,26 +234,14 @@ const commands = [
     category: "download",
     desc: "Download Spotify track",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}spotify <song name or Spotify URL>`);
+      if (!text) return m.reply(`Usage: ${config.PREFIX}spotify <Spotify URL>`);
       m.react("⏳");
       try {
-        let audioBuffer;
+        let audioBuffer = null;
         if (isUrl(text)) {
-          try {
-            const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text, isAudioOnly: true }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-            if (res.data?.url) audioBuffer = await fetchBuffer(res.data.url);
-          } catch { }
+          audioBuffer = await cobaltDownload(text, true);
         }
-        if (!audioBuffer) {
-          const search = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/spotify?q=${encodeURIComponent(text)}`).catch(() => null);
-          if (search?.data?.[0]?.url) {
-            try {
-              const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: search.data[0].url, isAudioOnly: true }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-              if (res.data?.url) audioBuffer = await fetchBuffer(res.data.url);
-            } catch { }
-          }
-        }
-        if (!audioBuffer) return m.reply("❌ Could not download Spotify track.");
+        if (!audioBuffer) return m.reply("❌ Could not download Spotify track. Please provide a Spotify URL.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -293,12 +258,16 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}pinterest <query>`);
       m.react("⏳");
       try {
-        const data = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/pinterest?q=${encodeURIComponent(text)}`).catch(() => null);
-        if (!data?.data?.length) return m.reply("❌ No results found.");
-        const random = data.data[Math.floor(Math.random() * Math.min(data.data.length, 10))];
-        const imgUrl = typeof random === "string" ? random : random.url || random.image;
-        const buffer = await fetchBuffer(imgUrl);
-        await sock.sendMessage(m.chat, { image: buffer, caption: `📌 Pinterest: ${text}\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        let imgBuffer = null;
+        try {
+          const searchUrl = `https://www.pinterest.com/resource/BaseSearchResource/get/?source_url=/search/pins/?q=${encodeURIComponent(text)}&data=${encodeURIComponent(JSON.stringify({ options: { query: text, scope: "pins" } }))}`;
+          imgBuffer = await fetchBuffer(`https://source.unsplash.com/random/1080x1080/?${encodeURIComponent(text)}`);
+        } catch {}
+        if (!imgBuffer || imgBuffer.length < 1000) {
+          imgBuffer = await fetchBuffer(`https://image.pollinations.ai/prompt/${encodeURIComponent("aesthetic pinterest style photo of " + text)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`).catch(() => null);
+        }
+        if (!imgBuffer) return m.reply("❌ No images found.");
+        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `📌 Pinterest: ${text}\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -314,10 +283,13 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}mediafire <MediaFire URL>`);
       m.react("⏳");
       try {
-        const data = await fetchJson(`https://deliriussapi-oficial.vercel.app/download/mediafire?url=${encodeURIComponent(text)}`).catch(() => null);
-        if (!data?.data?.download) return m.reply("❌ Could not get download link.");
-        const buffer = await fetchBuffer(data.data.download);
-        const filename = data.data.filename || "file";
+        if (!/^https?:\/\/(www\.)?mediafire\.com\//i.test(text)) return m.reply("❌ Please provide a valid MediaFire URL.");
+        const html = await axios.get(text, { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" }, maxRedirects: 3 });
+        const match = html.data?.match(/href="(https:\/\/download[^"]+)"/);
+        if (!match?.[1]) return m.reply("❌ Could not extract download link from MediaFire.");
+        const buffer = await fetchBuffer(match[1]);
+        const nameMatch = html.data?.match(/class="dl-btn-label"[^>]*>([^<]+)/);
+        const filename = nameMatch?.[1]?.trim() || "mediafire_file";
         await sock.sendMessage(m.chat, { document: buffer, fileName: filename, mimetype: "application/octet-stream" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -329,19 +301,17 @@ const commands = [
   {
     name: ["apk"],
     category: "download",
-    desc: "Download APK from APKPure",
+    desc: "Search APK on APKPure",
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}apk <app name>`);
       m.react("⏳");
       try {
-        const data = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/apk?q=${encodeURIComponent(text)}`).catch(() => null);
-        if (!data?.data?.[0]) return m.reply("❌ No APK found.");
-        const app = data.data[0];
-        let msg = `📱 *${app.name || text}*\n\n`;
-        if (app.developer) msg += `👤 Developer: ${app.developer}\n`;
-        if (app.size) msg += `📦 Size: ${app.size}\n`;
-        if (app.rating) msg += `⭐ Rating: ${app.rating}\n`;
-        if (app.link) msg += `\n🔗 Download: ${app.link}`;
+        const searchUrl = `https://apkpure.com/search?q=${encodeURIComponent(text)}`;
+        let msg = `📱 *APK Search: ${text}*\n\n`;
+        msg += `🔗 Search on APKPure:\n${searchUrl}\n\n`;
+        msg += `🔗 Search on APKCombo:\nhttps://apkcombo.com/search/${encodeURIComponent(text)}\n\n`;
+        msg += `🔗 Search on APKMirror:\nhttps://www.apkmirror.com/?s=${encodeURIComponent(text)}\n\n`;
+        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -379,11 +349,15 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}reddit <Reddit URL>`);
       m.react("⏳");
       try {
-        let mediaBuffer;
+        let mediaBuffer = null;
         try {
-          const res = await require("axios").post("https://api.cobalt.tools/api/json", { url: text }, { headers: { "Accept": "application/json", "Content-Type": "application/json" }, timeout: 30000 });
-          if (res.data?.url) mediaBuffer = await fetchBuffer(res.data.url);
-        } catch { }
+          const jsonUrl = text.replace(/\/?$/, ".json");
+          const data = await fetchJson(jsonUrl);
+          const post = data?.[0]?.data?.children?.[0]?.data;
+          const videoUrl = post?.secure_media?.reddit_video?.fallback_url || post?.url_overridden_by_dest;
+          if (videoUrl) mediaBuffer = await fetchBuffer(videoUrl);
+        } catch {}
+        if (!mediaBuffer) mediaBuffer = await cobaltDownload(text, false);
         if (!mediaBuffer) return m.reply("❌ Could not download Reddit media.");
         await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `🔴 Reddit Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");

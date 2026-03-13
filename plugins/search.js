@@ -1,5 +1,30 @@
 const config = require("../config");
 const { fetchJson, fetchBuffer, sendImageOrText } = require("../lib/helpers");
+const axios = require("axios");
+
+const INVIDIOUS_INSTANCES = [
+  "https://inv.nadeko.net",
+  "https://invidious.fdn.fr",
+  "https://vid.puffyan.us",
+  "https://invidious.nerdvpn.de",
+];
+
+const SEARXNG_INSTANCES = [
+  "https://searx.be",
+  "https://search.sapti.me",
+  "https://searx.tiekoetter.com",
+  "https://search.ononoki.org",
+];
+
+async function searxSearch(query, categories = "general") {
+  for (const inst of SEARXNG_INSTANCES) {
+    try {
+      const data = await fetchJson(`${inst}/search?q=${encodeURIComponent(query)}&format=json&categories=${categories}`, { timeout: 10000 });
+      if (data?.results?.length) return data.results;
+    } catch {}
+  }
+  return [];
+}
 
 const commands = [
   {
@@ -10,28 +35,35 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}google <query>`);
       m.react("🔍");
       try {
-        let results = await Promise.any([
-          (async () => {
-            const data = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/googlesearch?q=${encodeURIComponent(text)}`);
-            if (!data?.data?.length) throw new Error("empty");
-            return data.data;
-          })(),
-          (async () => {
-            const data = await fetchJson(`https://api.dreaded.site/api/google?query=${encodeURIComponent(text)}`);
-            if (!data?.result?.length) throw new Error("empty");
-            return data.result;
-          })()
-        ]).catch(() => []);
-        if (!results.length) return m.reply("⏳ The search API is busy or no results were found. Try again soon!");
+        const results = await searxSearch(text);
+        if (!results.length) {
+          try {
+            const ddg = await fetchJson(`https://api.duckduckgo.com/?q=${encodeURIComponent(text)}&format=json&no_html=1`);
+            if (ddg?.RelatedTopics?.length) {
+              let msg = `🔍 *Search Results for:* ${text}\n\n`;
+              ddg.RelatedTopics.slice(0, 7).forEach((r, i) => {
+                if (r.Text && r.FirstURL) {
+                  msg += `${i + 1}. ${r.Text}\n🔗 ${r.FirstURL}\n\n`;
+                }
+              });
+              msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+              await m.reply(msg);
+              m.react("✅");
+              return;
+            }
+          } catch {}
+          return m.reply("⏳ No search results found. Try a different query.");
+        }
         let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🔍 *Google Search Results* ║\n`;
+        msg += `║ 🔍 *Search Results* ║\n`;
         msg += `╚══════════════════════════╝\n\n`;
         msg += `🔎 Query: *${text}*\n`;
         msg += `📊 Showing top ${Math.min(results.length, 7)} results\n\n`;
         results.slice(0, 7).forEach((r, i) => {
           msg += `┌─── *${i + 1}. ${r.title || "Untitled"}* ───\n`;
-          if (r.description || r.snippet) msg += `│ ${(r.description || r.snippet).substring(0, 300)}\n`;
-          if (r.url || r.link) msg += `│ 🔗 ${r.url || r.link}\n`;
+          if (r.content) msg += `│ ${r.content.substring(0, 300)}\n`;
+          if (r.url) msg += `│ 🔗 ${r.url}\n`;
+          if (r.engine) msg += `│ 🔧 ${r.engine}\n`;
           msg += `└──────────────────\n\n`;
         });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -111,19 +143,29 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}lyrics <song name>`);
       m.react("🎵");
       try {
-        let { title, artist, lyrics } = await Promise.any([
-          (async () => {
-            const data = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/lyrics?q=${encodeURIComponent(text)}`);
-            if (!data?.data?.lyrics) throw new Error("empty");
-            return { title: data.data.title || text, artist: data.data.artist || "", lyrics: data.data.lyrics };
-          })(),
-          (async () => {
-            const data = await fetchJson(`https://api.dreaded.site/api/lyrics?query=${encodeURIComponent(text)}`);
-            if (!data?.result?.lyrics) throw new Error("empty");
-            return { title: data.result.title || text, artist: data.result.artist || "", lyrics: data.result.lyrics };
-          })()
-        ]).catch(() => ({ title: "", artist: "", lyrics: "" }));
-        if (!lyrics) return m.reply("⏳ Lyrics not found or API is overloaded.");
+        let title = text, artist = "", lyrics = "";
+        try {
+          const data = await fetchJson(`https://lrclib.net/api/search?q=${encodeURIComponent(text)}`, { timeout: 10000 });
+          if (data?.[0]) {
+            title = data[0].trackName || text;
+            artist = data[0].artistName || "";
+            lyrics = data[0].plainLyrics || "";
+          }
+        } catch {}
+        if (!lyrics) {
+          const parts = text.split(/[-–—]/);
+          const a = parts[0]?.trim() || text;
+          const t = parts[1]?.trim() || text;
+          try {
+            const data = await fetchJson(`https://api.lyrics.ovh/v1/${encodeURIComponent(a)}/${encodeURIComponent(t)}`, { timeout: 10000 });
+            if (data?.lyrics) {
+              lyrics = data.lyrics;
+              artist = a;
+              title = t;
+            }
+          } catch {}
+        }
+        if (!lyrics) return m.reply("⏳ Lyrics not found. Try: artist - song title");
         let msg = `╔══════════════════════════╗\n`;
         msg += `║ 🎵 *SONG LYRICS* ║\n`;
         msg += `╚══════════════════════════╝\n\n`;
@@ -307,8 +349,16 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}ytsearch <query>`);
       m.react("🔍");
       try {
-        const data = await fetchJson(`https://deliriussapi-oficial.vercel.app/search/ytsearch?q=${encodeURIComponent(text)}`).catch(() => null);
-        const results = data?.data || [];
+        let results = [];
+        for (const inst of INVIDIOUS_INSTANCES) {
+          try {
+            const data = await fetchJson(`${inst}/api/v1/search?q=${encodeURIComponent(text)}&type=video`, { timeout: 10000 });
+            if (Array.isArray(data) && data.length) {
+              results = data.filter(v => v.type === "video");
+              break;
+            }
+          } catch {}
+        }
         if (!results.length) return m.reply("❌ No results found.");
         let msg = `╔══════════════════════════╗\n`;
         msg += `║ ▶️ *YOUTUBE SEARCH* ║\n`;
@@ -316,11 +366,15 @@ const commands = [
         msg += `🔎 Query: *${text}*\n\n`;
         results.slice(0, 7).forEach((r, i) => {
           msg += `┌─── *${i + 1}. ${r.title}* ───\n`;
-          if (r.duration) msg += `│ ⏱️ Duration: ${r.duration}\n`;
-          if (r.views) msg += `│ 👁️ Views: ${r.views}\n`;
-          if (r.uploaded || r.ago) msg += `│ 📅 Uploaded: ${r.uploaded || r.ago}\n`;
-          if (r.author?.name) msg += `│ 👤 Channel: ${r.author.name}\n`;
-          msg += `│ 🔗 ${r.url}\n`;
+          if (r.lengthSeconds) {
+            const mins = Math.floor(r.lengthSeconds / 60);
+            const secs = r.lengthSeconds % 60;
+            msg += `│ ⏱️ Duration: ${mins}:${String(secs).padStart(2, "0")}\n`;
+          }
+          if (r.viewCount) msg += `│ 👁️ Views: ${r.viewCount.toLocaleString()}\n`;
+          if (r.publishedText) msg += `│ 📅 Uploaded: ${r.publishedText}\n`;
+          if (r.author) msg += `│ 👤 Channel: ${r.author}\n`;
+          msg += `│ 🔗 https://youtube.com/watch?v=${r.videoId}\n`;
           msg += `└──────────────────\n\n`;
         });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -419,7 +473,6 @@ const commands = [
       m.react("🎌");
       try {
         const query = `query ($search: String) { Media (search: $search, type: ANIME) { id title { romaji english native } episodes duration status season seasonYear averageScore meanScore popularity favourites genres tags { name rank } description(asHtml: false) coverImage { large } bannerImage startDate { year month day } endDate { year month day } studios { nodes { name isAnimationStudio } } source format countryOfOrigin isAdult siteUrl nextAiringEpisode { episode airingAt } rankings { rank type context } } }`;
-        const axios = require("axios");
         const res = await axios.post("https://graphql.anilist.co", { query, variables: { search: text } }, { timeout: 15000 });
         const anime = res.data?.data?.Media;
         if (!anime) return m.reply("❌ Anime not found.");
@@ -463,28 +516,24 @@ const commands = [
         if (anime.isAdult) msg += `│ 🔞 Adult: Yes\n`;
         msg += `└──────────────────\n\n`;
 
-        const studios = anime.studios?.nodes?.filter(s => s.isAnimationStudio) || [];
-        const producers = anime.studios?.nodes?.filter(s => !s.isAnimationStudio) || [];
-        if (studios.length || producers.length) {
-          msg += `┌─── *Studios* ───\n`;
-          if (studios.length) msg += `│ 🏢 Studio: ${studios.map(s => s.name).join(", ")}\n`;
-          if (producers.length) msg += `│ 🎬 Producers: ${producers.map(s => s.name).join(", ")}\n`;
-          msg += `└──────────────────\n\n`;
+        if (anime.studios?.nodes?.length) {
+          const studios = anime.studios.nodes.filter(s => s.isAnimationStudio).map(s => s.name);
+          if (studios.length) msg += `🎬 *Studios:* ${studios.join(", ")}\n`;
         }
-
         if (anime.genres?.length) msg += `🎭 *Genres:* ${anime.genres.join(", ")}\n`;
         if (anime.tags?.length) {
-          msg += `🏷️ *Tags:* ${anime.tags.map(t => `${t.name} (${t.rank}%)`).join(", ")}\n`;
+          msg += `🏷️ *Tags:* ${anime.tags.slice(0, 10).map(t => `${t.name} (${t.rank}%)`).join(", ")}\n`;
         }
 
         if (anime.nextAiringEpisode) {
-          const nextDate = new Date(anime.nextAiringEpisode.airingAt * 1000);
-          msg += `\n📡 *Next Episode:* Episode ${anime.nextAiringEpisode.episode} — ${nextDate.toUTCString()}\n`;
+          const airingDate = new Date(anime.nextAiringEpisode.airingAt * 1000);
+          msg += `\n📡 *Next Episode:* EP${anime.nextAiringEpisode.episode} — ${airingDate.toLocaleDateString()} ${airingDate.toLocaleTimeString()}\n`;
         }
 
         if (anime.description) {
           const cleanDesc = anime.description.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n");
-          msg += `\n📝 *Synopsis:*\n${cleanDesc}`;
+          msg += `\n📝 *Synopsis:*\n${cleanDesc.substring(0, 2000)}`;
+          if (cleanDesc.length > 2000) msg += "\n_(truncated)_";
         }
 
         if (anime.siteUrl) msg += `\n\n🔗 ${anime.siteUrl}`;
@@ -515,7 +564,6 @@ const commands = [
       m.react("📖");
       try {
         const query = `query ($search: String) { Media (search: $search, type: MANGA) { id title { romaji english native } chapters volumes status averageScore meanScore popularity favourites genres tags { name rank } description(asHtml: false) coverImage { large } startDate { year month day } endDate { year month day } staff { nodes { name { full } } } source format countryOfOrigin isAdult siteUrl rankings { rank type context } } }`;
-        const axios = require("axios");
         const res = await axios.post("https://graphql.anilist.co", { query, variables: { search: text } }, { timeout: 15000 });
         const manga = res.data?.data?.Media;
         if (!manga) return m.reply("❌ Manga not found.");
@@ -598,12 +646,65 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}wallpaper <query>`);
       m.react("🖼️");
       try {
-        const buffer = await fetchBuffer(`https://source.unsplash.com/random/1920x1080/?${encodeURIComponent(text)}`);
+        let buffer = null;
+        try {
+          buffer = await fetchBuffer(`https://source.unsplash.com/random/1920x1080/?${encodeURIComponent(text)}`);
+        } catch {}
+        if (!buffer || buffer.length < 1000) {
+          buffer = await fetchBuffer(`https://image.pollinations.ai/prompt/${encodeURIComponent("beautiful wallpaper 4k " + text)}?width=1920&height=1080&nologo=true&seed=${Date.now()}`).catch(() => null);
+        }
+        if (!buffer) return m.reply("❌ Could not find wallpapers.");
         await sock.sendMessage(m.chat, { image: buffer, caption: `🖼️ *Wallpaper: ${text}*\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
         await m.reply("⏳ The Wallpaper search API is currently overloaded.");
+      }
+    },
+  },
+  {
+    name: ["weather", "wt"],
+    category: "search",
+    desc: "Get weather info for a city",
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}weather <city>`);
+      m.react("🌤️");
+      try {
+        const data = await fetchJson(`https://wttr.in/${encodeURIComponent(text)}?format=j1`);
+        if (!data?.current_condition?.[0]) return m.reply("❌ City not found.");
+        const c = data.current_condition[0];
+        const area = data.nearest_area?.[0];
+        let msg = `╔══════════════════════════╗\n`;
+        msg += `║ 🌤️ *WEATHER* ║\n`;
+        msg += `╚══════════════════════════╝\n\n`;
+        msg += `📍 *${area?.areaName?.[0]?.value || text}*`;
+        if (area?.country?.[0]?.value) msg += `, ${area.country[0].value}`;
+        msg += `\n\n`;
+        msg += `┌─── *Current* ───\n`;
+        msg += `│ 🌡️ Temp: ${c.temp_C}°C (${c.temp_F}°F)\n`;
+        msg += `│ 🤗 Feels Like: ${c.FeelsLikeC}°C (${c.FeelsLikeF}°F)\n`;
+        msg += `│ 💧 Humidity: ${c.humidity}%\n`;
+        msg += `│ 💨 Wind: ${c.windspeedKmph} km/h ${c.winddir16Point}\n`;
+        msg += `│ 🌫️ Visibility: ${c.visibility} km\n`;
+        msg += `│ ☁️ Cloud Cover: ${c.cloudcover}%\n`;
+        msg += `│ 📊 Pressure: ${c.pressure} mb\n`;
+        msg += `│ 🌧️ Precipitation: ${c.precipMM} mm\n`;
+        if (c.uvIndex) msg += `│ ☀️ UV Index: ${c.uvIndex}\n`;
+        msg += `│ 📝 ${c.weatherDesc?.[0]?.value || "N/A"}\n`;
+        msg += `└──────────────────\n\n`;
+        if (data.weather?.length) {
+          msg += `┌─── *Forecast* ───\n`;
+          data.weather.slice(0, 3).forEach(d => {
+            msg += `│ 📅 ${d.date}: ${d.mintempC}°C - ${d.maxtempC}°C\n`;
+          });
+          msg += `└──────────────────\n\n`;
+        }
+        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        await m.reply(msg);
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("⏳ The Weather API is currently overloaded.");
       }
     },
   },
