@@ -1,26 +1,27 @@
-# DESAM WABOT
+# Desam WABot
 
-A powerful, multi-device WhatsApp bot built with Node.js and Baileys. Features **200+ commands** across 19 plugin categories including AI, downloads, games, group management, religious content, sports, education, utilities, and much more.
+A powerful multi-device WhatsApp bot built with Node.js and Baileys v7. Features **520+ commands and aliases** across 19 plugin categories including AI, downloads, games, group management, religious content, sports, education, utilities, and much more.
 
-Powered by **Desam Tech**
+Powered by **Desam Tech** · [Join our WhatsApp Channel](https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h)
 
 ---
 
 ## Features
 
-- Multi-device WhatsApp Web support
-- 200+ commands with 400+ aliases
-- Plugin-based architecture (easy to extend)
-- Group management (welcome/goodbye, anti-link, anti-bad words, warnings)
-- Privacy controls (anti-call, auto-read, status viewing)
-- AI chatbot integration
-- Media tools (stickers, image editing, video downloads)
-- Religious content (Bible, Quran, Hadith, prayers)
+- Multi-device WhatsApp Web support (Baileys v7)
+- 520+ commands and aliases across 19 categories
+- Plugin-based architecture — easy to extend
+- Group management (welcome/goodbye, anti-link, anti-bad word, warnings)
+- Privacy controls (anti-call, auto-read, auto status view)
+- Multiple AI integrations (ChatGPT, Gemini, Claude, DeepSeek, and more)
+- Media tools (stickers, image editing, video/audio downloads)
+- Religious content (Bible, Quran, Hadith, daily prayers)
 - Sports data (live scores, fixtures, standings, player/team info)
-- Education tools (periodic table, planets, spelling, grammar)
+- Education tools (periodic table, planets, spell check, grammar)
 - Utility tools (currency converter, BMI, password generator, hashing)
-- Owner-only admin commands (eval, shell, broadcast)
-- PM2 ready for 24/7 deployment
+- Owner-only admin commands (eval, shell, broadcast, ban)
+- SQLite storage — no external database required
+- PM2-ready for 24/7 deployment
 
 ---
 
@@ -29,7 +30,7 @@ Powered by **Desam Tech**
 ### Prerequisites
 
 - Node.js 20+
-- A WhatsApp session ID (generate at your DESAM WABOT dashboard)
+- A WhatsApp session ID (scan QR or export from WhatsApp Web)
 
 ### Installation
 
@@ -45,31 +46,26 @@ npm install
 cp .env.example .env
 ```
 
-For production deployments, you can also start from `.env.production.example`.
-
 Edit `.env` with your settings:
 
-This build uses local SQLite only. The bot stores its database in `data/bot.db` by default and does not require any external database service.
+| Variable           | Description                              | Default                          |
+| ------------------ | ---------------------------------------- | -------------------------------- |
+| `SESSION_ID`       | Your WhatsApp session credentials (required) | —                            |
+| `BOT_NAME`         | Bot display name                         | `Desam WABot`                    |
+| `PREFIX`           | Command prefix                           | `.`                              |
+| `OWNER_NUMBER`     | Your WhatsApp number (with country code) | —                                |
+| `MODE`             | `public` or `private`                    | `public`                         |
+| `TIMEZONE`         | Timezone for time-based features         | `Africa/Accra`                   |
+| `SQLITE_PATH`      | SQLite database file path                | `./data/bot.db`                  |
+| `AUTO_READ`        | Auto-read incoming messages              | `off`                            |
+| `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses              | `off`                            |
+| `ANTI_CALL`        | Reject incoming calls automatically      | `on`                             |
+| `CHATBOT`          | Enable AI chatbot mode                   | `off`                            |
+| `AUTO_BIO_MSG`     | Auto-update bio message template         | `🤖 Desam WABot \| {time} \| {date}` |
 
-| Variable           | Description                         | Default          |
-| ------------------ | ----------------------------------- | ---------------- |
-| `SESSION_ID`       | Your WhatsApp session ID (required) | -                |
-| `SQLITE_PATH`      | Local SQLite database file path     | `./data/bot.db`  |
-| `BOT_NAME`         | Bot display name                    | `Desam Tech Bot` |
-| `PREFIX`           | Command prefix                      | `.`              |
-| `OWNER_NUMBER`     | Your WhatsApp number                | -                |
-| `MODE`             | `public` or `private`               | `public`         |
-| `TIMEZONE`         | Timezone for time-based features    | `Africa/Accra`   |
-| `AUTO_READ`        | Auto-read incoming messages         | `off`            |
-| `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses         | `off`            |
-| `ANTI_CALL`        | Reject incoming calls               | `on`             |
-| `CHATBOT`          | Enable AI chatbot mode              | `off`            |
+> **Note:** Values in `.env` always take priority over any environment variables set elsewhere.
 
 ### Running
-
-Note: this bot is a background worker process (not an HTTP server). On platforms like Render, Koyeb, Heroku, and DigitalOcean App Platform, deploy it as a `worker`, not a `web` service.
-
-SQLite storage note: on a VPS or your own Docker host, `data/bot.db` persists normally on disk. On many managed platforms, local disk can be ephemeral, so the SQLite file may reset after rebuilds or full restarts.
 
 **Direct:**
 
@@ -86,22 +82,26 @@ pm2 save
 pm2 startup
 ```
 
-### Deployment Tooling
+---
 
-Run the built-in deployment check:
+## Deployment Notes
 
-```bash
-npm run doctor
-```
+- The bot runs as a **background worker**, not an HTTP server. On platforms like Render, Koyeb, or Heroku deploy it as a `worker` service, not a `web` service.
+- On **Replit**, the bot runs on port 5000 as a web process (for the pairing UI) while the WhatsApp connection runs in the same process.
+- SQLite stores data at `data/bot.db`. On managed platforms with ephemeral disks, the database may reset on redeploy — use a persistent volume or back up regularly.
 
-Backup and restore local SQLite/auth state:
+**Backup / restore auth state:**
 
 ```bash
 npm run backup:state
 npm run restore:state -- --from backups/state-YYYY-MM-DDTHH-MM-SS-sssZ
 ```
 
-Exact host-by-host deployment instructions are in `DEPLOYMENT.md`.
+**Run diagnostics:**
+
+```bash
+npm run doctor
+```
 
 ---
 
@@ -111,11 +111,11 @@ Exact host-by-host deployment instructions are in `DEPLOYMENT.md`.
 
 | Command                                   | Description             |
 | ----------------------------------------- | ----------------------- |
-| `.menu` / `.help` / `.commands` / `.list` | Show command menu       |
-| `.ping`                                   | Check bot response time |
+| `.menu` / `.help` / `.commands`           | Show command categories |
+| `.list` / `.allcommands`                  | Show all commands       |
+| `.ping` / `.alive` / `.bot`               | Check bot response time |
 | `.info` / `.botinfo`                      | Bot information         |
-| `.owner`                                  | Show owner contact      |
-| `.alive`                                  | Check if bot is running |
+| `.owner` / `.creator`                     | Show owner contact      |
 
 ### AI (10 commands)
 
@@ -165,7 +165,7 @@ Exact host-by-host deployment instructions are in `DEPLOYMENT.md`.
 | --------------------------- | ------------------------ |
 | `.toaudio` / `.mp3`         | Extract audio from video |
 | `.bass` / `.bassboost`      | Bass boost audio         |
-| `.viewonce` / `.vo` / `.vv` | Re-send view once media  |
+| `.viewonce` / `.vo` / `.vv` | Re-send view-once media  |
 | `.crop`                     | Crop image               |
 
 ### Anime (15 commands)
@@ -249,7 +249,6 @@ Exact host-by-host deployment instructions are in `DEPLOYMENT.md`.
 | `.warn`                                | Warn a group member            |
 | `.warnings` / `.warnlist`              | Check user warnings            |
 | `.resetwarn` / `.clearwarn`            | Reset user warnings            |
-| `.grouplist` / `.members`              | List all group members         |
 
 ### Tools (11 commands)
 
@@ -265,7 +264,7 @@ Exact host-by-host deployment instructions are in `DEPLOYMENT.md`.
 | `.binary`              | Text to binary / binary to text |
 | `.color` / `.hex`      | Color info from hex code        |
 | `.ip` / `.ipinfo`      | IP address lookup               |
-| `.uptime`              | Bot uptime                      |
+| `.runtime` / `.uptime` | Bot uptime                      |
 
 ### Utility (13 commands)
 
@@ -411,7 +410,7 @@ Exact host-by-host deployment instructions are in `DEPLOYMENT.md`.
 | `.grammar`                             | Grammar check via AI     |
 | `.wordoftheday` / `.wotd`              | Word of the day          |
 
-### Owner (14 commands)
+### Owner (13 commands)
 
 | Command                     | Description                    |
 | --------------------------- | ------------------------------ |
@@ -438,48 +437,55 @@ WABot/
 ├── index.js              # Entry point
 ├── config.js             # Bot configuration
 ├── package.json
-├── .env.example          # Environment template
+├── .env.example          # Environment variable template
 ├── lib/
+│   ├── bot.js            # Core bot logic & session import
 │   ├── connection.js     # WhatsApp connection handler
 │   ├── handler.js        # Message handler & plugin loader
 │   └── helpers.js        # Utility functions
-└── plugins/
-    ├── ai.js             # AI commands
-    ├── anime.js          # Anime commands
-    ├── converter.js      # Media conversion
-    ├── download.js       # Download commands
-    ├── education.js      # Education tools
-    ├── games.js          # Games & fun
-    ├── group.js          # Group management
-    ├── main.js           # Core commands
-    ├── media.js          # Media tools
-    ├── misc.js           # Miscellaneous
-    ├── owner.js          # Owner commands
-    ├── privacy.js        # Privacy controls
-    ├── reactions.js      # Reaction commands
-    ├── religious.js      # Religious content
-    ├── search.js         # Search commands
-    ├── sports.js         # Sports data
-    ├── sticker.js        # Sticker tools
-    ├── tools.js          # General tools
-    └── utility.js        # Utility commands
+├── plugins/
+│   ├── ai.js             # AI commands
+│   ├── anime.js          # Anime commands
+│   ├── converter.js      # Media conversion
+│   ├── download.js       # Download commands
+│   ├── education.js      # Education tools
+│   ├── games.js          # Games & fun
+│   ├── group.js          # Group management
+│   ├── main.js           # Core commands
+│   ├── media.js          # Media tools
+│   ├── misc.js           # Miscellaneous
+│   ├── owner.js          # Owner commands
+│   ├── privacy.js        # Privacy controls
+│   ├── reactions.js      # Reaction commands
+│   ├── religious.js      # Religious content
+│   ├── search.js         # Search commands
+│   ├── sports.js         # Sports data
+│   ├── sticker.js        # Sticker tools
+│   ├── tools.js          # General tools
+│   └── utility.js        # Utility commands
+├── public/
+│   └── desam-bot.png     # Bot thumbnail image
+└── data/
+    └── bot.db            # SQLite database (auto-created)
 ```
+
+---
 
 ## VPS Deployment
 
 1. SSH into your VPS (Ubuntu 20.04+ recommended)
-2. Install Node.js 18+:
+2. Install Node.js 20+:
    ```bash
-   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
    sudo apt-get install -y nodejs
    ```
-3. Clone and setup:
+3. Clone and set up:
    ```bash
    git clone https://github.com/Theo-Sam/WABot.git
    cd WABot
    npm install
    cp .env.example .env
-   nano .env  # Add your SESSION_ID and settings
+   nano .env
    ```
 4. Start with PM2:
    ```bash
@@ -493,4 +499,4 @@ WABot/
 
 ## License
 
-MIT License - Powered by Desam Tech
+MIT License — Powered by **Desam Tech**
