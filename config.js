@@ -9,6 +9,11 @@ if (fs.existsSync(envPath)) {
   console.log(`[DESAM] No .env found at ${envPath}`);
 }
 
+if (process.env.BOT_NAME === "Desam Tech Bot") process.env.BOT_NAME = "Desam WABot";
+if (process.env.AUTO_BIO_MSG && process.env.AUTO_BIO_MSG.includes("Desam Tech Bot")) {
+  process.env.AUTO_BIO_MSG = process.env.AUTO_BIO_MSG.replace(/Desam Tech Bot/g, "Desam WABot");
+}
+
 function readSessionFromFile(sessionFileValue) {
   if (!sessionFileValue) return "";
   const resolvedPath = path.isAbsolute(sessionFileValue)

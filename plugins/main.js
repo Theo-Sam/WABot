@@ -29,16 +29,11 @@ const commands = [
       m.react("📋");
       if (text) {
         const catMenu = getCategoryMenu(text.toLowerCase(), cmds);
-        if (catMenu) return m.reply(catMenu);
-        return m.reply(`❌ Category *${text}* not found.\n\nUse ${config.PREFIX}menu to see all categories.${CHANNEL_FOOTER}`);
+        if (catMenu) return await sendImageOrText(sock, m.chat, getBotImage(), catMenu + CHANNEL_FOOTER, m);
+        return await sendImageOrText(sock, m.chat, null, `❌ Category *${text}* not found.\n\nUse ${config.PREFIX}menu to see all categories.${CHANNEL_FOOTER}`, m);
       }
       const menuText = getMenu() + CHANNEL_FOOTER;
-      const img = getBotImage();
-      if (img) {
-        await sendImageOrText(sock, m.chat, img, menuText, m);
-      } else {
-        await m.reply(menuText);
-      }
+      await sendImageOrText(sock, m.chat, getBotImage(), menuText, m);
     },
   },
   {
@@ -51,28 +46,15 @@ const commands = [
         const page = parseInt(text);
         if (!isNaN(page)) {
           const fullList = getFullList(cmds, page) + CHANNEL_FOOTER;
-          const img = getBotImage();
-          if (img) {
-            return await sendImageOrText(sock, m.chat, img, fullList, m);
-          }
-          return m.reply(fullList);
+          return await sendImageOrText(sock, m.chat, getBotImage(), fullList, m);
         }
         const catMenu = getCategoryMenu(text.toLowerCase(), cmds);
         if (catMenu) {
-          const img = getBotImage();
-          if (img) {
-            return await sendImageOrText(sock, m.chat, img, catMenu + CHANNEL_FOOTER, m);
-          }
-          return m.reply(catMenu + CHANNEL_FOOTER);
+          return await sendImageOrText(sock, m.chat, getBotImage(), catMenu + CHANNEL_FOOTER, m);
         }
       }
       const fullList = getFullList(cmds, 1) + CHANNEL_FOOTER;
-      const img = getBotImage();
-      if (img) {
-        await sendImageOrText(sock, m.chat, img, fullList, m);
-      } else {
-        await m.reply(fullList);
-      }
+      await sendImageOrText(sock, m.chat, getBotImage(), fullList, m);
     },
   },
   {
@@ -111,12 +93,7 @@ ${greeting}! 👋
 │ 📦 Node.js: ${sys.nodeVersion}
 └──────────────────
 ${CHANNEL_FOOTER}`;
-      const img = getBotImage();
-      if (img) {
-        await sendImageOrText(sock, m.chat, img, text, m);
-      } else {
-        await m.reply(text);
-      }
+      await sendImageOrText(sock, m.chat, getBotImage(), text, m);
     },
   },
   {
@@ -153,12 +130,7 @@ ${CHANNEL_FOOTER}`;
 │ 📦 Node.js: ${sys.nodeVersion}
 └──────────────────
 ${CHANNEL_FOOTER}`;
-      const img = getBotImage();
-      if (img) {
-        await sendImageOrText(sock, m.chat, img, text, m);
-      } else {
-        await m.reply(text);
-      }
+      await sendImageOrText(sock, m.chat, getBotImage(), text, m);
     },
   },
   {
@@ -168,12 +140,7 @@ ${CHANNEL_FOOTER}`;
     handler: async (sock, m) => {
       m.react("⏱️");
       const text = `⏱️ *Uptime:* ${runtime()}${CHANNEL_FOOTER}`;
-      const img = getBotImage();
-      if (img) {
-        await sendImageOrText(sock, m.chat, img, text, m);
-      } else {
-        await m.reply(text);
-      }
+      await sendImageOrText(sock, m.chat, getBotImage(), text, m);
     },
   },
   {
@@ -184,12 +151,7 @@ ${CHANNEL_FOOTER}`;
       m.react("👑");
       const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, "");
       const text = `╔══════════════════════════╗\n║    *${config.BOT_NAME}*    ║\n╚══════════════════════════╝\n\n👑 *Bot Owner / Creator*\n\n📞 Number: +${ownerNum}\n🔗 Contact: wa.me/${ownerNum}\n${CHANNEL_FOOTER}`;
-      const img = getBotImage();
-      if (img) {
-        await sendImageOrText(sock, m.chat, img, text, m);
-      } else {
-        await m.reply(text);
-      }
+      await sendImageOrText(sock, m.chat, getBotImage(), text, m);
       await sock.sendMessage(m.chat, {
         contacts: {
           displayName: "Desam Tech",
