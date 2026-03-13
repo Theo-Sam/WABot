@@ -209,18 +209,12 @@ const commands = [
       m.react("📝");
       try {
         const prompt = `Check the following text for grammar errors. If there are errors, provide the corrected version and explain the mistakes. If it's correct, say so. Text: "${input}"`;
-        const apis = [
-          `https://deliriussapi-oficial.vercel.app/ia/gptweb?text=${encodeURIComponent(prompt)}`,
-          `https://api.dreaded.site/api/chatgpt?text=${encodeURIComponent(prompt)}`,
-        ];
-        let answer = await Promise.any(
-          apis.map(async (url) => {
-            const data = await fetchJson(url);
-            const res = data?.data || data?.result || data?.answer;
-            if (!res) throw new Error("empty");
-            return res;
-          })
-        ).catch(() => "");
+        const axios = require("axios");
+        const res = await axios.post("https://text.pollinations.ai/openai", {
+          model: "openai",
+          messages: [{ role: "user", content: prompt }],
+        }, { timeout: 30000, headers: { "Content-Type": "application/json" } });
+        const answer = res.data?.choices?.[0]?.message?.content || "";
         if (!answer) return m.reply("❌ Grammar check unavailable.");
         await m.reply(`📝 *Grammar Check*\n\n${answer}`);
         m.react("✅");

@@ -434,7 +434,7 @@ const commands = [
             const comboBody = comboHtml.data || "";
             const comboNames = [...comboBody.matchAll(/class="name"[^>]*>([^<]+)/g)];
             const comboVers = [...comboBody.matchAll(/class="version"[^>]*>([^<]+)/g)];
-            const comboLinks = [...comboBody.matchAll(/href="(\/[^"]+\/download\/[^"]*)"/) ];
+            const comboLinks = [...comboBody.matchAll(/href="(\/[^"]+\/download\/[^"]*)"/g)];
             for (let i = 0; i < Math.min(comboNames.length, 5); i++) {
               apps.push({
                 name: comboNames[i]?.[1]?.trim(),
