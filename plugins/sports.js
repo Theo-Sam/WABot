@@ -175,7 +175,11 @@ const commands = [
         msg += `\n`;
 
         msg += `┌─── *Personal Info* ───\n`;
-        if (p.strNationality) msg += `│ 🌍 Nationality: ${p.strNationality}\n`;
+        if (p.strNationality) {
+          const flagMap = { "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Spain": "🇪🇸", "France": "🇫🇷", "Germany": "🇩🇪", "Italy": "🇮🇹", "Brazil": "🇧🇷", "Argentina": "🇦🇷", "Portugal": "🇵🇹", "Netherlands": "🇳🇱", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Uruguay": "🇺🇾", "Colombia": "🇨🇴", "Mexico": "🇲🇽", "Japan": "🇯🇵", "South Korea": "🇰🇷", "USA": "🇺🇸", "Ghana": "🇬🇭", "Nigeria": "🇳🇬", "Cameroon": "🇨🇲", "Senegal": "🇸🇳", "Egypt": "🇪🇬", "Morocco": "🇲🇦", "Algeria": "🇩🇿", "Poland": "🇵🇱", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "Sweden": "🇸🇪", "Denmark": "🇩🇰", "Norway": "🇳🇴", "Austria": "🇦🇹", "Switzerland": "🇨🇭", "Serbia": "🇷🇸", "Turkey": "🇹🇷", "Australia": "🇦🇺", "Canada": "🇨🇦", "Chile": "🇨🇱", "Ecuador": "🇪🇨", "Peru": "🇵🇪", "Paraguay": "🇵🇾", "Venezuela": "🇻🇪", "Ivory Coast": "🇨🇮", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Mali": "🇲🇱", "Guinea": "🇬🇳", "Burkina Faso": "🇧🇫", "South Africa": "🇿🇦", "China PR": "🇨🇳", "India": "🇮🇳", "Iran": "🇮🇷", "Iraq": "🇮🇶", "Saudi Arabia": "🇸🇦", "Russia": "🇷🇺", "Ukraine": "🇺🇦", "Czech Republic": "🇨🇿", "Romania": "🇷🇴", "Hungary": "🇭🇺", "Greece": "🇬🇷", "Republic of Ireland": "🇮🇪", "Northern Ireland": "🇬🇧", "Finland": "🇫🇮", "Iceland": "🇮🇸", "Jamaica": "🇯🇲", "Costa Rica": "🇨🇷" };
+          const flag = flagMap[p.strNationality] || "🌍";
+          msg += `│ ${flag} Nationality: ${p.strNationality}\n`;
+        }
         if (p.dateBorn) {
           const birthDate = new Date(p.dateBorn);
           const age = Math.floor((Date.now() - birthDate.getTime()) / 31557600000);
@@ -193,12 +197,30 @@ const commands = [
         if (p.strSport) msg += `│ 🏅 Sport: ${p.strSport}\n`;
         if (p.strPosition) msg += `│ 📌 Position: ${p.strPosition}\n`;
         if (p.strNumber) msg += `│ 🔢 Shirt Number: ${p.strNumber}\n`;
+        if (p.dateSigned) msg += `│ 📅 Signed: ${p.dateSigned}\n`;
         if (p.strSigning) msg += `│ 💰 Signing Fee: ${p.strSigning}\n`;
         if (p.strWage) msg += `│ 💵 Wage: ${p.strWage}\n`;
         if (p.strKit) msg += `│ 👕 Kit Number: ${p.strKit}\n`;
         if (p.strAgent) msg += `│ 🤝 Agent: ${p.strAgent}\n`;
         if (p.strOutfitter) msg += `│ 👟 Outfitter: ${p.strOutfitter}\n`;
+        if (p.dateBorn) {
+          const debut = p.dateSigned ? new Date(p.dateSigned) : null;
+          const born = new Date(p.dateBorn);
+          const startYear = debut ? debut.getFullYear() : born.getFullYear() + 18;
+          const currentYear = new Date().getFullYear();
+          if (p.strStatus === "Retired" || !p.strTeam) {
+            msg += `│ 📊 Career Span: ~${startYear} - retired\n`;
+          } else {
+            msg += `│ 📊 Years Active: ~${currentYear - startYear} years (since ~${startYear})\n`;
+          }
+        }
         msg += `└──────────────────\n\n`;
+
+        if (p.strLocked || p.strCreativeCommons) {
+          msg += `┌─── *Honors & Achievements* ───\n`;
+          if (p.strLocked) msg += `│ 🏆 ${p.strLocked}\n`;
+          msg += `└──────────────────\n\n`;
+        }
 
         if (p.strFormerTeam) {
           msg += `┌─── *Former Teams* ───\n`;

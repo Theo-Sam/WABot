@@ -30,7 +30,7 @@ const commands = [
       if (text) {
         const catMenu = getCategoryMenu(text.toLowerCase(), cmds);
         if (catMenu) return m.reply(catMenu);
-        return m.reply(`❌ Category *${text}* not found.\n\nUse ${config.PREFIX}menu to see all categories.`);
+        return m.reply(`❌ Category *${text}* not found.\n\nUse ${config.PREFIX}menu to see all categories.${CHANNEL_FOOTER}`);
       }
       const menuText = getMenu() + CHANNEL_FOOTER;
       const img = getBotImage();

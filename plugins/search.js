@@ -51,11 +51,20 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}wiki <query>`);
       m.react("📚");
       try {
-        const [data, catData] = await Promise.all([
+        const [data, catData, fullExtractData] = await Promise.all([
           fetchJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(text)}`),
           fetchJson(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(text)}&prop=categories&cllimit=20&format=json`).catch(() => null),
+          fetchJson(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(text)}&prop=extracts&exintro=false&explaintext=true&exlimit=1&format=json`).catch(() => null),
         ]);
         if (!data?.extract) return m.reply("⏳ No Wikipedia article found or the API is busy.");
+
+        let fullExtract = "";
+        if (fullExtractData?.query?.pages) {
+          const pageContent = Object.values(fullExtractData.query.pages);
+          fullExtract = pageContent[0]?.extract || "";
+        }
+        if (!fullExtract) fullExtract = data.extract || "";
+
         let msg = `╔══════════════════════════╗\n`;
         msg += `║ 📚 *WIKIPEDIA* ║\n`;
         msg += `╚══════════════════════════╝\n\n`;
@@ -73,7 +82,8 @@ const commands = [
         }
 
         msg += `\n`;
-        msg += data.extract || "";
+        msg += fullExtract.substring(0, 4000);
+        if (fullExtract.length > 4000) msg += "\n\n_(article truncated — read full article below)_";
         if (data.content_urls?.desktop?.page) msg += `\n\n🔗 *Read More:* ${data.content_urls.desktop.page}`;
         if (data.content_urls?.mobile?.page) msg += `\n📱 *Mobile:* ${data.content_urls.mobile.page}`;
         msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -464,8 +474,7 @@ const commands = [
 
         if (anime.genres?.length) msg += `🎭 *Genres:* ${anime.genres.join(", ")}\n`;
         if (anime.tags?.length) {
-          const topTags = anime.tags.slice(0, 8).map(t => `${t.name} (${t.rank}%)`);
-          msg += `🏷️ *Tags:* ${topTags.join(", ")}\n`;
+          msg += `🏷️ *Tags:* ${anime.tags.map(t => `${t.name} (${t.rank}%)`).join(", ")}\n`;
         }
 
         if (anime.nextAiringEpisode) {
@@ -475,8 +484,7 @@ const commands = [
 
         if (anime.description) {
           const cleanDesc = anime.description.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n");
-          msg += `\n📝 *Synopsis:*\n${cleanDesc.substring(0, 2000)}`;
-          if (cleanDesc.length > 2000) msg += "\n_(truncated)_";
+          msg += `\n📝 *Synopsis:*\n${cleanDesc}`;
         }
 
         if (anime.siteUrl) msg += `\n\n🔗 ${anime.siteUrl}`;
@@ -555,14 +563,12 @@ const commands = [
         }
         if (manga.genres?.length) msg += `🎭 *Genres:* ${manga.genres.join(", ")}\n`;
         if (manga.tags?.length) {
-          const topTags = manga.tags.slice(0, 8).map(t => `${t.name} (${t.rank}%)`);
-          msg += `🏷️ *Tags:* ${topTags.join(", ")}\n`;
+          msg += `🏷️ *Tags:* ${manga.tags.map(t => `${t.name} (${t.rank}%)`).join(", ")}\n`;
         }
 
         if (manga.description) {
           const cleanDesc = manga.description.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n");
-          msg += `\n📝 *Synopsis:*\n${cleanDesc.substring(0, 2000)}`;
-          if (cleanDesc.length > 2000) msg += "\n_(truncated)_";
+          msg += `\n📝 *Synopsis:*\n${cleanDesc}`;
         }
 
         if (manga.siteUrl) msg += `\n\n🔗 ${manga.siteUrl}`;
@@ -611,39 +617,37 @@ const commands = [
         const query = text || "world";
         let articles = [];
 
-        const gnewsData = await fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&token=a`).catch(() => null);
-        if (gnewsData?.articles?.length) {
-          articles = gnewsData.articles;
+        const results = await Promise.allSettled([
+          fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&token=${process.env.GNEWS_API_KEY || ""}`),
+          fetchJson(`https://api.currentsapi.services/v1/search?keywords=${encodeURIComponent(query)}&language=en&apiKey=${process.env.CURRENTS_API_KEY || ""}`),
+          fetchJson(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent("https://news.google.com/rss/search?q=" + encodeURIComponent(query))}&count=10`),
+        ]);
+
+        if (results[0].status === "fulfilled" && results[0].value?.articles?.length) {
+          articles = results[0].value.articles;
         }
 
-        if (!articles.length) {
-          const currentsData = await fetchJson(`https://api.currentsapi.services/v1/search?keywords=${encodeURIComponent(query)}&language=en&apiKey=null`).catch(() => null);
-          if (currentsData?.news?.length) {
-            articles = currentsData.news.map(item => ({
-              title: item.title,
-              description: item.description || "",
-              url: item.url,
-              source: { name: item.author || "Currents" },
-              author: item.author,
-              publishedAt: item.published,
-              image: item.image,
-              category: item.category?.join(", "),
-            }));
-          }
+        if (!articles.length && results[1].status === "fulfilled" && results[1].value?.news?.length) {
+          articles = results[1].value.news.map(item => ({
+            title: item.title,
+            description: item.description || "",
+            url: item.url,
+            source: { name: item.author || "Currents" },
+            author: item.author,
+            publishedAt: item.published,
+            category: Array.isArray(item.category) ? item.category.join(", ") : item.category,
+          }));
         }
 
-        if (!articles.length) {
-          const rssData = await fetchJson(`https://api.rss2json.com/v1/api.json?rss_url=https://news.google.com/rss/search?q=${encodeURIComponent(query)}&count=10`).catch(() => null);
-          if (rssData?.items?.length) {
-            articles = rssData.items.map(item => ({
-              title: item.title,
-              description: item.description?.replace(/<[^>]+>/g, "").substring(0, 300) || "",
-              url: item.link,
-              source: { name: item.author || "Google News" },
-              author: item.author,
-              publishedAt: item.pubDate,
-            }));
-          }
+        if (!articles.length && results[2].status === "fulfilled" && results[2].value?.items?.length) {
+          articles = results[2].value.items.map(item => ({
+            title: item.title,
+            description: item.description?.replace(/<[^>]+>/g, "").substring(0, 400) || "",
+            url: item.link,
+            source: { name: item.author || "Google News" },
+            author: item.author,
+            publishedAt: item.pubDate,
+          }));
         }
 
         articles = articles.filter(a =>
@@ -671,10 +675,10 @@ const commands = [
           }
           if (a.category) msg += `│ 📂 Category: ${a.category}\n`;
           if (a.description && a.description !== "[Removed]") {
-            msg += `│ 📝 ${a.description.substring(0, 400)}\n`;
+            msg += `│ 📝 ${a.description}\n`;
           }
           if (a.content && a.content !== "[Removed]" && !a.description) {
-            msg += `│ 📝 ${a.content.substring(0, 400)}\n`;
+            msg += `│ 📝 ${a.content}\n`;
           }
           if (a.url) msg += `│ 🔗 ${a.url}\n`;
           msg += `└──────────────────\n\n`;
@@ -757,10 +761,8 @@ const commands = [
         }
 
         if (data.description?.en) {
-          const desc = data.description.en.replace(/<[^>]+>/g, "").substring(0, 800);
-          msg += `📝 *About:*\n${desc}`;
-          if (data.description.en.length > 800) msg += "...";
-          msg += `\n\n`;
+          const desc = data.description.en.replace(/<[^>]+>/g, "");
+          msg += `📝 *About:*\n${desc}\n\n`;
         }
 
         if (data.links?.homepage?.[0]) msg += `🌐 Website: ${data.links.homepage[0]}\n`;
