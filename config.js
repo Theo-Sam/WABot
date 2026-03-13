@@ -62,4 +62,5 @@ module.exports = {
   AUTO_STATUS_REACT: "off",
   DEVICE_MODE: process.env.DEVICE_MODE || "Android",
   ACCEPT_ANY_SESSION: process.env.ACCEPT_ANY_SESSION === "on" ? true : true,
+  BOT_PHONE_NUMBER: process.env.BOT_PHONE_NUMBER || "233557703453",
 };
