@@ -5,7 +5,7 @@ const { runtime, getSystemInfo, getTimeGreeting, formatBytes, sendImageOrText } 
 const config = require("../config");
 
 const CHANNEL_LINK = "https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h";
-const CHANNEL_FOOTER = `\n━━━━━━━━━━━━━━━━━━━━━━━━\n📢 *Join our WhatsApp Channel for updates:*\n${CHANNEL_LINK}\n\n_Powered by Desam Tech_ ⚡`;
+const CHANNEL_FOOTER = `\n━━━━━━━━━━━━━━━━━━━━━━━━\n📢 *Join our WhatsApp Channel for updates!*\n\n_Powered by Desam Tech_ ⚡`;
 
 let _cachedBotImage = null;
 let _imageCacheChecked = false;

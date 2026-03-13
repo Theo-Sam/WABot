@@ -35,3 +35,9 @@ run = ["node", "index.js"]
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+BOT_NAME = "Desam WABot"
+AUTO_BIO_MSG = "🤖 Desam WABot | {time} | {date}"
