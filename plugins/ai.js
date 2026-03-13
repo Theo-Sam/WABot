@@ -152,7 +152,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}claude <question>`);
       m.react("🤖");
       try {
-        const answer = await pollinate(text, "openai");
+        const answer = await pollinate(text, "claude");
         await m.reply(`🟠 *Claude AI*\n\n${answer}`);
         m.react("✅");
       } catch {
@@ -169,7 +169,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}copilot <question>`);
       m.react("🤖");
       try {
-        const answer = await pollinate(text, "openai");
+        const answer = await pollinate(text, "copilot");
         await m.reply(`🔵 *Copilot AI*\n\n${answer}`);
         m.react("✅");
       } catch {

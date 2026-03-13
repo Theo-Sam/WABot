@@ -390,12 +390,63 @@ const commands = [
       try {
         let apps = [];
         try {
-          const html = await axios.get(`https://apkpure.com/search?q=${encodeURIComponent(text)}`, { timeout: 10000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
-          const matches = [...(html.data || "").matchAll(/class="p-detail"[^>]*>[\s\S]*?<p class="first-title[^"]*"[^>]*>([^<]+)<\/p>[\s\S]*?class="developer"[^>]*>([^<]*)/g)];
-          if (matches.length) {
-            apps = matches.slice(0, 5).map(m => ({ name: m[1]?.trim(), developer: m[2]?.trim() }));
+          const searchUrl = `https://apkpure.com/search?q=${encodeURIComponent(text)}`;
+          const html = await axios.get(searchUrl, { timeout: 10000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+          const body = html.data || "";
+          const cardPattern = /<div[^>]*class="[^"]*search-dl[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g;
+          const cards = body.match(cardPattern) || [];
+          for (const card of cards.slice(0, 5)) {
+            const nameMatch = card.match(/class="p-name"[^>]*>([^<]+)/);
+            const devMatch = card.match(/class="developer"[^>]*>([^<]+)/);
+            const sizeMatch = card.match(/class="p-size"[^>]*>([^<]+)/);
+            const verMatch = card.match(/class="p-version"[^>]*>([^<]+)/);
+            const linkMatch = card.match(/href="(\/[^"]+\.html)"/);
+            if (nameMatch) {
+              apps.push({
+                name: nameMatch[1]?.trim(),
+                developer: devMatch?.[1]?.trim() || "Unknown",
+                size: sizeMatch?.[1]?.trim() || "N/A",
+                version: verMatch?.[1]?.trim() || "N/A",
+                downloadUrl: linkMatch ? `https://apkpure.com${linkMatch[1]}` : null,
+              });
+            }
+          }
+          if (!apps.length) {
+            const fallbackNames = [...body.matchAll(/class="first-title[^"]*"[^>]*>([^<]+)<\/p>/g)];
+            const fallbackDevs = [...body.matchAll(/class="developer"[^>]*>([^<]*)/g)];
+            const fallbackLinks = [...body.matchAll(/<a[^>]*href="(\/[^"]*-[^"]*\.html)"[^>]*class="[^"]*dd[^"]*"/g)];
+            for (let i = 0; i < Math.min(fallbackNames.length, 5); i++) {
+              apps.push({
+                name: fallbackNames[i]?.[1]?.trim(),
+                developer: fallbackDevs[i]?.[1]?.trim() || "Unknown",
+                size: "N/A",
+                version: "N/A",
+                downloadUrl: fallbackLinks[i] ? `https://apkpure.com${fallbackLinks[i][1]}` : null,
+              });
+            }
           }
         } catch {}
+
+        if (!apps.length) {
+          try {
+            const comboUrl = `https://apkcombo.com/search/${encodeURIComponent(text)}`;
+            const comboHtml = await axios.get(comboUrl, { timeout: 10000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+            const comboBody = comboHtml.data || "";
+            const comboNames = [...comboBody.matchAll(/class="name"[^>]*>([^<]+)/g)];
+            const comboVers = [...comboBody.matchAll(/class="version"[^>]*>([^<]+)/g)];
+            const comboLinks = [...comboBody.matchAll(/href="(\/[^"]+\/download\/[^"]*)"/) ];
+            for (let i = 0; i < Math.min(comboNames.length, 5); i++) {
+              apps.push({
+                name: comboNames[i]?.[1]?.trim(),
+                developer: "N/A",
+                size: "N/A",
+                version: comboVers[i]?.[1]?.trim() || "N/A",
+                downloadUrl: comboLinks[i] ? `https://apkcombo.com${comboLinks[i][1]}` : null,
+              });
+            }
+          } catch {}
+        }
+
         let msg = `╔══════════════════════════╗\n`;
         msg += `║ 📱 *APK SEARCH* ║\n`;
         msg += `╚══════════════════════════╝\n\n`;
@@ -403,14 +454,19 @@ const commands = [
         if (apps.length) {
           apps.forEach((app, i) => {
             msg += `${i + 1}. *${app.name}*\n`;
-            if (app.developer) msg += `   👤 ${app.developer}\n`;
+            if (app.developer && app.developer !== "N/A") msg += `   👤 Developer: ${app.developer}\n`;
+            msg += `   📦 Version: ${app.version}\n`;
+            msg += `   💾 Size: ${app.size}\n`;
+            if (app.downloadUrl) msg += `   🔗 Download: ${app.downloadUrl}\n`;
+            msg += `\n`;
           });
-          msg += `\n`;
+        } else {
+          msg += `No results found.\n\n`;
+          msg += `🔗 *Search manually:*\n`;
+          msg += `• APKPure: https://apkpure.com/search?q=${encodeURIComponent(text)}\n`;
+          msg += `• APKCombo: https://apkcombo.com/search/${encodeURIComponent(text)}\n`;
+          msg += `• APKMirror: https://www.apkmirror.com/?s=${encodeURIComponent(text)}\n\n`;
         }
-        msg += `🔗 *Download from:*\n`;
-        msg += `• APKPure: https://apkpure.com/search?q=${encodeURIComponent(text)}\n`;
-        msg += `• APKCombo: https://apkcombo.com/search/${encodeURIComponent(text)}\n`;
-        msg += `• APKMirror: https://www.apkmirror.com/?s=${encodeURIComponent(text)}\n\n`;
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
