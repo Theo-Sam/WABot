@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchBuffer, isUrl, getSelfJid } = require("../lib/helpers");
+const { fetchBuffer, fetchJson, isUrl, getSelfJid } = require("../lib/helpers");
 
 const commands = [
   {
@@ -10,17 +10,18 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}img <query>`);
       m.react("⏳");
       try {
-        const imageUrl = await Promise.any([
-          (async () => {
-            const data = await require("../lib/helpers").fetchJson(`https://api.lolhuman.xyz/api/gimage2?apikey=GataDios&query=${encodeURIComponent(text)}`);
-            if (!data?.result) throw new Error("empty");
-            return data.result;
-          })(),
-          (async () => {
-            // Immediately resolve the unsplash random URL as a valid fallback
-            return `https://source.unsplash.com/random/800x600/?${encodeURIComponent(text)}`;
-          })()
-        ]).catch(() => `https://source.unsplash.com/random/800x600/?${encodeURIComponent(text)}`);
+        const unsplashKey = process.env.UNSPLASH_ACCESS_KEY || "";
+        let imageUrl = "";
+
+        if (unsplashKey) {
+          const data = await fetchJson(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(text)}&page=1&per_page=1&orientation=landscape&client_id=${encodeURIComponent(unsplashKey)}`).catch(() => null);
+          imageUrl = data?.results?.[0]?.urls?.regular || "";
+        }
+
+        if (!imageUrl) {
+          imageUrl = `https://source.unsplash.com/random/800x600/?${encodeURIComponent(text)}`;
+        }
+
         const buffer = await fetchBuffer(imageUrl);
         await sock.sendMessage(m.chat, {
           image: buffer,

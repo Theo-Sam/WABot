@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson } = require("../lib/helpers");
+const { fetchJson, normalizeAiText } = require("../lib/helpers");
 
 const elements = {
   "hydrogen": { symbol: "H", number: 1, mass: "1.008", group: "Nonmetal", period: 1 },
@@ -216,7 +216,7 @@ const commands = [
         }, { timeout: 30000, headers: { "Content-Type": "application/json" } });
         const answer = res.data?.choices?.[0]?.message?.content || "";
         if (!answer) return m.reply("❌ Grammar check unavailable.");
-        await m.reply(`📝 *Grammar Check*\n\n${answer}`);
+        await m.reply(`📝 *Grammar Check*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");

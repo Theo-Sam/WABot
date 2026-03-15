@@ -266,7 +266,7 @@ const commands = [
       if (s1 === s2 && s2 === s3) result = "🎉 JACKPOT! All three match!";
       else if (s1 === s2 || s2 === s3 || s1 === s3) result = "😊 Two matched! Close one!";
       else result = "😔 No match. Try again!";
-      await m.reply(`🎰 *Slot Machine*\n\n┌───────────┐\n│ ${s1} │ ${s2} │ ${s3} │\n└───────────┘\n\n${result}`);
+      await m.reply(`🎰 *Slot Machine*\n\n${s1}  ${s2}  ${s3}\n\n${result}`);
     },
   },
   {

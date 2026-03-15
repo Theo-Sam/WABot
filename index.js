@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * DESAM TECH WHATSAPP BOT
+ * DESAM WHATSAPP BOT
  * Fresh rebuild with proper Baileys v7 implementation
  * Using official patterns and best practices
  */

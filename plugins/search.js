@@ -394,68 +394,76 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}movie <movie name>`);
       m.react("🎬");
       try {
-        const data = await fetchJson(`https://www.omdbapi.com/?t=${encodeURIComponent(text)}&plot=full&apikey=742b2d09`);
-        if (data?.Response === "False") return m.reply("❌ Movie not found.");
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🎬 *MOVIE INFO* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
-        msg += `🎬 *${data.Title}* (${data.Year})\n\n`;
+        let posterUrl = "";
+        let msg = "";
 
-        msg += `┌─── *Ratings* ───\n`;
-        if (data.imdbRating && data.imdbRating !== "N/A") msg += `│ ⭐ IMDb: ${data.imdbRating}/10`;
-        if (data.imdbVotes && data.imdbVotes !== "N/A") msg += ` (${data.imdbVotes} votes)`;
-        msg += `\n`;
-        if (data.Ratings) {
-          data.Ratings.forEach(r => {
-            if (r.Source !== "Internet Movie Database") {
-              msg += `│ 🏆 ${r.Source}: ${r.Value}\n`;
-            }
-          });
-        }
-        if (data.Metascore && data.Metascore !== "N/A") msg += `│ 📊 Metascore: ${data.Metascore}/100\n`;
-        msg += `└──────────────────\n\n`;
+        const tvMaze = await fetchJson(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(text)}`).catch(() => []);
+        const show = Array.isArray(tvMaze) && tvMaze.length ? tvMaze[0]?.show : null;
 
-        msg += `┌─── *Details* ───\n`;
-        if (data.Released && data.Released !== "N/A") msg += `│ 📅 Released: ${data.Released}\n`;
-        if (data.Runtime && data.Runtime !== "N/A") msg += `│ ⏱️ Runtime: ${data.Runtime}\n`;
-        if (data.Genre && data.Genre !== "N/A") msg += `│ 🎭 Genre: ${data.Genre}\n`;
-        if (data.Rated && data.Rated !== "N/A") msg += `│ 🔞 Rated: ${data.Rated}\n`;
-        if (data.Type) msg += `│ 📂 Type: ${data.Type}\n`;
-        if (data.Language && data.Language !== "N/A") msg += `│ 🗣️ Language: ${data.Language}\n`;
-        if (data.Country && data.Country !== "N/A") msg += `│ 🌍 Country: ${data.Country}\n`;
-        msg += `└──────────────────\n\n`;
+        if (show) {
+          const genres = Array.isArray(show.genres) ? show.genres.join(", ") : "N/A";
+          const summary = (show.summary || "").replace(/<[^>]+>/g, "").trim();
+          posterUrl = show.image?.original || show.image?.medium || "";
 
-        msg += `┌─── *Cast & Crew* ───\n`;
-        if (data.Director && data.Director !== "N/A") msg += `│ 🎬 Director: ${data.Director}\n`;
-        if (data.Writer && data.Writer !== "N/A") msg += `│ ✍️ Writer: ${data.Writer}\n`;
-        if (data.Actors && data.Actors !== "N/A") msg += `│ 🎭 Cast: ${data.Actors}\n`;
-        if (data.Production && data.Production !== "N/A") msg += `│ 🏢 Production: ${data.Production}\n`;
-        msg += `└──────────────────\n\n`;
-
-        if ((data.Awards && data.Awards !== "N/A") || (data.BoxOffice && data.BoxOffice !== "N/A")) {
-          msg += `┌─── *Awards & Revenue* ───\n`;
-          if (data.Awards && data.Awards !== "N/A") msg += `│ 🏆 Awards: ${data.Awards}\n`;
-          if (data.BoxOffice && data.BoxOffice !== "N/A") msg += `│ 💰 Box Office: ${data.BoxOffice}\n`;
-          if (data.DVD && data.DVD !== "N/A") msg += `│ 📀 DVD Release: ${data.DVD}\n`;
+          msg += `╔══════════════════════════╗\n`;
+          msg += `║ 🎬 *MOVIE / SHOW INFO* ║\n`;
+          msg += `╚══════════════════════════╝\n\n`;
+          msg += `🎬 *${show.name || text}*\n\n`;
+          msg += `┌─── *Details* ───\n`;
+          if (show.premiered) msg += `│ 📅 Premiered: ${show.premiered}\n`;
+          if (show.ended) msg += `│ 🏁 Ended: ${show.ended}\n`;
+          if (show.type) msg += `│ 📂 Type: ${show.type}\n`;
+          if (show.language) msg += `│ 🗣️ Language: ${show.language}\n`;
+          if (show.runtime) msg += `│ ⏱️ Runtime: ${show.runtime} min\n`;
+          if (show.status) msg += `│ 📊 Status: ${show.status}\n`;
+          msg += `│ 🎭 Genres: ${genres || "N/A"}\n`;
+          if (show.rating?.average) msg += `│ ⭐ Rating: ${show.rating.average}/10\n`;
+          if (show.network?.name) msg += `│ 📡 Network: ${show.network.name}\n`;
           msg += `└──────────────────\n\n`;
+          if (summary) msg += `📝 *Summary:*\n${summary.substring(0, 2200)}\n\n`;
+          if (show.url) msg += `🔗 ${show.url}\n`;
+          msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        } else {
+          const itunes = await fetchJson(`https://itunes.apple.com/search?term=${encodeURIComponent(text)}&media=movie&limit=1`).catch(() => null);
+          const item = itunes?.results?.[0];
+
+          if (!item) {
+            const omdbKey = process.env.OMDB_API_KEY || "";
+            if (!omdbKey) return m.reply("❌ Movie not found. You can set OMDB_API_KEY for an additional source.");
+            const data = await fetchJson(`https://www.omdbapi.com/?t=${encodeURIComponent(text)}&plot=full&apikey=${encodeURIComponent(omdbKey)}`);
+            if (data?.Response === "False") return m.reply("❌ Movie not found.");
+            posterUrl = data.Poster && data.Poster !== "N/A" ? data.Poster : "";
+            msg += `🎬 *${data.Title || text}* (${data.Year || "N/A"})\n\n`;
+            if (data.Genre && data.Genre !== "N/A") msg += `🎭 Genre: ${data.Genre}\n`;
+            if (data.Runtime && data.Runtime !== "N/A") msg += `⏱️ Runtime: ${data.Runtime}\n`;
+            if (data.imdbRating && data.imdbRating !== "N/A") msg += `⭐ IMDb: ${data.imdbRating}/10\n`;
+            if (data.Plot && data.Plot !== "N/A") msg += `\n📝 ${data.Plot}\n`;
+            if (data.imdbID) msg += `\n🔗 https://www.imdb.com/title/${data.imdbID}`;
+            msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          } else {
+            posterUrl = item.artworkUrl100 ? item.artworkUrl100.replace("100x100bb", "600x600bb") : "";
+            msg += `🎬 *${item.trackName || text}*\n\n`;
+            if (item.primaryGenreName) msg += `🎭 Genre: ${item.primaryGenreName}\n`;
+            if (item.releaseDate) msg += `📅 Release: ${new Date(item.releaseDate).toLocaleDateString()}\n`;
+            if (item.trackTimeMillis) msg += `⏱️ Runtime: ${Math.round(item.trackTimeMillis / 60000)} min\n`;
+            if (item.contentAdvisoryRating) msg += `🔞 Rated: ${item.contentAdvisoryRating}\n`;
+            if (item.longDescription || item.shortDescription) {
+              msg += `\n📝 ${(item.longDescription || item.shortDescription).substring(0, 2200)}\n`;
+            }
+            if (item.trackViewUrl) msg += `\n🔗 ${item.trackViewUrl}`;
+            msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          }
         }
 
-        if (data.Plot && data.Plot !== "N/A") {
-          msg += `📝 *Plot:*\n${data.Plot}\n\n`;
-        }
-
-        if (data.totalSeasons) msg += `📺 Total Seasons: ${data.totalSeasons}\n`;
-        if (data.imdbID) msg += `🔗 IMDb: https://www.imdb.com/title/${data.imdbID}\n`;
-        msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-
-        if (data.Poster && data.Poster !== "N/A") {
-          const poster = await fetchBuffer(data.Poster).catch(() => null);
+        if (posterUrl) {
+          const poster = await fetchBuffer(posterUrl).catch(() => null);
           if (poster) {
             await sendImageOrText(sock, m.chat, poster, msg, m);
             m.react("✅");
             return;
           }
         }
+
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -718,18 +726,38 @@ const commands = [
         const query = text || "world";
         let articles = [];
 
-        const results = await Promise.allSettled([
-          fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&token=${process.env.GNEWS_API_KEY || ""}`),
-          fetchJson(`https://api.currentsapi.services/v1/search?keywords=${encodeURIComponent(query)}&language=en&apiKey=${process.env.CURRENTS_API_KEY || ""}`),
-          fetchJson(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent("https://news.google.com/rss/search?q=" + encodeURIComponent(query))}&count=10`),
-        ]);
+        const gnewsKey = (process.env.GNEWS_API_KEY || "").trim();
+        const currentsKey = (process.env.CURRENTS_API_KEY || "").trim();
 
-        if (results[0].status === "fulfilled" && results[0].value?.articles?.length) {
-          articles = results[0].value.articles;
+        const tasks = [];
+        const labels = [];
+
+        if (gnewsKey) {
+          tasks.push(fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&token=${encodeURIComponent(gnewsKey)}`));
+          labels.push("gnews");
         }
 
-        if (!articles.length && results[1].status === "fulfilled" && results[1].value?.news?.length) {
-          articles = results[1].value.news.map(item => ({
+        if (currentsKey) {
+          tasks.push(fetchJson(`https://api.currentsapi.services/v1/search?keywords=${encodeURIComponent(query)}&language=en&apiKey=${encodeURIComponent(currentsKey)}`));
+          labels.push("currents");
+        }
+
+        tasks.push(fetchJson(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent("https://news.google.com/rss/search?q=" + encodeURIComponent(query))}&count=10`));
+        labels.push("rss");
+
+        const results = await Promise.allSettled(tasks);
+
+        const byLabel = {};
+        labels.forEach((label, idx) => {
+          byLabel[label] = results[idx];
+        });
+
+        if (byLabel.gnews?.status === "fulfilled" && byLabel.gnews.value?.articles?.length) {
+          articles = byLabel.gnews.value.articles;
+        }
+
+        if (!articles.length && byLabel.currents?.status === "fulfilled" && byLabel.currents.value?.news?.length) {
+          articles = byLabel.currents.value.news.map(item => ({
             title: item.title,
             description: item.description || "",
             url: item.url,
@@ -740,8 +768,8 @@ const commands = [
           }));
         }
 
-        if (!articles.length && results[2].status === "fulfilled" && results[2].value?.items?.length) {
-          articles = results[2].value.items.map(item => ({
+        if (!articles.length && byLabel.rss?.status === "fulfilled" && byLabel.rss.value?.items?.length) {
+          articles = byLabel.rss.value.items.map(item => ({
             title: item.title,
             description: item.description?.replace(/<[^>]+>/g, "").substring(0, 400) || "",
             url: item.link,

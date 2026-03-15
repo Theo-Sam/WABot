@@ -5,7 +5,7 @@ const { runtime, getSystemInfo, getTimeGreeting, formatBytes, sendImageOrText } 
 const config = require("../config");
 
 const CHANNEL_LINK = "https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h";
-const CHANNEL_FOOTER = `\n━━━━━━━━━━━━━━━━━━━━━━━━\n📢 *Join our WhatsApp Channel for updates!*\nhttps://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h\n\n_Powered by Desam Tech_ ⚡`;
+const CHANNEL_FOOTER = `\n📢 *Join our WhatsApp Channel for updates!*\nhttps://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h\n\n_Powered by Desam Tech_ ⚡`;
 
 let _cachedBotImage = null;
 let _imageCacheChecked = false;
@@ -69,29 +69,25 @@ const commands = [
       const latency = Date.now() - start;
       const totalCmds = cmds ? cmds.size : 0;
       const sys = getSystemInfo();
-      const text = `╔══════════════════════════╗
-║    *${config.BOT_NAME}*    ║
-╚══════════════════════════╝
+      const text = `🤖 *${config.BOT_NAME}*
 
 ${greeting}! 👋
 
 ✅ *Bot is online and running!*
 
-┌─── *Bot Details* ───
-│ ⏱️ Uptime: ${uptime}
-│ ⚡ Speed: ${latency}ms
-│ 📡 Mode: ${config.MODE}
-│ 🔑 Prefix: ${config.PREFIX}
-│ 🤖 Commands: ${totalCmds}
-│ 👤 Owner: ${config.OWNER_NUMBER}
-└──────────────────
+*Bot Details*
+⏱️ Uptime: ${uptime}
+⚡ Speed: ${latency}ms
+📡 Mode: ${config.MODE}
+🔑 Prefix: ${config.PREFIX}
+🤖 Commands: ${totalCmds}
+👤 Owner: ${config.OWNER_NUMBER}
 
-┌─── *System Info* ───
-│ 🖥️ Platform: ${sys.platform} ${sys.arch}
-│ 🧮 CPUs: ${sys.cpus}
-│ 💾 RAM: ${sys.freeMem} free / ${sys.totalMem}
-│ 📦 Node.js: ${sys.nodeVersion}
-└──────────────────
+*System Info*
+🖥️ Platform: ${sys.platform} ${sys.arch}
+🧮 CPUs: ${sys.cpus}
+💾 RAM: ${sys.freeMem} free / ${sys.totalMem}
+📦 Node.js: ${sys.nodeVersion}
 ${CHANNEL_FOOTER}`;
       await sendImageOrText(sock, m.chat, getBotImage(), text, m);
     },
@@ -106,29 +102,25 @@ ${CHANNEL_FOOTER}`;
       const totalCmds = cmds ? cmds.size : 0;
       const categories = new Set();
       if (cmds) for (const [, cmd] of cmds) categories.add((cmd.category || "misc").toLowerCase());
-      const text = `╔══════════════════════════╗
-║  *${config.BOT_NAME} - Info*  ║
-╚══════════════════════════╝
+      const text = `ℹ️ *${config.BOT_NAME} — Info*
 
-┌─── 📌 *Bot Details* ───
-│ 📛 Name: ${config.BOT_NAME}
-│ 🔑 Prefix: ${config.PREFIX}
-│ 📡 Mode: ${config.MODE}
-│ 👤 Owner: ${config.OWNER_NUMBER}
-│ 🌍 Timezone: ${config.TIMEZONE}
-│ 🤖 Total Commands: ${totalCmds}
-│ 📂 Categories: ${categories.size}
-│ ⏱️ Uptime: ${sys.uptime}
-└──────────────────
+📌 *Bot Details*
+📛 Name: ${config.BOT_NAME}
+🔑 Prefix: ${config.PREFIX}
+📡 Mode: ${config.MODE}
+👤 Owner: ${config.OWNER_NUMBER}
+🌍 Timezone: ${config.TIMEZONE}
+🤖 Total Commands: ${totalCmds}
+📂 Categories: ${categories.size}
+⏱️ Uptime: ${sys.uptime}
 
-┌─── 💻 *System Info* ───
-│ 🖥️ Platform: ${sys.platform}
-│ 🏗️ Architecture: ${sys.arch}
-│ 🧮 CPUs: ${sys.cpus}
-│ 💾 Total RAM: ${sys.totalMem}
-│ 💾 Free RAM: ${sys.freeMem}
-│ 📦 Node.js: ${sys.nodeVersion}
-└──────────────────
+💻 *System Info*
+🖥️ Platform: ${sys.platform}
+🏗️ Architecture: ${sys.arch}
+🧮 CPUs: ${sys.cpus}
+💾 Total RAM: ${sys.totalMem}
+💾 Free RAM: ${sys.freeMem}
+📦 Node.js: ${sys.nodeVersion}
 ${CHANNEL_FOOTER}`;
       await sendImageOrText(sock, m.chat, getBotImage(), text, m);
     },
@@ -150,7 +142,7 @@ ${CHANNEL_FOOTER}`;
     handler: async (sock, m) => {
       m.react("👑");
       const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, "");
-      const text = `╔══════════════════════════╗\n║    *${config.BOT_NAME}*    ║\n╚══════════════════════════╝\n\n👑 *Bot Owner / Creator*\n\n📞 Number: +${ownerNum}\n🔗 Contact: wa.me/${ownerNum}\n${CHANNEL_FOOTER}`;
+      const text = `👑 *${config.BOT_NAME}*\n\n👑 *Bot Owner / Creator*\n\n📞 Number: +${ownerNum}\n🔗 Contact: wa.me/${ownerNum}\n${CHANNEL_FOOTER}`;
       await sendImageOrText(sock, m.chat, getBotImage(), text, m);
       await sock.sendMessage(m.chat, {
         contacts: {
@@ -188,25 +180,21 @@ function getCategoryMenu(cat, cmds) {
   if (catCmds.length === 0) return null;
 
   const emoji = catEmojis[cat] || "📌";
-  let msg = `╔══════════════════════════╗\n`;
-  msg += `║ ${emoji} *${cat.toUpperCase()} COMMANDS* (${catCmds.length}) ║\n`;
-  msg += `╚══════════════════════════╝\n\n`;
+  let msg = `${emoji} *${cat.toUpperCase()} COMMANDS* (${catCmds.length})\n\n`;
   catCmds.forEach((cmd, i) => {
     const tags = [];
     if (cmd.owner) tags.push("👑");
     if (cmd.admin) tags.push("⭐");
     if (cmd.group) tags.push("👥");
     const tagStr = tags.length ? " " + tags.join("") : "";
-    msg += `┃ ${i + 1}. ${config.PREFIX}${cmd.primary}${tagStr}\n`;
-    if (cmd.desc) msg += `┃    _${cmd.desc}_\n`;
+    msg += `${i + 1}. ${config.PREFIX}${cmd.primary}${tagStr}\n`;
+    if (cmd.desc) msg += `   _${cmd.desc}_\n`;
     if (cmd.aliases.length > 0) {
-      msg += `┃    Aliases: ${cmd.aliases.map(a => config.PREFIX + a).join(", ")}\n`;
+      msg += `   Aliases: ${cmd.aliases.map(a => config.PREFIX + a).join(", ")}\n`;
     }
-    msg += `┃\n`;
+    msg += `\n`;
   });
-  msg += `╔══════════════════════════╗\n`;
-  msg += `║ 👑 Owner | ⭐ Admin | 👥 Group ║\n`;
-  msg += `╚══════════════════════════╝`;
+  msg += `👑 Owner  ⭐ Admin  👥 Group`;
   msg += CHANNEL_FOOTER;
   return msg;
 }
@@ -250,13 +238,10 @@ function getFullList(cmds, page) {
 
   const totalAliases = allCmds.reduce((sum, c) => sum + 1 + c.aliases.length, 0);
 
-  let msg = `╔══════════════════════════╗\n`;
-  msg += `║  *${config.BOT_NAME}*  ║\n`;
-  msg += `║  📋 FULL COMMAND LIST    ║\n`;
-  msg += `╚══════════════════════════╝\n\n`;
+  let msg = `📋 *${config.BOT_NAME} — Full Command List*\n\n`;
   msg += `📊 *${allCmds.length} commands* (${totalAliases} with aliases)\n`;
   msg += `📄 Page *${safePage}/${totalPages}*\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg += `\n`;
 
   let currentCat = "";
   const catEmojis = {
@@ -271,10 +256,10 @@ function getFullList(cmds, page) {
     if (cmd.category !== currentCat) {
       currentCat = cmd.category;
       const emoji = catEmojis[currentCat] || "📌";
-      msg += `\n┌─── ${emoji} *${currentCat.toUpperCase()}* ───\n`;
+      msg += `\n${emoji} *${currentCat.toUpperCase()}*\n`;
     }
     const num = start + i + 1;
-    msg += `│ ${num}. ${config.PREFIX}${cmd.primary}`;
+    msg += `${num}. ${config.PREFIX}${cmd.primary}`;
     if (cmd.aliases.length > 0) {
       msg += ` _(${cmd.aliases.join(", ")})_`;
     }
@@ -282,8 +267,8 @@ function getFullList(cmds, page) {
     msg += "\n";
   });
 
-  msg += `└──────────────────\n`;
-  msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `\n`;
+  msg += `\n`;
   if (totalPages > 1) {
     msg += `📄 Page ${safePage}/${totalPages}`;
     if (safePage < totalPages) msg += ` | Next: ${config.PREFIX}list ${safePage + 1}`;

@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer } = require("../lib/helpers");
+const { fetchJson, fetchBuffer, normalizeAiText } = require("../lib/helpers");
 const axios = require("axios");
 
 const AI_PERSONAS = {
@@ -18,6 +18,10 @@ async function pollinate(prompt, persona = "openai") {
   const messages = [];
   const systemMsg = AI_PERSONAS[persona];
   if (systemMsg) messages.push({ role: "system", content: systemMsg });
+  messages.push({
+    role: "system",
+    content: "Reply in clean WhatsApp chat style. Use short paragraphs. Avoid markdown tables and avoid decorative formatting.",
+  });
   messages.push({ role: "user", content: prompt });
   const res = await axios.post("https://text.pollinations.ai/openai", {
     model: "openai",
@@ -25,7 +29,7 @@ async function pollinate(prompt, persona = "openai") {
   }, { timeout: 60000, headers: { "Content-Type": "application/json" } });
   const answer = res.data?.choices?.[0]?.message?.content;
   if (!answer || answer.length < 2) throw new Error("empty");
-  return answer;
+  return normalizeAiText(answer, { keepLightFormatting: true });
 }
 
 const commands = [
@@ -38,7 +42,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "openai");
-        await m.reply(`🤖 *${config.BOT_NAME} AI*\n\n${answer}`);
+        await m.reply(`🤖 *${config.BOT_NAME} AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -55,7 +59,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "gemini");
-        await m.reply(`💎 *Gemini AI*\n\n${answer}`);
+        await m.reply(`💎 *Gemini AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -72,7 +76,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "deepseek");
-        await m.reply(`🧠 *DeepSeek AI*\n\n${answer}`);
+        await m.reply(`🧠 *DeepSeek AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -89,7 +93,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "llama");
-        await m.reply(`🦙 *Llama AI*\n\n${answer}`);
+        await m.reply(`🦙 *Llama AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -106,7 +110,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "mistral");
-        await m.reply(`🌀 *Mistral AI*\n\n${answer}`);
+        await m.reply(`🌀 *Mistral AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -152,7 +156,7 @@ const commands = [
           translated = await pollinate(`Translate the following text to ${lang}. Only output the translation, nothing else:\n\n${query}`, "openai").catch(() => "");
         }
         if (!translated) return m.reply("⏳ Translation API is overloaded. Try again later.");
-        await m.reply(`🌐 *Translation* (→ ${lang})\n\n${translated}`);
+        await m.reply(`🌐 *Translation* (→ ${lang})\n\n${normalizeAiText(translated, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -169,7 +173,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "claude");
-        await m.reply(`🟠 *Claude AI*\n\n${answer}`);
+        await m.reply(`🟠 *Claude AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -186,7 +190,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "copilot");
-        await m.reply(`🔵 *Copilot AI*\n\n${answer}`);
+        await m.reply(`🔵 *Copilot AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -203,7 +207,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(text, "gemini");
-        await m.reply(`🟡 *Bard AI*\n\n${answer}`);
+        await m.reply(`🟡 *Bard AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -220,7 +224,7 @@ const commands = [
       m.react("🤖");
       try {
         const answer = await pollinate(`You are a coding expert assistant. Answer this coding/technical question:\n\n${text}`, "openai");
-        await m.reply(`⬛ *Blackbox AI*\n\n${answer}`);
+        await m.reply(`⬛ *Blackbox AI*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -240,7 +244,7 @@ const commands = [
         const prompt = `Summarize the following text concisely:\n\n${input}`;
         const answer = await pollinate(prompt, "openai");
         if (!answer) return m.reply("⏳ Summarization server is busy. Try again soon!");
-        await m.reply(`📝 *Summary*\n\n${answer}`);
+        await m.reply(`📝 *Summary*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -326,7 +330,7 @@ const commands = [
         const res = await axios.post("https://api.ocr.space/parse/image", form, { headers: form.getHeaders(), timeout: 30000 });
         const text = res.data?.ParsedResults?.[0]?.ParsedText || "";
         if (!text) return m.reply("❌ No text detected in image.");
-        await m.reply(`📝 *OCR Result*\n\n${text.trim()}`);
+        await m.reply(`📝 *OCR Result*\n\n${normalizeAiText(text.trim(), { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");

@@ -23,9 +23,7 @@ const commands = [
 
         const data = await fetchJson(url).catch(() => null);
         if (data?.events?.length) {
-          let msg = `╔══════════════════════════╗\n`;
-          msg += `║ ⚽ *LIVE & RECENT SCORES* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          let msg = `⚽ *LIVE & RECENT SCORES*\n\n`;
           msg += `🏆 ${data.leagues?.[0]?.name || league}\n`;
           if (data.leagues?.[0]?.season?.displayName) msg += `📅 Season: ${data.leagues[0].season.displayName}\n`;
           msg += `\n`;
@@ -39,12 +37,10 @@ const commands = [
             const awayScore = away.score || "0";
             const stateIcon = statusState === "in" ? "🟢" : statusState === "post" ? "🏁" : "⏳";
 
-            msg += `┌─── ${stateIcon} ───\n`;
-            msg += `│ 🏠 *${home.team?.shortDisplayName || home.team?.name}* ${homeScore}\n`;
-            msg += `│ 🛫 *${away.team?.shortDisplayName || away.team?.name}* ${awayScore}\n`;
-            msg += `│ ⏰ ${status}\n`;
-            if (comp.venue?.fullName) msg += `│ 🏟️ ${comp.venue.fullName}\n`;
-            msg += `└──────────────────\n\n`;
+            msg += `${stateIcon} *${home.team?.shortDisplayName || home.team?.name}* ${homeScore} — *${away.team?.shortDisplayName || away.team?.name}* ${awayScore}\n`;
+            msg += `⏰ ${status}\n`;
+            if (comp.venue?.fullName) msg += `🏟️ ${comp.venue.fullName}\n`;
+            msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
           await m.reply(msg);
@@ -79,19 +75,15 @@ const commands = [
         const leagueId = leagueIdMap[code] || "4328";
         const data = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=${leagueId}`).catch(() => null);
         if (data?.events?.length) {
-          let msg = `╔══════════════════════════╗\n`;
-          msg += `║ 📅 *UPCOMING FIXTURES* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          let msg = `📅 *UPCOMING FIXTURES*\n\n`;
           msg += `🏆 League: ${data.events[0]?.strLeague || league}\n\n`;
           data.events.slice(0, 10).forEach((e, i) => {
-            msg += `┌─── *Match ${i + 1}* ───\n`;
-            msg += `│ 🏠 ${e.strHomeTeam}\n`;
-            msg += `│       VS\n`;
-            msg += `│ 🛫 ${e.strAwayTeam}\n`;
-            msg += `│ 📅 ${e.dateEvent} ⏰ ${e.strTime || "TBD"}\n`;
-            if (e.strVenue) msg += `│ 🏟️ ${e.strVenue}\n`;
-            if (e.strThumb) msg += `│ 🎫 Round: ${e.intRound || "N/A"}\n`;
-            msg += `└──────────────────\n\n`;
+            msg += `*Match ${i + 1}*\n`;
+            msg += `🏠 ${e.strHomeTeam} vs 🛫 ${e.strAwayTeam}\n`;
+            msg += `📅 ${e.dateEvent} ⏰ ${e.strTime || "TBD"}\n`;
+            if (e.strVenue) msg += `🏟️ ${e.strVenue}\n`;
+            if (e.strThumb) msg += `🎫 Round: ${e.intRound || "N/A"}\n`;
+            msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
           await m.reply(msg);
@@ -129,20 +121,16 @@ const commands = [
         const data = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=${leagueId}&s=${season}`).catch(() => null);
         if (data?.table?.length) {
           const table = data.table;
-          let msg = `╔══════════════════════════╗\n`;
-          msg += `║ 🏆 *LEAGUE STANDINGS* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          let msg = `🏆 *LEAGUE STANDINGS*\n\n`;
           msg += `🏆 ${table[0]?.strLeague || league}\n`;
           msg += `📅 Season: ${season}\n\n`;
-          msg += `┌─────────────────────────────────────────\n`;
-          msg += `│ *#  | Team         | P | W | D | L | Pts*\n`;
-          msg += `│━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+          msg += `*# Team | P W D L | Pts*\n`;
           table.slice(0, 20).forEach((t) => {
-            const name = (t.strTeam || "???").padEnd(12).substring(0, 12);
+            const name = t.strTeam || "???";
             const pos = String(t.intRank).padStart(2);
-            msg += `│ ${pos} | ${name} | ${t.intPlayed} | ${t.intWin} | ${t.intDraw} | ${t.intLoss} | *${t.intPoints}*\n`;
+            msg += `${pos}. ${name} | ${t.intPlayed} ${t.intWin} ${t.intDraw} ${t.intLoss} | *${t.intPoints}*\n`;
           });
-          msg += `└─────────────────────────────────────────\n\n`;
+          msg += `\n`;
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
           await m.reply(msg);
         } else {
@@ -167,77 +155,74 @@ const commands = [
         if (!data?.player?.[0]) return m.reply("❌ Player not found.");
         const p = data.player[0];
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ ⚽ *PLAYER PROFILE* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `⚽ *PLAYER PROFILE*\n\n`;
         msg += `🌟 *${p.strPlayer}*\n`;
         if (p.strTeam) msg += `🏟️ Current Team: ${p.strTeam}\n`;
         msg += `\n`;
 
-        msg += `┌─── *Personal Info* ───\n`;
+        msg += `*Personal Info*\n`;
         if (p.strNationality) {
           const flagMap = { "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Spain": "🇪🇸", "France": "🇫🇷", "Germany": "🇩🇪", "Italy": "🇮🇹", "Brazil": "🇧🇷", "Argentina": "🇦🇷", "Portugal": "🇵🇹", "Netherlands": "🇳🇱", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Uruguay": "🇺🇾", "Colombia": "🇨🇴", "Mexico": "🇲🇽", "Japan": "🇯🇵", "South Korea": "🇰🇷", "USA": "🇺🇸", "Ghana": "🇬🇭", "Nigeria": "🇳🇬", "Cameroon": "🇨🇲", "Senegal": "🇸🇳", "Egypt": "🇪🇬", "Morocco": "🇲🇦", "Algeria": "🇩🇿", "Poland": "🇵🇱", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "Sweden": "🇸🇪", "Denmark": "🇩🇰", "Norway": "🇳🇴", "Austria": "🇦🇹", "Switzerland": "🇨🇭", "Serbia": "🇷🇸", "Turkey": "🇹🇷", "Australia": "🇦🇺", "Canada": "🇨🇦", "Chile": "🇨🇱", "Ecuador": "🇪🇨", "Peru": "🇵🇪", "Paraguay": "🇵🇾", "Venezuela": "🇻🇪", "Ivory Coast": "🇨🇮", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Mali": "🇲🇱", "Guinea": "🇬🇳", "Burkina Faso": "🇧🇫", "South Africa": "🇿🇦", "China PR": "🇨🇳", "India": "🇮🇳", "Iran": "🇮🇷", "Iraq": "🇮🇶", "Saudi Arabia": "🇸🇦", "Russia": "🇷🇺", "Ukraine": "🇺🇦", "Czech Republic": "🇨🇿", "Romania": "🇷🇴", "Hungary": "🇭🇺", "Greece": "🇬🇷", "Republic of Ireland": "🇮🇪", "Northern Ireland": "🇬🇧", "Finland": "🇫🇮", "Iceland": "🇮🇸", "Jamaica": "🇯🇲", "Costa Rica": "🇨🇷" };
           const flag = flagMap[p.strNationality] || "🌍";
-          msg += `│ ${flag} Nationality: ${p.strNationality}\n`;
+          msg += `${flag} Nationality: ${p.strNationality}\n`;
         }
         if (p.dateBorn) {
           const birthDate = new Date(p.dateBorn);
           const age = Math.floor((Date.now() - birthDate.getTime()) / 31557600000);
-          msg += `│ 🎂 Born: ${p.dateBorn} (Age: ${age})\n`;
+          msg += `🎂 Born: ${p.dateBorn} (Age: ${age})\n`;
         }
-        if (p.strBirthLocation) msg += `│ 📍 Birth Place: ${p.strBirthLocation}\n`;
-        if (p.strGender) msg += `│ 👤 Gender: ${p.strGender}\n`;
-        if (p.strHeight) msg += `│ 📏 Height: ${p.strHeight}\n`;
-        if (p.strWeight) msg += `│ ⚖️ Weight: ${p.strWeight}\n`;
-        if (p.strEthnicity) msg += `│ 🏷️ Ethnicity: ${p.strEthnicity}\n`;
-        if (p.strCollege) msg += `│ 🎓 College: ${p.strCollege}\n`;
-        msg += `└──────────────────\n\n`;
+        if (p.strBirthLocation) msg += `📍 Birth Place: ${p.strBirthLocation}\n`;
+        if (p.strGender) msg += `👤 Gender: ${p.strGender}\n`;
+        if (p.strHeight) msg += `📏 Height: ${p.strHeight}\n`;
+        if (p.strWeight) msg += `⚖️ Weight: ${p.strWeight}\n`;
+        if (p.strEthnicity) msg += `🏷️ Ethnicity: ${p.strEthnicity}\n`;
+        if (p.strCollege) msg += `🎓 College: ${p.strCollege}\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Career Info* ───\n`;
-        if (p.strSport) msg += `│ 🏅 Sport: ${p.strSport}\n`;
-        if (p.strPosition) msg += `│ 📌 Position: ${p.strPosition}\n`;
-        if (p.strNumber) msg += `│ 🔢 Shirt Number: ${p.strNumber}\n`;
-        if (p.dateSigned) msg += `│ 📅 Signed: ${p.dateSigned}\n`;
-        if (p.strSigning) msg += `│ 💰 Signing Fee: ${p.strSigning}\n`;
-        if (p.strWage) msg += `│ 💵 Wage: ${p.strWage}\n`;
-        if (p.strKit) msg += `│ 👕 Kit Number: ${p.strKit}\n`;
-        if (p.strAgent) msg += `│ 🤝 Agent: ${p.strAgent}\n`;
-        if (p.strOutfitter) msg += `│ 👟 Outfitter: ${p.strOutfitter}\n`;
+        msg += `*Career Info*\n`;
+        if (p.strSport) msg += `🏅 Sport: ${p.strSport}\n`;
+        if (p.strPosition) msg += `📌 Position: ${p.strPosition}\n`;
+        if (p.strNumber) msg += `🔢 Shirt Number: ${p.strNumber}\n`;
+        if (p.dateSigned) msg += `📅 Signed: ${p.dateSigned}\n`;
+        if (p.strSigning) msg += `💰 Signing Fee: ${p.strSigning}\n`;
+        if (p.strWage) msg += `💵 Wage: ${p.strWage}\n`;
+        if (p.strKit) msg += `👕 Kit Number: ${p.strKit}\n`;
+        if (p.strAgent) msg += `🤝 Agent: ${p.strAgent}\n`;
+        if (p.strOutfitter) msg += `👟 Outfitter: ${p.strOutfitter}\n`;
         if (p.dateBorn) {
           const debut = p.dateSigned ? new Date(p.dateSigned) : null;
           const born = new Date(p.dateBorn);
           const startYear = debut ? debut.getFullYear() : born.getFullYear() + 18;
           const currentYear = new Date().getFullYear();
           if (p.strStatus === "Retired" || !p.strTeam) {
-            msg += `│ 📊 Career Span: ~${startYear} - retired\n`;
+            msg += `📊 Career Span: ~${startYear} - retired\n`;
           } else {
-            msg += `│ 📊 Years Active: ~${currentYear - startYear} years (since ~${startYear})\n`;
+            msg += `📊 Years Active: ~${currentYear - startYear} years (since ~${startYear})\n`;
           }
         }
-        msg += `└──────────────────\n\n`;
+        msg += `\n`;
 
         if (p.strLocked || p.strCreativeCommons) {
-          msg += `┌─── *Honors & Achievements* ───\n`;
-          if (p.strLocked) msg += `│ 🏆 ${p.strLocked}\n`;
-          msg += `└──────────────────\n\n`;
+          msg += `*Honors & Achievements*\n`;
+          if (p.strLocked) msg += `🏆 ${p.strLocked}\n`;
+          msg += `\n`;
         }
 
         if (p.strFormerTeam) {
-          msg += `┌─── *Former Teams* ───\n`;
-          msg += `│ ${p.strFormerTeam}\n`;
-          msg += `└──────────────────\n\n`;
+          msg += `*Former Teams*\n`;
+          msg += `${p.strFormerTeam}\n\n`;
         }
 
         const socials = [];
-        if (p.strFacebook) socials.push(`│ 📘 Facebook: ${p.strFacebook}`);
-        if (p.strTwitter) socials.push(`│ 🐦 Twitter: ${p.strTwitter}`);
-        if (p.strInstagram) socials.push(`│ 📸 Instagram: ${p.strInstagram}`);
-        if (p.strYoutube) socials.push(`│ ▶️ YouTube: ${p.strYoutube}`);
-        if (p.strWebsite) socials.push(`│ 🌐 Website: ${p.strWebsite}`);
+        if (p.strFacebook) socials.push(`📘 Facebook: ${p.strFacebook}`);
+        if (p.strTwitter) socials.push(`🐦 Twitter: ${p.strTwitter}`);
+        if (p.strInstagram) socials.push(`📸 Instagram: ${p.strInstagram}`);
+        if (p.strYoutube) socials.push(`▶️ YouTube: ${p.strYoutube}`);
+        if (p.strWebsite) socials.push(`🌐 Website: ${p.strWebsite}`);
         if (socials.length) {
-          msg += `┌─── *Social Media* ───\n`;
+          msg += `*Social Media*\n`;
           msg += socials.join("\n") + "\n";
-          msg += `└──────────────────\n\n`;
+          msg += `\n`;
         }
 
         if (p.strDescriptionEN) {
@@ -275,33 +260,31 @@ const commands = [
         if (!data?.teams?.[0]) return m.reply("❌ Team not found.");
         const t = data.teams[0];
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🏟️ *TEAM PROFILE* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `🏟️ *TEAM PROFILE*\n\n`;
         msg += `🏟️ *${t.strTeam}*\n`;
         if (t.strTeamAlternate) msg += `📛 Also known as: ${t.strTeamAlternate}\n`;
         msg += `\n`;
 
-        msg += `┌─── *Club Details* ───\n`;
-        if (t.intFormedYear) msg += `│ 📅 Founded: ${t.intFormedYear}\n`;
-        if (t.strSport) msg += `│ 🏅 Sport: ${t.strSport}\n`;
-        if (t.strCountry) msg += `│ 🌍 Country: ${t.strCountry}\n`;
-        if (t.strLeague) msg += `│ 🏆 League: ${t.strLeague}\n`;
-        if (t.strLeague2) msg += `│ 🏆 League 2: ${t.strLeague2}\n`;
-        if (t.strDivision) msg += `│ 📊 Division: ${t.strDivision}\n`;
-        if (t.strManager) msg += `│ 👨‍💼 Manager: ${t.strManager}\n`;
-        if (t.strKeywords) msg += `│ 🏷️ Keywords: ${t.strKeywords}\n`;
-        msg += `└──────────────────\n\n`;
+        msg += `*Club Details*\n`;
+        if (t.intFormedYear) msg += `📅 Founded: ${t.intFormedYear}\n`;
+        if (t.strSport) msg += `🏅 Sport: ${t.strSport}\n`;
+        if (t.strCountry) msg += `🌍 Country: ${t.strCountry}\n`;
+        if (t.strLeague) msg += `🏆 League: ${t.strLeague}\n`;
+        if (t.strLeague2) msg += `🏆 League 2: ${t.strLeague2}\n`;
+        if (t.strDivision) msg += `📊 Division: ${t.strDivision}\n`;
+        if (t.strManager) msg += `👨‍💼 Manager: ${t.strManager}\n`;
+        if (t.strKeywords) msg += `🏷️ Keywords: ${t.strKeywords}\n`;
+        msg += `\n`;
 
         if (t.strStadium) {
-          msg += `┌─── *Stadium* ───\n`;
-          msg += `│ 🏟️ Name: ${t.strStadium}\n`;
-          if (t.intStadiumCapacity) msg += `│ 👥 Capacity: ${parseInt(t.intStadiumCapacity).toLocaleString()}\n`;
-          if (t.strStadiumLocation) msg += `│ 📍 Location: ${t.strStadiumLocation}\n`;
+          msg += `*Stadium*\n`;
+          msg += `🏟️ Name: ${t.strStadium}\n`;
+          if (t.intStadiumCapacity) msg += `👥 Capacity: ${parseInt(t.intStadiumCapacity).toLocaleString()}\n`;
+          if (t.strStadiumLocation) msg += `📍 Location: ${t.strStadiumLocation}\n`;
           if (t.strStadiumDescription) {
-            msg += `│ 📝 ${t.strStadiumDescription.substring(0, 300)}\n`;
+            msg += `📝 ${t.strStadiumDescription.substring(0, 300)}\n`;
           }
-          msg += `└──────────────────\n\n`;
+          msg += `\n`;
         }
 
         if (t.strColour1 || t.strColour2) {
@@ -309,15 +292,15 @@ const commands = [
         }
 
         const socials = [];
-        if (t.strWebsite) socials.push(`│ 🌐 Website: ${t.strWebsite}`);
-        if (t.strFacebook) socials.push(`│ 📘 Facebook: ${t.strFacebook}`);
-        if (t.strTwitter) socials.push(`│ 🐦 Twitter: ${t.strTwitter}`);
-        if (t.strInstagram) socials.push(`│ 📸 Instagram: ${t.strInstagram}`);
-        if (t.strYoutube) socials.push(`│ ▶️ YouTube: ${t.strYoutube}`);
+        if (t.strWebsite) socials.push(`🌐 Website: ${t.strWebsite}`);
+        if (t.strFacebook) socials.push(`📘 Facebook: ${t.strFacebook}`);
+        if (t.strTwitter) socials.push(`🐦 Twitter: ${t.strTwitter}`);
+        if (t.strInstagram) socials.push(`📸 Instagram: ${t.strInstagram}`);
+        if (t.strYoutube) socials.push(`▶️ YouTube: ${t.strYoutube}`);
         if (socials.length) {
-          msg += `\n┌─── *Social Media* ───\n`;
+          msg += `\n*Social Media*\n`;
           msg += socials.join("\n") + "\n";
-          msg += `└──────────────────\n\n`;
+          msg += `\n`;
         }
 
         if (t.strDescriptionEN) {
@@ -353,17 +336,15 @@ const commands = [
       try {
         const data = await fetchJson("https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id=4387").catch(() => null);
         if (data?.events?.length) {
-          let msg = `╔══════════════════════════╗\n`;
-          msg += `║ 🏀 *RECENT NBA GAMES* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          let msg = `🏀 *RECENT NBA GAMES*\n\n`;
           data.events.slice(0, 10).forEach((e, i) => {
-            msg += `┌─── *Game ${i + 1}* ───\n`;
-            msg += `│ 🏠 ${e.strHomeTeam} *${e.intHomeScore || "?"}*\n`;
-            msg += `│ 🛫 ${e.strAwayTeam} *${e.intAwayScore || "?"}*\n`;
-            msg += `│ 📅 ${e.dateEvent}\n`;
-            if (e.strVenue) msg += `│ 🏟️ ${e.strVenue}\n`;
-            if (e.intRound) msg += `│ 🔢 Round: ${e.intRound}\n`;
-            msg += `└──────────────────\n\n`;
+            msg += `*Game ${i + 1}*\n`;
+            msg += `🏠 ${e.strHomeTeam} *${e.intHomeScore || "?"}*\n`;
+            msg += `🛫 ${e.strAwayTeam} *${e.intAwayScore || "?"}*\n`;
+            msg += `📅 ${e.dateEvent}\n`;
+            if (e.strVenue) msg += `🏟️ ${e.strVenue}\n`;
+            if (e.intRound) msg += `🔢 Round: ${e.intRound}\n`;
+            msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
           await m.reply(msg);

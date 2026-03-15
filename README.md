@@ -48,20 +48,20 @@ cp .env.example .env
 
 Edit `.env` with your settings:
 
-| Variable           | Description                              | Default                          |
-| ------------------ | ---------------------------------------- | -------------------------------- |
-| `SESSION_ID`       | Your WhatsApp session credentials (required) | —                            |
-| `BOT_NAME`         | Bot display name                         | `Desam WABot`                    |
-| `PREFIX`           | Command prefix                           | `.`                              |
-| `OWNER_NUMBER`     | Your WhatsApp number (with country code) | —                                |
-| `MODE`             | `public` or `private`                    | `public`                         |
-| `TIMEZONE`         | Timezone for time-based features         | `Africa/Accra`                   |
-| `SQLITE_PATH`      | SQLite database file path                | `./data/bot.db`                  |
-| `AUTO_READ`        | Auto-read incoming messages              | `off`                            |
-| `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses              | `off`                            |
-| `ANTI_CALL`        | Reject incoming calls automatically      | `on`                             |
-| `CHATBOT`          | Enable AI chatbot mode                   | `off`                            |
-| `AUTO_BIO_MSG`     | Auto-update bio message template         | `🤖 Desam WABot \| {time} \| {date}` |
+| Variable           | Description                                  | Default                              |
+| ------------------ | -------------------------------------------- | ------------------------------------ |
+| `SESSION_ID`       | Your WhatsApp session credentials (required) | —                                    |
+| `BOT_NAME`         | Bot display name                             | `Desam WABot`                        |
+| `PREFIX`           | Command prefix                               | `.`                                  |
+| `OWNER_NUMBER`     | Your WhatsApp number (with country code)     | —                                    |
+| `MODE`             | `public` or `private`                        | `public`                             |
+| `TIMEZONE`         | Timezone for time-based features             | `Africa/Accra`                       |
+| `SQLITE_PATH`      | SQLite database file path                    | `./data/bot.db`                      |
+| `AUTO_READ`        | Auto-read incoming messages                  | `off`                                |
+| `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses                  | `off`                                |
+| `ANTI_CALL`        | Reject incoming calls automatically          | `on`                                 |
+| `CHATBOT`          | Enable AI chatbot mode                       | `off`                                |
+| `AUTO_BIO_MSG`     | Auto-update bio message template             | `🤖 Desam WABot \| {time} \| {date}` |
 
 > **Note:** Values in `.env` always take priority over any environment variables set elsewhere.
 
@@ -87,7 +87,6 @@ pm2 startup
 ## Deployment Notes
 
 - The bot runs as a **background worker**, not an HTTP server. On platforms like Render, Koyeb, or Heroku deploy it as a `worker` service, not a `web` service.
-- On **Replit**, the bot runs on port 5000 as a web process (for the pairing UI) while the WhatsApp connection runs in the same process.
 - SQLite stores data at `data/bot.db`. On managed platforms with ephemeral disks, the database may reset on redeploy — use a persistent volume or back up regularly.
 
 **Backup / restore auth state:**
@@ -109,13 +108,13 @@ npm run doctor
 
 ### Main (5 commands)
 
-| Command                                   | Description             |
-| ----------------------------------------- | ----------------------- |
-| `.menu` / `.help` / `.commands`           | Show command categories |
-| `.list` / `.allcommands`                  | Show all commands       |
-| `.ping` / `.alive` / `.bot`               | Check bot response time |
-| `.info` / `.botinfo`                      | Bot information         |
-| `.owner` / `.creator`                     | Show owner contact      |
+| Command                         | Description             |
+| ------------------------------- | ----------------------- |
+| `.menu` / `.help` / `.commands` | Show command categories |
+| `.list` / `.allcommands`        | Show all commands       |
+| `.ping` / `.alive` / `.bot`     | Check bot response time |
+| `.info` / `.botinfo`            | Bot information         |
+| `.owner` / `.creator`           | Show owner contact      |
 
 ### AI (10 commands)
 
