@@ -1,5 +1,17 @@
 const config = require("../config");
-const { fetchBuffer, fetchJson, isUrl } = require("../lib/helpers");
+const { fetchBuffer, fetchJson, isUrl, pickNonRepeating } = require("../lib/helpers");
+
+const fallbackMemes = [
+  { title: "When code works on first run", subtitle: "Everyone acts normal, but inside you're shocked.", subreddit: "programmerhumor" },
+  { title: "Deploy Friday?", subtitle: "Bold strategy, team.", subreddit: "memes" },
+  { title: "One bug fixed, two appear", subtitle: "Classic software lifecycle.", subreddit: "coding" },
+  { title: "Refactor complete", subtitle: "Same behavior, 3x confidence.", subreddit: "dev" },
+  { title: "API down at demo time", subtitle: "Plan B is now Plan A.", subreddit: "techhumor" },
+];
+
+const catCaptions = ["🐱 *Cat Drop*", "🐾 *Feline Moment*", "🐈 *Cat of the Minute*", "😺 *Mood Booster Cat*", "🧶 *Tiny Tiger Update*"];
+const dogCaptions = ["🐶 *Dog Drop*", "🐾 *Good Boy/Girl Alert*", "🦴 *Paw-some Moment*", "🐕 *Dog of the Minute*", "🎾 *Tail-Wag Update*"];
+const foxCaptions = ["🦊 *Fox Drop*", "🍂 *Wild Fox Moment*", "✨ *Floof Alert*", "🌲 *Forest Vibes*", "🧡 *Fox of the Minute*"];
 
 const commands = [
   {
@@ -115,11 +127,15 @@ const commands = [
           return m.reply("⏳ The Meme API is currently overloaded.");
         }
         const buffer = await fetchBuffer(data.url);
-        await sock.sendMessage(m.chat, { image: buffer, caption: `😂 *${data.title || "Meme"}*\n\n👍 ${data.ups || 0} upvotes\n📍 r/${data.subreddit || "memes"}` }, { quoted: { key: m.key, message: m.message } });
+        const title = data.title || "Meme";
+        const author = data.author ? `\n✍️ u/${data.author}` : "";
+        const comments = typeof data.num_comments === "number" ? `\n💬 ${data.num_comments} comments` : "";
+        await sock.sendMessage(m.chat, { image: buffer, caption: `😂 *${title}*\n\n👍 ${data.ups || 0} upvotes${comments}${author}\n📍 r/${data.subreddit || "memes"}` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
-        m.react("❌");
-        await m.reply("⏳ The Meme API is currently overloaded.");
+        const mm = pickNonRepeating(fallbackMemes, `${m.chat}:meme`, { maxHistory: 4 });
+        await m.reply(`😂 *${mm.title}*\n\n${mm.subtitle}\n📍 r/${mm.subreddit}\n📡 Source: Local fallback`);
+        m.react("✅");
       }
     },
   },
@@ -132,7 +148,8 @@ const commands = [
       try {
         const data = await fetchJson("https://api.thecatapi.com/v1/images/search");
         const buffer = await fetchBuffer(data[0].url);
-        await sock.sendMessage(m.chat, { image: buffer, caption: "🐱 *Meow!*" }, { quoted: { key: m.key, message: m.message } });
+        const caption = pickNonRepeating(catCaptions, `${m.chat}:cat-caption`, { maxHistory: 3 });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${caption}\n\n_Type ${config.PREFIX}cat for another._` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -149,7 +166,8 @@ const commands = [
       try {
         const data = await fetchJson("https://dog.ceo/api/breeds/image/random");
         const buffer = await fetchBuffer(data.message);
-        await sock.sendMessage(m.chat, { image: buffer, caption: "🐶 *Woof!*" }, { quoted: { key: m.key, message: m.message } });
+        const caption = pickNonRepeating(dogCaptions, `${m.chat}:dog-caption`, { maxHistory: 3 });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${caption}\n\n_Type ${config.PREFIX}dog for another._` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -166,7 +184,8 @@ const commands = [
       try {
         const data = await fetchJson("https://randomfox.ca/floof/");
         const buffer = await fetchBuffer(data.image);
-        await sock.sendMessage(m.chat, { image: buffer, caption: "🦊 *Floof!*" }, { quoted: { key: m.key, message: m.message } });
+        const caption = pickNonRepeating(foxCaptions, `${m.chat}:fox-caption`, { maxHistory: 3 });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${caption}\n\n_Type ${config.PREFIX}fox for another._` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");

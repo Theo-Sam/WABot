@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, isUrl, tempFile } = require("../lib/helpers");
+const { fetchJson, fetchBuffer, isUrl, tempFile, pickNonRepeating } = require("../lib/helpers");
 const fs = require("fs");
 const axios = require("axios");
 const play = require("play-dl");
@@ -117,6 +117,16 @@ async function twitterDownload(url) {
   return null;
 }
 
+function formatVideoMeta(item = {}) {
+  const lines = [];
+  if (item.title) lines.push(`🎵 Title: *${item.title}*`);
+  if (item.author) lines.push(`👤 Channel: ${item.author}`);
+  if (item.duration) lines.push(`⏱️ Duration: ${item.duration}`);
+  if (item.views) lines.push(`👁️ Views: ${item.views}`);
+  if (item.url) lines.push(`🔗 ${item.url}`);
+  return lines.join("\n");
+}
+
 const commands = [
   {
     name: ["play", "song", "music", "p", "m", "s"],
@@ -128,10 +138,14 @@ const commands = [
       try {
         const results = await ytSearch(text);
         if (!results.length) return m.reply("❌ No results found. Try a different search term.");
-        const { url: videoUrl, title } = results[0];
+        const first = results[0];
+        const { url: videoUrl, title } = first;
         let audioBuffer = await ytDownloadAudio(videoUrl);
         if (!audioBuffer) {
-          let msg = `🎵 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`;
+          let msg = `🎵 *Audio Preview*\n\n${formatVideoMeta(first)}\n\n`;
+          msg += `⚠️ Direct audio download is temporarily unavailable.\n`;
+          msg += `Use the link above and try again shortly.\n\n`;
+          msg += `_${config.BOT_NAME}_`;
           return m.reply(msg);
         }
         await sock.sendMessage(m.chat, {
@@ -156,18 +170,23 @@ const commands = [
       m.react("⏳");
       try {
         let videoUrl = text;
-        let title = text;
+        let picked = { title: text, url: text };
         if (!isUrl(text)) {
           const results = await ytSearch(text);
           if (!results.length) return m.reply("❌ No results found.");
-          videoUrl = results[0].url;
-          title = results[0].title;
+          picked = results[0];
+          videoUrl = picked.url;
         }
         let videoBuffer = await ytDownloadVideo(videoUrl);
         if (!videoBuffer) {
-          return m.reply(`🎬 *${title}*\n\n🔗 ${videoUrl}\n\n_Direct download is temporarily unavailable. Use the link above._\n\n_${config.BOT_NAME}_`);
+          return m.reply(
+            `🎬 *Video Preview*\n\n${formatVideoMeta(picked)}\n\n` +
+            `⚠️ Direct video download is temporarily unavailable.\n` +
+            `Use the link above and try again shortly.\n\n` +
+            `_${config.BOT_NAME}_`
+          );
         }
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 *${title}*\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 *${picked.title || "YouTube Video"}*\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -347,7 +366,8 @@ const commands = [
           const results = res.data?.resource_response?.data?.results || [];
           const images = results.filter(r => r.images?.orig?.url).map(r => r.images.orig.url);
           if (images.length) {
-            const randomImg = images[Math.floor(Math.random() * Math.min(images.length, 10))];
+            const list = images.slice(0, 10);
+            const randomImg = pickNonRepeating(list, `${m.chat}:pin:${text.toLowerCase()}`, { maxHistory: Math.min(4, Math.max(1, list.length - 1)) });
             imgBuffer = await fetchBuffer(randomImg);
           }
         } catch {}

@@ -1,5 +1,31 @@
 const config = require("../config");
-const { fetchJson } = require("../lib/helpers");
+const { fetchJson, pickNonRepeating } = require("../lib/helpers");
+
+const DEFAULT_BIBLE_VERSIONS = ["kjv", "web", "bbe"];
+
+const fallbackHadiths = [
+  { text: "The best among you are those who have the best manners and character.", source: "Sahih Bukhari 6029" },
+  { text: "None of you truly believes until he loves for his brother what he loves for himself.", source: "Sahih Bukhari 13" },
+  { text: "The strong man is not the one who can overpower others. The strong man is the one who controls himself when he is angry.", source: "Sahih Bukhari 6114" },
+  { text: "Make things easy and do not make them difficult, cheer people up and do not repulse them.", source: "Sahih Bukhari 69" },
+  { text: "Whoever believes in Allah and the Last Day, let him speak good or remain silent.", source: "Sahih Bukhari 6018" },
+  { text: "The most beloved deeds to Allah are those done consistently, even if they are small.", source: "Sahih Muslim 783" },
+  { text: "Allah does not look at your appearance or wealth, but He looks at your hearts and deeds.", source: "Sahih Muslim 2564" },
+];
+
+const prayers = [
+  { title: "Morning Surrender", text: "Heavenly Father, thank You for the gift of this new day. Order my steps, guard my heart, and help me walk in Your will with joy.", source: "Psalm 143:8" },
+  { title: "Prayer for Guidance", text: "Our Father, who art in heaven, hallowed be thy name. Thy kingdom come, thy will be done, on earth as it is in heaven. Give us this day our daily bread, and forgive us our trespasses.", source: "The Lord's Prayer" },
+  { title: "Prayer for Strength", text: "Lord Jesus, when I am weak, be my strength. Help me endure with faith, speak with grace, and finish today with courage.", source: "Philippians 4:13" },
+  { title: "Prayer for Protection", text: "Lord, be my refuge and fortress. Cover me and my family under Your wings, and keep us from harm in body, mind, and spirit.", source: "Psalm 91:1-4" },
+  { title: "Prayer for Peace", text: "Lord, make me an instrument of your peace. Where there is hatred, let me sow love; where there is injury, pardon; where there is doubt, faith.", source: "Prayer of St. Francis" },
+  { title: "Prayer for Wisdom", text: "Father, give me wisdom for every decision today. Let Your Word shape my thinking, and let Your Spirit lead my actions.", source: "James 1:5" },
+  { title: "Prayer of Gratitude", text: "Thank You, Lord, for Your goodness and mercy. Teach me to notice Your blessings and to serve others with a thankful heart.", source: "Psalm 107:1" },
+  { title: "Prayer for Patience", text: "Lord, help me be patient in trials, kind in conversations, and faithful while I wait for Your timing.", source: "Romans 12:12" },
+  { title: "Prayer for Forgiveness", text: "Merciful Father, forgive my sins and renew a right spirit within me. Help me forgive others as You have forgiven me.", source: "1 John 1:9" },
+  { title: "Prayer for Work and Purpose", text: "God, bless the work of my hands. Let my efforts honor You and bring help, excellence, and integrity wherever I serve.", source: "Colossians 3:23" },
+  { title: "Night Prayer", text: "Lord, thank You for carrying me through today. As I rest, grant me peace, restore my strength, and watch over my home.", source: "Psalm 4:8" },
+];
 
 const commands = [
   {
@@ -7,28 +33,51 @@ const commands = [
     category: "religious",
     desc: "Get a Bible verse",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}bible <reference> [| <version>]\nExample: ${config.PREFIX}bible John 3:16\n${config.PREFIX}bible Psalm 23 | KJV`);
+      if (!text) return m.reply(`Usage: ${config.PREFIX}bible <reference> [| <versions>]\nExample: ${config.PREFIX}bible John 3:16\n${config.PREFIX}bible Psalm 23:1 | kjv, web, bbe`);
       m.react("📖");
       try {
         let reference = text;
-        let version = "web";
+        let versions = [...DEFAULT_BIBLE_VERSIONS];
         if (text.includes("|")) {
           const parts = text.split("|");
           reference = parts[0].trim();
-          version = parts[1].trim().toLowerCase();
+          const requested = parts[1].split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+          if (requested.length) versions = requested.slice(0, 5);
         }
 
-        const data = await fetchJson(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${version}`);
-        if (!data?.text) return m.reply(`⏳ Verse not found or API is busy. Try valid reference like 'John 3:16'. Versions: kjv, asv, bbe, web, etc.`);
+        const responses = await Promise.allSettled(
+          versions.map((version) =>
+            fetchJson(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${version}`).then((data) => ({ version, data }))
+          )
+        );
+
+        const ok = responses
+          .filter((r) => r.status === "fulfilled" && r.value?.data?.text)
+          .map((r) => r.value);
+
+        if (!ok.length) {
+          return m.reply(`⏳ Verse not found or API is busy. Try valid reference like 'John 3:16'.\nSupported version codes include: kjv, web, bbe, asv.`);
+        }
+
         let msg = `📖 *Holy Bible*\n\n`;
-        msg += `📌 *${data.reference}*\n\n`;
-        msg += `"${data.text.trim()}"\n\n`;
-        if (data.translation_name) msg += `📚 _${data.translation_name}_`;
+        msg += `📌 *${ok[0].data.reference || reference}*\n\n`;
+        ok.forEach(({ version, data }, index) => {
+          const versionName = data.translation_name || version.toUpperCase();
+          msg += `*${index + 1}. ${versionName} (${version.toUpperCase()})*\n`;
+          msg += `"${String(data.text || "").trim()}"\n\n`;
+        });
+
+        const failed = responses.length - ok.length;
+        if (failed > 0) {
+          msg += `⚠️ ${failed} requested version(s) could not be fetched.\n`;
+        }
+
+        msg += `💡 Tip: ${config.PREFIX}bible John 3:16 | kjv,web,bbe`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Bible API is currently overloaded or the version is invalid.");
+        await m.reply("⏳ The Bible API is currently overloaded or one or more versions are invalid.");
       }
     },
   },
@@ -96,29 +145,27 @@ const commands = [
     name: ["hadith"],
     category: "religious",
     desc: "Get a random hadith",
-    handler: async (sock, m) => {
+    handler: async (sock, m, { text }) => {
       m.react("📖");
       try {
-        const num = Math.floor(Math.random() * 300) + 1;
-        const data = await fetchJson(`https://api.hadith.gading.dev/books/bukhari/${num}`).catch(() => null);
+        const [bookRaw, numberRaw] = String(text || "").trim().split(/\s+/);
+        const supportedBooks = ["bukhari", "muslim", "abudawud", "nasai", "tirmidzi", "ibnmajah"];
+        const book = supportedBooks.includes((bookRaw || "").toLowerCase()) ? bookRaw.toLowerCase() : "bukhari";
+        const requested = Number(numberRaw || bookRaw || 0);
+        const num = Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), 7000) : Math.floor(Math.random() * 300) + 1;
+        const data = await fetchJson(`https://api.hadith.gading.dev/books/${book}/${num}`).catch(() => null);
         if (data?.data?.contents) {
           const h = data.data.contents;
           let msg = `📖 *Hadith*\n\n`;
           msg += `📌 *${data.data.name} - #${h.number}*\n\n`;
           msg += `${h.arab}\n\n`;
           msg += `*Translation:*\n${h.en || h.id || ""}\n`;
+          msg += `\n💡 Tip: ${config.PREFIX}hadith bukhari 42`;
           await m.reply(msg);
           m.react("✅");
         } else {
-          const hadiths = [
-            { text: "The best among you are those who have the best manners and character.", source: "Sahih Bukhari 6029" },
-            { text: "None of you truly believes until he loves for his brother what he loves for himself.", source: "Sahih Bukhari 13" },
-            { text: "The strong man is not the one who can overpower others. The strong man is the one who controls himself when he is angry.", source: "Sahih Bukhari 6114" },
-            { text: "Make things easy and do not make them difficult, cheer the people up by conveying glad tidings to them and do not repulse them.", source: "Sahih Bukhari 69" },
-            { text: "Whoever believes in Allah and the Last Day, let him speak good or remain silent.", source: "Sahih Bukhari 6018" },
-          ];
-          const h = hadiths[Math.floor(Math.random() * hadiths.length)];
-          await m.reply(`📖 *Hadith*\n\n"${h.text}"\n\n_${h.source}_`);
+          const h = pickNonRepeating(fallbackHadiths, `${m.chat}:hadith`, { maxHistory: 5 });
+          await m.reply(`📖 *Hadith*\n\n"${h.text}"\n\n_${h.source}_\n📡 Source: Local fallback`);
           m.react("✅");
         }
       } catch {
@@ -128,22 +175,12 @@ const commands = [
     },
   },
   {
-    name: ["pray", "prayer", "dua"],
+    name: ["pray", "prayer"],
     category: "religious",
-    desc: "Get a prayer/dua",
+    desc: "Get a Christian prayer",
     handler: async (sock, m) => {
-      const prayers = [
-        { title: "Morning Prayer", text: "O Allah, by Your leave we have reached the morning and by Your leave we have reached the evening. By Your leave we live and die, and unto You is our resurrection.", source: "Morning Dua" },
-        { title: "Prayer for Guidance", text: "Our Father, who art in heaven, hallowed be thy name. Thy kingdom come, thy will be done, on earth as it is in heaven. Give us this day our daily bread, and forgive us our trespasses.", source: "The Lord's Prayer" },
-        { title: "Prayer for Strength", text: "Lord, grant me the serenity to accept the things I cannot change, courage to change the things I can, and wisdom to know the difference.", source: "Serenity Prayer" },
-        { title: "Prayer for Protection", text: "The Lord is my shepherd; I shall not want. He makes me lie down in green pastures. He leads me beside still waters. He restores my soul.", source: "Psalm 23" },
-        { title: "Prayer for Peace", text: "Lord, make me an instrument of your peace. Where there is hatred, let me sow love; where there is injury, pardon; where there is doubt, faith.", source: "Prayer of St. Francis" },
-        { title: "Dua for Knowledge", text: "O Allah, I ask You for knowledge that is of benefit, a good provision, and deeds that will be accepted.", source: "Ibn Majah 925" },
-        { title: "Prayer of Gratitude", text: "Give thanks to the Lord, for He is good; His love endures forever. Let the redeemed of the Lord tell their story.", source: "Psalm 107:1-2" },
-        { title: "Dua for Patience", text: "Our Lord, pour upon us patience and let us die as Muslims [in submission to You].", source: "Quran 7:126" },
-      ];
-      const p = prayers[Math.floor(Math.random() * prayers.length)];
-      await m.reply(`🙏 *${p.title}*\n\n"${p.text}"\n\n_${p.source}_`);
+      const p = pickNonRepeating(prayers, `${m.chat}:prayer`, { maxHistory: 6 });
+      await m.reply(`🙏 *${p.title}*\n\n"${p.text}"\n\n_${p.source}_\n\n_Tip: share this with someone who needs encouragement today._`);
     },
   },
 ];

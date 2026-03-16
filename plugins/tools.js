@@ -1,5 +1,45 @@
 const config = require("../config");
-const { fetchBuffer, fetchJson, isUrl, parseMention } = require("../lib/helpers");
+const { fetchBuffer, fetchJson, isUrl, parseMention, pickNonRepeating } = require("../lib/helpers");
+
+const fallbackQuotes = [
+  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs", tag: "work" },
+  { text: "Innovation distinguishes between a leader and a follower.", author: "Steve Jobs", tag: "innovation" },
+  { text: "Life is what happens when you're busy making other plans.", author: "John Lennon", tag: "life" },
+  { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt", tag: "dreams" },
+  { text: "It is during our darkest moments that we must focus to see the light.", author: "Aristotle", tag: "resilience" },
+  { text: "Discipline is choosing between what you want now and what you want most.", author: "Abraham Lincoln", tag: "discipline" },
+  { text: "Consistency compounds. Small wins repeated daily change your life.", author: "James Clear", tag: "growth" },
+  { text: "Done is better than perfect.", author: "Sheryl Sandberg", tag: "execution" },
+  { text: "You don't rise to the level of your goals; you fall to the level of your systems.", author: "James Clear", tag: "systems" },
+  { text: "Courage starts with showing up and letting ourselves be seen.", author: "Brene Brown", tag: "courage" },
+];
+
+const fallbackJokes = [
+  "Why did the programmer quit his job? Because he didn't get arrays!",
+  "Why do Java developers wear glasses? Because they don't C#.",
+  "I told my code to be clean. It removed all my comments.",
+  "Why was the function always calm? It had no side effects.",
+  "I broke production once. It was a groundbreaking release.",
+  "Debugging is like being the detective and the criminal in the same movie.",
+];
+
+const fallbackFacts = [
+  "Honey never spoils. Archaeologists found 3000-year-old honey that was still edible.",
+  "Octopuses have three hearts and blue blood.",
+  "Bananas are berries, but strawberries are not.",
+  "A day on Venus is longer than a year on Venus.",
+  "Sharks existed before trees appeared on Earth.",
+  "The Eiffel Tower can grow taller in summer due to heat expansion.",
+];
+
+const magic8Answers = [
+  "It is certain.", "Without a doubt.", "Yes, definitely.", "You may rely on it.",
+  "As I see it, yes.", "Most likely.", "Outlook good.", "Yes.",
+  "Signs point to yes.", "Reply hazy, try again.", "Ask again later.",
+  "Better not tell you now.", "Cannot predict now.", "Concentrate and ask again.",
+  "Don't count on it.", "My reply is no.", "My sources say no.",
+  "Outlook not so good.", "Very doubtful.",
+];
 
 const commands = [
   {
@@ -99,18 +139,15 @@ const commands = [
       m.react("⏳");
       try {
         const data = await fetchJson("https://api.quotable.io/random");
-        await m.reply(`📜 *"${data.content}"*\n\n— _${data.author}_`);
+        const author = data?.author || "Unknown";
+        const content = data?.content || "No quote text available.";
+        const tags = Array.isArray(data?.tags) && data.tags.length ? data.tags.slice(0, 3).join(", ") : "general";
+        const len = String(content).length;
+        await m.reply(`📜 *Daily Quote*\n\n"${content}"\n\n— _${author}_\n🏷️ Tags: ${tags}\n📏 Length: ${len} chars`);
         m.react("✅");
       } catch {
-        const quotes = [
-          { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
-          { text: "Innovation distinguishes between a leader and a follower.", author: "Steve Jobs" },
-          { text: "Life is what happens when you're busy making other plans.", author: "John Lennon" },
-          { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
-          { text: "It is during our darkest moments that we must focus to see the light.", author: "Aristotle" },
-        ];
-        const q = quotes[Math.floor(Math.random() * quotes.length)];
-        await m.reply(`📜 *"${q.text}"*\n\n— _${q.author}_`);
+        const q = pickNonRepeating(fallbackQuotes, `${m.chat}:quote`, { maxHistory: 7 });
+        await m.reply(`📜 *Daily Quote*\n\n"${q.text}"\n\n— _${q.author}_\n🏷️ Tags: ${q.tag}\n📡 Source: Local fallback`);
         m.react("✅");
       }
     },
@@ -124,12 +161,13 @@ const commands = [
       try {
         const data = await fetchJson("https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,racist,sexist&type=single");
         if (data.joke) {
-          await m.reply(`😂 ${data.joke}`);
+          await m.reply(`😂 *Joke Break*\n\n${data.joke}\n\n_Type ${config.PREFIX}joke for another one._`);
         } else {
-          await m.reply(`😂 ${data.setup}\n\n${data.delivery}`);
+          await m.reply(`😂 *Joke Break*\n\n${data.setup}\n\n${data.delivery}`);
         }
       } catch {
-        await m.reply("😂 Why did the programmer quit his job? Because he didn't get arrays!");
+        const joke = pickNonRepeating(fallbackJokes, `${m.chat}:joke`, { maxHistory: 4 });
+        await m.reply(`😂 *Joke Break*\n\n${joke}\n\n📡 Source: Local fallback`);
       }
     },
   },
@@ -141,9 +179,10 @@ const commands = [
       m.react("🧠");
       try {
         const data = await fetchJson("https://uselessfacts.jsph.pl/api/v2/facts/random?language=en");
-        await m.reply(`🧠 *Did you know?*\n\n${data.text}`);
+        await m.reply(`🧠 *Did You Know?*\n\n${data.text}\n\n🌍 Language: EN`);
       } catch {
-        await m.reply("🧠 *Did you know?*\n\nHoney never spoils. Archaeologists have found 3000-year-old honey in Egyptian tombs that was still edible!");
+        const fact = pickNonRepeating(fallbackFacts, `${m.chat}:fact`, { maxHistory: 4 });
+        await m.reply(`🧠 *Did You Know?*\n\n${fact}\n\n📡 Source: Local fallback`);
       }
     },
   },
@@ -172,16 +211,8 @@ const commands = [
     desc: "Ask the magic 8-ball",
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}8ball <question>`);
-      const answers = [
-        "It is certain.", "Without a doubt.", "Yes, definitely.", "You may rely on it.",
-        "As I see it, yes.", "Most likely.", "Outlook good.", "Yes.",
-        "Signs point to yes.", "Reply hazy, try again.", "Ask again later.",
-        "Better not tell you now.", "Cannot predict now.", "Concentrate and ask again.",
-        "Don't count on it.", "My reply is no.", "My sources say no.",
-        "Outlook not so good.", "Very doubtful.",
-      ];
-      const answer = answers[Math.floor(Math.random() * answers.length)];
-      await m.reply(`🎱 *Magic 8-Ball*\n\n❓ ${text}\n🔮 ${answer}`);
+      const answer = pickNonRepeating(magic8Answers, `${m.chat}:8ball`, { maxHistory: 6 });
+      await m.reply(`🎱 *Magic 8-Ball*\n\n❓ Question: ${text}\n🔮 Answer: ${answer}`);
     },
   },
 ];

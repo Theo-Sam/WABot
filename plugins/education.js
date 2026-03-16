@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, normalizeAiText } = require("../lib/helpers");
+const { fetchJson, normalizeAiText, pickNonRepeating } = require("../lib/helpers");
 
 const elements = {
   "hydrogen": { symbol: "H", number: 1, mass: "1.008", group: "Nonmetal", period: 1 },
@@ -46,6 +46,24 @@ const planets = {
   "uranus": { name: "Uranus", emoji: "♅", distance: "2.87B km", diameter: "51,118 km", moons: 27, dayLength: "17.2 hours", yearLength: "84 Earth years", temp: "-195°C avg", fact: "Rotates on its side. An ice giant with a blue-green color." },
   "neptune": { name: "Neptune", emoji: "♆", distance: "4.50B km", diameter: "49,528 km", moons: 16, dayLength: "16.1 hours", yearLength: "164.8 Earth years", temp: "-200°C avg", fact: "Windiest planet with speeds up to 2,100 km/h." },
 };
+
+const wordOfTheDayPool = [
+  { word: "Ephemeral", part: "adjective", meaning: "Lasting for a very short time", example: "The ephemeral beauty of cherry blossoms.", tip: "Use it for moments, trends, or feelings that do not last." },
+  { word: "Serendipity", part: "noun", meaning: "The occurrence of finding pleasant things by chance", example: "Finding that book was pure serendipity.", tip: "Great for happy accidents in life or work." },
+  { word: "Eloquent", part: "adjective", meaning: "Fluent or persuasive in speaking or writing", example: "She gave an eloquent speech at the ceremony.", tip: "Often used for speeches, writing, or communication style." },
+  { word: "Resilient", part: "adjective", meaning: "Able to recover quickly from difficulties", example: "Children are remarkably resilient creatures.", tip: "Useful when describing people, systems, or teams." },
+  { word: "Ubiquitous", part: "adjective", meaning: "Present, appearing, or found everywhere", example: "Smartphones have become ubiquitous in modern life.", tip: "Best used for very common technologies, trends, or habits." },
+  { word: "Pragmatic", part: "adjective", meaning: "Dealing with things practically rather than theoretically", example: "A pragmatic approach to solving problems.", tip: "Good for business and decision-making contexts." },
+  { word: "Benevolent", part: "adjective", meaning: "Well-meaning and kindly", example: "A benevolent leader who cared for the people.", tip: "Commonly used for character description." },
+  { word: "Ethereal", part: "adjective", meaning: "Extremely delicate and light in a way that seems heavenly", example: "The ethereal glow of the moonlight.", tip: "Fits poetic or artistic descriptions." },
+  { word: "Cacophony", part: "noun", meaning: "A harsh, discordant mixture of sounds", example: "A cacophony of car horns filled the street.", tip: "Use it for noisy, chaotic environments." },
+  { word: "Perspicacious", part: "adjective", meaning: "Having a ready insight into things; shrewd", example: "A perspicacious observer of human nature.", tip: "Formal word for sharp judgment or intelligence." },
+  { word: "Mellifluous", part: "adjective", meaning: "Sweet-sounding; pleasant to hear", example: "Her mellifluous voice captivated the audience.", tip: "Great for describing voices or music." },
+  { word: "Quintessential", part: "adjective", meaning: "Representing the most perfect example of something", example: "The quintessential summer meal.", tip: "Use for ideal or classic examples." },
+  { word: "Surreptitious", part: "adjective", meaning: "Kept secret, especially because improper", example: "A surreptitious glance across the room.", tip: "Works well in suspense or social situations." },
+  { word: "Indefatigable", part: "adjective", meaning: "Persisting tirelessly", example: "An indefatigable campaigner for human rights.", tip: "Best for effort, energy, or commitment." },
+  { word: "Magnanimous", part: "adjective", meaning: "Very generous or forgiving", example: "She was magnanimous in victory.", tip: "Ideal for sportsmanship or leadership contexts." },
+];
 
 const commands = [
   {
@@ -126,11 +144,12 @@ const commands = [
         if (!data?.length) return m.reply(`✅ "${text}" appears to be spelled correctly (or no suggestions found).`);
         const exact = data.find((d) => d.word.toLowerCase() === text.toLowerCase());
         if (exact) {
-          return m.reply(`✅ *"${text}"* is spelled correctly!`);
+          return m.reply(`✅ *"${text}"* is spelled correctly!\n\n💡 Tip: Try ${config.PREFIX}synonym ${text} for alternatives.`);
         }
         let msg = `📝 *Spell Check: "${text}"*\n\n`;
-        msg += `Did you mean:\n`;
+        msg += `Did you mean (${Math.min(8, data.length)} suggestion${data.length > 1 ? "s" : ""}):\n`;
         data.slice(0, 8).forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        msg += `\n_Type ${config.PREFIX}synonym <word> to expand vocabulary._`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -150,7 +169,8 @@ const commands = [
         const data = await fetchJson(`https://api.datamuse.com/words?rel_syn=${encodeURIComponent(text)}&max=15`);
         if (!data?.length) return m.reply(`❌ No synonyms found for "${text}".`);
         let msg = `📖 *Synonyms for "${text}"*\n\n`;
-        data.forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        data.slice(0, 15).forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        msg += `\n📊 Total found: ${data.length}`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -170,7 +190,8 @@ const commands = [
         const data = await fetchJson(`https://api.datamuse.com/words?rel_ant=${encodeURIComponent(text)}&max=15`);
         if (!data?.length) return m.reply(`❌ No antonyms found for "${text}".`);
         let msg = `📖 *Antonyms for "${text}"*\n\n`;
-        data.forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        data.slice(0, 15).forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        msg += `\n📊 Total found: ${data.length}`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -190,7 +211,8 @@ const commands = [
         const data = await fetchJson(`https://api.datamuse.com/words?rel_rhy=${encodeURIComponent(text)}&max=20`);
         if (!data?.length) return m.reply(`❌ No rhymes found for "${text}".`);
         let msg = `🎵 *Words that rhyme with "${text}"*\n\n`;
-        data.forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        data.slice(0, 20).forEach((d, i) => { msg += `${i + 1}. ${d.word}\n`; });
+        msg += `\n📊 Total found: ${data.length}`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -230,26 +252,15 @@ const commands = [
     desc: "Get word of the day",
     handler: async (sock, m) => {
       m.react("📖");
-      const words = [
-        { word: "Ephemeral", meaning: "Lasting for a very short time", example: "The ephemeral beauty of cherry blossoms." },
-        { word: "Serendipity", meaning: "The occurrence of finding pleasant things by chance", example: "Finding that book was pure serendipity." },
-        { word: "Eloquent", meaning: "Fluent or persuasive in speaking or writing", example: "She gave an eloquent speech at the ceremony." },
-        { word: "Resilient", meaning: "Able to recover quickly from difficulties", example: "Children are remarkably resilient creatures." },
-        { word: "Ubiquitous", meaning: "Present, appearing, or found everywhere", example: "Smartphones have become ubiquitous in modern life." },
-        { word: "Pragmatic", meaning: "Dealing with things practically rather than theoretically", example: "A pragmatic approach to solving problems." },
-        { word: "Benevolent", meaning: "Well-meaning and kindly", example: "A benevolent ruler who cared for the people." },
-        { word: "Ethereal", meaning: "Extremely delicate and light in a way that seems heavenly", example: "The ethereal glow of the moonlight." },
-        { word: "Cacophony", meaning: "A harsh, discordant mixture of sounds", example: "A cacophony of car horns filled the street." },
-        { word: "Perspicacious", meaning: "Having a ready insight into things; shrewd", example: "A perspicacious observer of human nature." },
-        { word: "Mellifluous", meaning: "Sweet-sounding; pleasant to hear", example: "Her mellifluous voice captivated the audience." },
-        { word: "Quintessential", meaning: "Representing the most perfect example of something", example: "The quintessential English garden." },
-        { word: "Surreptitious", meaning: "Kept secret, especially because improper", example: "A surreptitious glance across the room." },
-        { word: "Indefatigable", meaning: "Persisting tirelessly", example: "An indefatigable campaigner for human rights." },
-        { word: "Magnanimous", meaning: "Very generous or forgiving", example: "She was magnanimous in victory." },
-      ];
-      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-      const w = words[dayOfYear % words.length];
-      await m.reply(`📖 *Word of the Day*\n\n📌 *${w.word}*\n\n📝 Meaning: ${w.meaning}\n\n💬 Example: _"${w.example}"_\n\n📅 _${new Date().toLocaleDateString()}_`);
+      const w = pickNonRepeating(wordOfTheDayPool, `${m.chat}:wotd`, { maxHistory: 7 });
+      await m.reply(
+        `📖 *Word of the Day*\n\n` +
+        `📌 *${w.word}* (${w.part})\n\n` +
+        `📝 Meaning: ${w.meaning}\n\n` +
+        `💬 Example: _"${w.example}"_\n\n` +
+        `🎯 Usage Tip: ${w.tip}\n\n` +
+        `📅 ${new Date().toLocaleDateString()}`
+      );
     },
   },
 ];

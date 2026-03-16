@@ -2,6 +2,29 @@ const config = require("../config");
 const { fetchJson, fetchBuffer, sendImageOrText } = require("../lib/helpers");
 const axios = require("axios");
 
+async function fetchWallpaperBuffer(query) {
+  const seed = Date.now();
+  const prompt = encodeURIComponent(`beautiful wallpaper 4k ${query}`);
+  const endpoints = [
+    `https://source.unsplash.com/random/1920x1080/?${encodeURIComponent(query)}`,
+    `https://image.pollinations.ai/prompt/${prompt}?model=flux&width=1920&height=1080&nologo=true&seed=${seed}`,
+    `https://image.pollinations.ai/prompt/${prompt}?model=turbo&width=1920&height=1080&nologo=true&seed=${seed + 1}`,
+    `https://image.pollinations.ai/prompt/${prompt}?width=1920&height=1080&nologo=true&seed=${seed + 2}`,
+  ];
+
+  for (const url of endpoints) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const buffer = await fetchBuffer(url, { timeout: 45000, headers: { Accept: "image/*" } });
+        if (buffer && buffer.length >= 2048) return buffer;
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  return null;
+}
+
 const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
   "https://invidious.fdn.fr",
@@ -54,17 +77,15 @@ const commands = [
           } catch {}
           return m.reply("⏳ No search results found. Try a different query.");
         }
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🔍 *Search Results* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `🔍 *Search Results*\n\n`;
         msg += `🔎 Query: *${text}*\n`;
         msg += `📊 Showing top ${Math.min(results.length, 7)} results\n\n`;
         results.slice(0, 7).forEach((r, i) => {
-          msg += `┌─── *${i + 1}. ${r.title || "Untitled"}* ───\n`;
-          if (r.content) msg += `│ ${r.content.substring(0, 300)}\n`;
-          if (r.url) msg += `│ 🔗 ${r.url}\n`;
-          if (r.engine) msg += `│ 🔧 ${r.engine}\n`;
-          msg += `└──────────────────\n\n`;
+          msg += `*${i + 1}. ${r.title || "Untitled"}*\n`;
+          if (r.content) msg += `${r.content.substring(0, 300)}\n`;
+          if (r.url) msg += `🔗 ${r.url}\n`;
+          if (r.engine) msg += `🔧 Source: ${r.engine}\n`;
+          msg += `\n`;
         });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
@@ -97,9 +118,7 @@ const commands = [
         }
         if (!fullExtract) fullExtract = data.extract || "";
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 📚 *WIKIPEDIA* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `📚 *Wikipedia*\n\n`;
         msg += `📖 *${data.title}*\n`;
         if (data.description) msg += `📝 _${data.description}_\n`;
         msg += `\n`;
@@ -166,12 +185,10 @@ const commands = [
           } catch {}
         }
         if (!lyrics) return m.reply("⏳ Lyrics not found. Try: artist - song title");
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🎵 *SONG LYRICS* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `🎵 *Song Lyrics*\n\n`;
         msg += `🎶 *${title}*\n`;
         if (artist) msg += `🎤 Artist: ${artist}\n`;
-        msg += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        msg += `\n`;
         msg += lyrics.substring(0, 4000);
         if (lyrics.length > 4000) msg += "\n\n_(lyrics truncated)_";
         msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -194,9 +211,7 @@ const commands = [
         const data = await fetchJson(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(text)}`);
         if (!data?.[0]) return m.reply("❌ Word not found.");
         const entry = data[0];
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 📖 *DICTIONARY* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `📖 *Dictionary*\n\n`;
         msg += `📝 *${entry.word}*\n`;
         if (entry.phonetic) msg += `🗣️ Phonetic: ${entry.phonetic}\n`;
         const allPhonetics = entry.phonetics?.filter(p => p.text) || [];
@@ -209,14 +224,14 @@ const commands = [
         msg += `\n`;
 
         entry.meanings?.forEach((meaning) => {
-          msg += `┌─── *${meaning.partOfSpeech.toUpperCase()}* ───\n`;
+          msg += `*${meaning.partOfSpeech.toUpperCase()}*\n`;
           meaning.definitions?.forEach((def, i) => {
-            msg += `│ ${i + 1}. ${def.definition}\n`;
-            if (def.example) msg += `│    _Example: "${def.example}"_\n`;
+            msg += `${i + 1}. ${def.definition}\n`;
+            if (def.example) msg += `_Example: "${def.example}"_\n`;
           });
-          if (meaning.synonyms?.length) msg += `│\n│ 🔗 Synonyms: ${meaning.synonyms.join(", ")}\n`;
-          if (meaning.antonyms?.length) msg += `│ 🔗 Antonyms: ${meaning.antonyms.join(", ")}\n`;
-          msg += `└──────────────────\n\n`;
+          if (meaning.synonyms?.length) msg += `🔗 Synonyms: ${meaning.synonyms.join(", ")}\n`;
+          if (meaning.antonyms?.length) msg += `🔗 Antonyms: ${meaning.antonyms.join(", ")}\n`;
+          msg += `\n`;
         });
 
         const allSyn = data.flatMap(e => e.meanings?.flatMap(m => m.synonyms || []) || []);
@@ -244,31 +259,28 @@ const commands = [
       try {
         if (text.includes("/")) {
           const data = await fetchJson(`https://api.github.com/repos/${text}`);
-          let msg = `╔══════════════════════════╗\n`;
-          msg += `║ 🐙 *GITHUB REPOSITORY* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          let msg = `🐙 *GitHub Repository*\n\n`;
           msg += `📦 *${data.full_name}*\n`;
           if (data.description) msg += `📝 ${data.description}\n`;
           msg += `\n`;
-          msg += `┌─── *Stats* ───\n`;
-          msg += `│ ⭐ Stars: ${(data.stargazers_count || 0).toLocaleString()}\n`;
-          msg += `│ 🍴 Forks: ${(data.forks_count || 0).toLocaleString()}\n`;
-          msg += `│ 👁️ Watchers: ${(data.watchers_count || 0).toLocaleString()}\n`;
-          msg += `│ 🐛 Open Issues: ${(data.open_issues_count || 0).toLocaleString()}\n`;
-          msg += `│ 📏 Size: ${(data.size || 0).toLocaleString()} KB\n`;
-          msg += `└──────────────────\n\n`;
-          msg += `┌─── *Details* ───\n`;
-          msg += `│ 🔤 Language: ${data.language || "N/A"}\n`;
-          msg += `│ 📜 License: ${data.license?.name || "N/A"}\n`;
-          msg += `│ 🌿 Default Branch: ${data.default_branch || "main"}\n`;
-          msg += `│ 📅 Created: ${new Date(data.created_at).toLocaleDateString()}\n`;
-          msg += `│ 🔄 Last Updated: ${new Date(data.updated_at).toLocaleDateString()}\n`;
-          msg += `│ 📤 Last Push: ${new Date(data.pushed_at).toLocaleDateString()}\n`;
-          if (data.homepage) msg += `│ 🌐 Homepage: ${data.homepage}\n`;
-          msg += `│ 🍴 Is Fork: ${data.fork ? "Yes" : "No"}\n`;
-          msg += `│ 📦 Is Archived: ${data.archived ? "Yes" : "No"}\n`;
-          if (data.topics?.length) msg += `│ 🏷️ Topics: ${data.topics.join(", ")}\n`;
-          msg += `└──────────────────\n\n`;
+          msg += `*Stats*\n`;
+          msg += `⭐ Stars: ${(data.stargazers_count || 0).toLocaleString()}\n`;
+          msg += `🍴 Forks: ${(data.forks_count || 0).toLocaleString()}\n`;
+          msg += `👁️ Watchers: ${(data.watchers_count || 0).toLocaleString()}\n`;
+          msg += `🐛 Open Issues: ${(data.open_issues_count || 0).toLocaleString()}\n`;
+          msg += `📏 Size: ${(data.size || 0).toLocaleString()} KB\n\n`;
+          msg += `*Details*\n`;
+          msg += `🔤 Language: ${data.language || "N/A"}\n`;
+          msg += `📜 License: ${data.license?.name || "N/A"}\n`;
+          msg += `🌿 Default Branch: ${data.default_branch || "main"}\n`;
+          msg += `📅 Created: ${new Date(data.created_at).toLocaleDateString()}\n`;
+          msg += `🔄 Last Updated: ${new Date(data.updated_at).toLocaleDateString()}\n`;
+          msg += `📤 Last Push: ${new Date(data.pushed_at).toLocaleDateString()}\n`;
+          if (data.homepage) msg += `🌐 Homepage: ${data.homepage}\n`;
+          msg += `🍴 Is Fork: ${data.fork ? "Yes" : "No"}\n`;
+          msg += `📦 Is Archived: ${data.archived ? "Yes" : "No"}\n`;
+          if (data.topics?.length) msg += `🏷️ Topics: ${data.topics.join(", ")}\n`;
+          msg += `\n`;
           msg += `🔗 ${data.html_url}\n`;
           msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
 
@@ -286,39 +298,37 @@ const commands = [
             fetchJson(`https://api.github.com/users/${text}`),
             fetchJson(`https://api.github.com/users/${text}/repos?sort=stars&per_page=5`).catch(() => [])
           ]);
-          let msg = `╔══════════════════════════╗\n`;
-          msg += `║ 🐙 *GITHUB USER PROFILE* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          let msg = `🐙 *GitHub User Profile*\n\n`;
           msg += `👤 *${data.name || data.login}*`;
           if (data.login) msg += ` (@${data.login})`;
           msg += `\n`;
           if (data.bio) msg += `📝 _${data.bio}_\n`;
           msg += `\n`;
-          msg += `┌─── *Profile* ───\n`;
-          msg += `│ 📦 Public Repos: ${(data.public_repos || 0).toLocaleString()}\n`;
-          msg += `│ 📋 Public Gists: ${(data.public_gists || 0).toLocaleString()}\n`;
-          msg += `│ 👥 Followers: ${(data.followers || 0).toLocaleString()}\n`;
-          msg += `│ 👤 Following: ${(data.following || 0).toLocaleString()}\n`;
-          if (data.location) msg += `│ 📍 Location: ${data.location}\n`;
-          if (data.company) msg += `│ 🏢 Company: ${data.company}\n`;
-          if (data.blog) msg += `│ 🌐 Blog: ${data.blog}\n`;
-          if (data.twitter_username) msg += `│ 🐦 Twitter: @${data.twitter_username}\n`;
-          if (data.email) msg += `│ 📧 Email: ${data.email}\n`;
-          msg += `│ 📅 Joined: ${new Date(data.created_at).toLocaleDateString()}\n`;
-          msg += `│ 🔄 Last Active: ${new Date(data.updated_at).toLocaleDateString()}\n`;
-          msg += `│ 📊 Type: ${data.type || "User"}\n`;
-          if (data.hireable) msg += `│ 💼 Hireable: Yes ✅\n`;
-          msg += `└──────────────────\n`;
+          msg += `*Profile*\n`;
+          msg += `📦 Public Repos: ${(data.public_repos || 0).toLocaleString()}\n`;
+          msg += `📋 Public Gists: ${(data.public_gists || 0).toLocaleString()}\n`;
+          msg += `👥 Followers: ${(data.followers || 0).toLocaleString()}\n`;
+          msg += `👤 Following: ${(data.following || 0).toLocaleString()}\n`;
+          if (data.location) msg += `📍 Location: ${data.location}\n`;
+          if (data.company) msg += `🏢 Company: ${data.company}\n`;
+          if (data.blog) msg += `🌐 Blog: ${data.blog}\n`;
+          if (data.twitter_username) msg += `🐦 Twitter: @${data.twitter_username}\n`;
+          if (data.email) msg += `📧 Email: ${data.email}\n`;
+          msg += `📅 Joined: ${new Date(data.created_at).toLocaleDateString()}\n`;
+          msg += `🔄 Last Active: ${new Date(data.updated_at).toLocaleDateString()}\n`;
+          msg += `📊 Type: ${data.type || "User"}\n`;
+          if (data.hireable) msg += `💼 Hireable: Yes ✅\n`;
+          msg += `\n`;
 
           if (reposData.length > 0) {
-            msg += `\n┌─── *Top Repositories* ───\n`;
+            msg += `*Top Repositories*\n`;
             reposData.forEach((r, i) => {
-              msg += `│ ${i + 1}. *${r.name}* ⭐ ${r.stargazers_count}`;
+              msg += `${i + 1}. *${r.name}* ⭐ ${r.stargazers_count}`;
               if (r.language) msg += ` (${r.language})`;
               msg += `\n`;
-              if (r.description) msg += `│    _${r.description.substring(0, 80)}_\n`;
+              if (r.description) msg += `_${r.description.substring(0, 80)}_\n`;
             });
-            msg += `└──────────────────\n`;
+            msg += `\n`;
           }
 
           msg += `\n🔗 ${data.html_url}\n`;
@@ -360,22 +370,19 @@ const commands = [
           } catch {}
         }
         if (!results.length) return m.reply("❌ No results found.");
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ ▶️ *YOUTUBE SEARCH* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `▶️ *YouTube Search*\n\n`;
         msg += `🔎 Query: *${text}*\n\n`;
         results.slice(0, 7).forEach((r, i) => {
-          msg += `┌─── *${i + 1}. ${r.title}* ───\n`;
+          msg += `*${i + 1}. ${r.title}*\n`;
           if (r.lengthSeconds) {
             const mins = Math.floor(r.lengthSeconds / 60);
             const secs = r.lengthSeconds % 60;
-            msg += `│ ⏱️ Duration: ${mins}:${String(secs).padStart(2, "0")}\n`;
+            msg += `⏱️ Duration: ${mins}:${String(secs).padStart(2, "0")}\n`;
           }
-          if (r.viewCount) msg += `│ 👁️ Views: ${r.viewCount.toLocaleString()}\n`;
-          if (r.publishedText) msg += `│ 📅 Uploaded: ${r.publishedText}\n`;
-          if (r.author) msg += `│ 👤 Channel: ${r.author}\n`;
-          msg += `│ 🔗 https://youtube.com/watch?v=${r.videoId}\n`;
-          msg += `└──────────────────\n\n`;
+          if (r.viewCount) msg += `👁️ Views: ${r.viewCount.toLocaleString()}\n`;
+          if (r.publishedText) msg += `📅 Uploaded: ${r.publishedText}\n`;
+          if (r.author) msg += `👤 Channel: ${r.author}\n`;
+          msg += `🔗 https://youtube.com/watch?v=${r.videoId}\n\n`;
         });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
@@ -405,21 +412,19 @@ const commands = [
           const summary = (show.summary || "").replace(/<[^>]+>/g, "").trim();
           posterUrl = show.image?.original || show.image?.medium || "";
 
-          msg += `╔══════════════════════════╗\n`;
-          msg += `║ 🎬 *MOVIE / SHOW INFO* ║\n`;
-          msg += `╚══════════════════════════╝\n\n`;
+          msg += `🎬 *Movie / Show Info*\n\n`;
           msg += `🎬 *${show.name || text}*\n\n`;
-          msg += `┌─── *Details* ───\n`;
-          if (show.premiered) msg += `│ 📅 Premiered: ${show.premiered}\n`;
-          if (show.ended) msg += `│ 🏁 Ended: ${show.ended}\n`;
-          if (show.type) msg += `│ 📂 Type: ${show.type}\n`;
-          if (show.language) msg += `│ 🗣️ Language: ${show.language}\n`;
-          if (show.runtime) msg += `│ ⏱️ Runtime: ${show.runtime} min\n`;
-          if (show.status) msg += `│ 📊 Status: ${show.status}\n`;
-          msg += `│ 🎭 Genres: ${genres || "N/A"}\n`;
-          if (show.rating?.average) msg += `│ ⭐ Rating: ${show.rating.average}/10\n`;
-          if (show.network?.name) msg += `│ 📡 Network: ${show.network.name}\n`;
-          msg += `└──────────────────\n\n`;
+          msg += `*Details*\n`;
+          if (show.premiered) msg += `📅 Premiered: ${show.premiered}\n`;
+          if (show.ended) msg += `🏁 Ended: ${show.ended}\n`;
+          if (show.type) msg += `📂 Type: ${show.type}\n`;
+          if (show.language) msg += `🗣️ Language: ${show.language}\n`;
+          if (show.runtime) msg += `⏱️ Runtime: ${show.runtime} min\n`;
+          if (show.status) msg += `📊 Status: ${show.status}\n`;
+          msg += `🎭 Genres: ${genres || "N/A"}\n`;
+          if (show.rating?.average) msg += `⭐ Rating: ${show.rating.average}/10\n`;
+          if (show.network?.name) msg += `📡 Network: ${show.network.name}\n`;
+          msg += `\n`;
           if (summary) msg += `📝 *Summary:*\n${summary.substring(0, 2200)}\n\n`;
           if (show.url) msg += `🔗 ${show.url}\n`;
           msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -485,9 +490,7 @@ const commands = [
         const anime = res.data?.data?.Media;
         if (!anime) return m.reply("❌ Anime not found.");
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🎌 *ANIME INFO* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `🎌 *Anime Info*\n\n`;
         msg += `🎬 *${anime.title.english || anime.title.romaji}*\n`;
         if (anime.title.romaji && anime.title.english && anime.title.romaji !== anime.title.english) {
           msg += `🇯🇵 Romaji: ${anime.title.romaji}\n`;
@@ -495,34 +498,34 @@ const commands = [
         if (anime.title.native) msg += `🈯 Native: ${anime.title.native}\n`;
         msg += `\n`;
 
-        msg += `┌─── *Scores & Stats* ───\n`;
-        if (anime.averageScore) msg += `│ ⭐ Average Score: ${anime.averageScore}/100\n`;
-        if (anime.meanScore) msg += `│ 📊 Mean Score: ${anime.meanScore}/100\n`;
-        if (anime.popularity) msg += `│ 📈 Popularity: #${anime.popularity.toLocaleString()}\n`;
-        if (anime.favourites) msg += `│ ❤️ Favourites: ${anime.favourites.toLocaleString()}\n`;
+        msg += `*Scores & Stats*\n`;
+        if (anime.averageScore) msg += `⭐ Average Score: ${anime.averageScore}/100\n`;
+        if (anime.meanScore) msg += `📊 Mean Score: ${anime.meanScore}/100\n`;
+        if (anime.popularity) msg += `📈 Popularity: #${anime.popularity.toLocaleString()}\n`;
+        if (anime.favourites) msg += `❤️ Favourites: ${anime.favourites.toLocaleString()}\n`;
         if (anime.rankings?.length) {
           anime.rankings.slice(0, 3).forEach(r => {
-            msg += `│ 🏆 Rank #${r.rank} — ${r.context}\n`;
+            msg += `🏆 Rank #${r.rank} — ${r.context}\n`;
           });
         }
-        msg += `└──────────────────\n\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Details* ───\n`;
-        msg += `│ 📺 Episodes: ${anime.episodes || "N/A"}\n`;
-        if (anime.duration) msg += `│ ⏱️ Duration: ${anime.duration} min/ep\n`;
-        msg += `│ 📊 Status: ${anime.status}\n`;
-        if (anime.format) msg += `│ 📂 Format: ${anime.format}\n`;
-        if (anime.source) msg += `│ 📖 Source: ${anime.source}\n`;
-        if (anime.season) msg += `│ 🗓️ Season: ${anime.season} ${anime.seasonYear || ""}\n`;
+        msg += `*Details*\n`;
+        msg += `📺 Episodes: ${anime.episodes || "N/A"}\n`;
+        if (anime.duration) msg += `⏱️ Duration: ${anime.duration} min/ep\n`;
+        msg += `📊 Status: ${anime.status}\n`;
+        if (anime.format) msg += `📂 Format: ${anime.format}\n`;
+        if (anime.source) msg += `📖 Source: ${anime.source}\n`;
+        if (anime.season) msg += `🗓️ Season: ${anime.season} ${anime.seasonYear || ""}\n`;
         if (anime.startDate?.year) {
-          msg += `│ 📅 Start: ${anime.startDate.day || "?"}/${anime.startDate.month || "?"}/${anime.startDate.year}\n`;
+          msg += `📅 Start: ${anime.startDate.day || "?"}/${anime.startDate.month || "?"}/${anime.startDate.year}\n`;
         }
         if (anime.endDate?.year) {
-          msg += `│ 📅 End: ${anime.endDate.day || "?"}/${anime.endDate.month || "?"}/${anime.endDate.year}\n`;
+          msg += `📅 End: ${anime.endDate.day || "?"}/${anime.endDate.month || "?"}/${anime.endDate.year}\n`;
         }
-        if (anime.countryOfOrigin) msg += `│ 🌍 Country: ${anime.countryOfOrigin}\n`;
-        if (anime.isAdult) msg += `│ 🔞 Adult: Yes\n`;
-        msg += `└──────────────────\n\n`;
+        if (anime.countryOfOrigin) msg += `🌍 Country: ${anime.countryOfOrigin}\n`;
+        if (anime.isAdult) msg += `🔞 Adult: Yes\n`;
+        msg += `\n`;
 
         if (anime.studios?.nodes?.length) {
           const studios = anime.studios.nodes.filter(s => s.isAnimationStudio).map(s => s.name);
@@ -576,9 +579,7 @@ const commands = [
         const manga = res.data?.data?.Media;
         if (!manga) return m.reply("❌ Manga not found.");
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 📖 *MANGA INFO* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `📖 *Manga Info*\n\n`;
         msg += `📚 *${manga.title.english || manga.title.romaji}*\n`;
         if (manga.title.romaji && manga.title.english && manga.title.romaji !== manga.title.english) {
           msg += `🇯🇵 Romaji: ${manga.title.romaji}\n`;
@@ -586,33 +587,33 @@ const commands = [
         if (manga.title.native) msg += `🈯 Native: ${manga.title.native}\n`;
         msg += `\n`;
 
-        msg += `┌─── *Scores & Stats* ───\n`;
-        if (manga.averageScore) msg += `│ ⭐ Average Score: ${manga.averageScore}/100\n`;
-        if (manga.meanScore) msg += `│ 📊 Mean Score: ${manga.meanScore}/100\n`;
-        if (manga.popularity) msg += `│ 📈 Popularity: #${manga.popularity.toLocaleString()}\n`;
-        if (manga.favourites) msg += `│ ❤️ Favourites: ${manga.favourites.toLocaleString()}\n`;
+        msg += `*Scores & Stats*\n`;
+        if (manga.averageScore) msg += `⭐ Average Score: ${manga.averageScore}/100\n`;
+        if (manga.meanScore) msg += `📊 Mean Score: ${manga.meanScore}/100\n`;
+        if (manga.popularity) msg += `📈 Popularity: #${manga.popularity.toLocaleString()}\n`;
+        if (manga.favourites) msg += `❤️ Favourites: ${manga.favourites.toLocaleString()}\n`;
         if (manga.rankings?.length) {
           manga.rankings.slice(0, 3).forEach(r => {
-            msg += `│ 🏆 Rank #${r.rank} — ${r.context}\n`;
+            msg += `🏆 Rank #${r.rank} — ${r.context}\n`;
           });
         }
-        msg += `└──────────────────\n\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Details* ───\n`;
-        msg += `│ 📚 Chapters: ${manga.chapters || "Ongoing"}\n`;
-        msg += `│ 📕 Volumes: ${manga.volumes || "N/A"}\n`;
-        msg += `│ 📊 Status: ${manga.status}\n`;
-        if (manga.format) msg += `│ 📂 Format: ${manga.format}\n`;
-        if (manga.source) msg += `│ 📖 Source: ${manga.source}\n`;
+        msg += `*Details*\n`;
+        msg += `📚 Chapters: ${manga.chapters || "Ongoing"}\n`;
+        msg += `📕 Volumes: ${manga.volumes || "N/A"}\n`;
+        msg += `📊 Status: ${manga.status}\n`;
+        if (manga.format) msg += `📂 Format: ${manga.format}\n`;
+        if (manga.source) msg += `📖 Source: ${manga.source}\n`;
         if (manga.startDate?.year) {
-          msg += `│ 📅 Start: ${manga.startDate.day || "?"}/${manga.startDate.month || "?"}/${manga.startDate.year}\n`;
+          msg += `📅 Start: ${manga.startDate.day || "?"}/${manga.startDate.month || "?"}/${manga.startDate.year}\n`;
         }
         if (manga.endDate?.year) {
-          msg += `│ 📅 End: ${manga.endDate.day || "?"}/${manga.endDate.month || "?"}/${manga.endDate.year}\n`;
+          msg += `📅 End: ${manga.endDate.day || "?"}/${manga.endDate.month || "?"}/${manga.endDate.year}\n`;
         }
-        if (manga.countryOfOrigin) msg += `│ 🌍 Country: ${manga.countryOfOrigin}\n`;
-        if (manga.isAdult) msg += `│ 🔞 Adult: Yes\n`;
-        msg += `└──────────────────\n\n`;
+        if (manga.countryOfOrigin) msg += `🌍 Country: ${manga.countryOfOrigin}\n`;
+        if (manga.isAdult) msg += `🔞 Adult: Yes\n`;
+        msg += `\n`;
 
         if (manga.staff?.nodes?.length) {
           msg += `✍️ *Staff:* ${manga.staff.nodes.slice(0, 5).map(s => s.name.full).join(", ")}\n`;
@@ -654,13 +655,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}wallpaper <query>`);
       m.react("🖼️");
       try {
-        let buffer = null;
-        try {
-          buffer = await fetchBuffer(`https://source.unsplash.com/random/1920x1080/?${encodeURIComponent(text)}`);
-        } catch {}
-        if (!buffer || buffer.length < 1000) {
-          buffer = await fetchBuffer(`https://image.pollinations.ai/prompt/${encodeURIComponent("beautiful wallpaper 4k " + text)}?width=1920&height=1080&nologo=true&seed=${Date.now()}`).catch(() => null);
-        }
+        const buffer = await fetchWallpaperBuffer(text);
         if (!buffer) return m.reply("❌ Could not find wallpapers.");
         await sock.sendMessage(m.chat, { image: buffer, caption: `🖼️ *Wallpaper: ${text}*\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -682,30 +677,27 @@ const commands = [
         if (!data?.current_condition?.[0]) return m.reply("❌ City not found.");
         const c = data.current_condition[0];
         const area = data.nearest_area?.[0];
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🌤️ *WEATHER* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `🌤️ *WEATHER REPORT*\n\n`;
         msg += `📍 *${area?.areaName?.[0]?.value || text}*`;
         if (area?.country?.[0]?.value) msg += `, ${area.country[0].value}`;
         msg += `\n\n`;
-        msg += `┌─── *Current* ───\n`;
-        msg += `│ 🌡️ Temp: ${c.temp_C}°C (${c.temp_F}°F)\n`;
-        msg += `│ 🤗 Feels Like: ${c.FeelsLikeC}°C (${c.FeelsLikeF}°F)\n`;
-        msg += `│ 💧 Humidity: ${c.humidity}%\n`;
-        msg += `│ 💨 Wind: ${c.windspeedKmph} km/h ${c.winddir16Point}\n`;
-        msg += `│ 🌫️ Visibility: ${c.visibility} km\n`;
-        msg += `│ ☁️ Cloud Cover: ${c.cloudcover}%\n`;
-        msg += `│ 📊 Pressure: ${c.pressure} mb\n`;
-        msg += `│ 🌧️ Precipitation: ${c.precipMM} mm\n`;
-        if (c.uvIndex) msg += `│ ☀️ UV Index: ${c.uvIndex}\n`;
-        msg += `│ 📝 ${c.weatherDesc?.[0]?.value || "N/A"}\n`;
-        msg += `└──────────────────\n\n`;
+        msg += `*Current Conditions*\n`;
+        msg += `🌡️ Temp: ${c.temp_C}°C (${c.temp_F}°F)\n`;
+        msg += `🤗 Feels Like: ${c.FeelsLikeC}°C (${c.FeelsLikeF}°F)\n`;
+        msg += `💧 Humidity: ${c.humidity}%\n`;
+        msg += `💨 Wind: ${c.windspeedKmph} km/h ${c.winddir16Point}\n`;
+        msg += `🌫️ Visibility: ${c.visibility} km\n`;
+        msg += `☁️ Cloud Cover: ${c.cloudcover}%\n`;
+        msg += `📊 Pressure: ${c.pressure} mb\n`;
+        msg += `🌧️ Precipitation: ${c.precipMM} mm\n`;
+        if (c.uvIndex) msg += `☀️ UV Index: ${c.uvIndex}\n`;
+        msg += `📝 ${c.weatherDesc?.[0]?.value || "N/A"}\n\n`;
         if (data.weather?.length) {
-          msg += `┌─── *Forecast* ───\n`;
-          data.weather.slice(0, 3).forEach(d => {
-            msg += `│ 📅 ${d.date}: ${d.mintempC}°C - ${d.maxtempC}°C\n`;
+          msg += `*3-Day Forecast*\n`;
+          data.weather.slice(0, 3).forEach((d, idx) => {
+            msg += `${idx + 1}. 📅 ${d.date} | ${d.mintempC}°C - ${d.maxtempC}°C\n`;
           });
-          msg += `└──────────────────\n\n`;
+          msg += `\n`;
         }
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
@@ -787,30 +779,28 @@ const commands = [
 
         if (!articles.length) return m.reply("❌ No news found. Try a different search term.");
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 📰 *LATEST NEWS* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `📰 *LATEST NEWS*\n\n`;
         msg += `🔎 Topic: *${query}*\n`;
         msg += `📅 ${new Date().toLocaleDateString()}\n\n`;
 
         articles.slice(0, 5).forEach((a, i) => {
-          msg += `┌─── *${i + 1}. ${a.title}* ───\n`;
+          msg += `*${i + 1}. ${a.title}*\n`;
           const sourceName = a.source?.name || a.source || "";
-          if (sourceName) msg += `│ 📰 Source: ${sourceName}\n`;
-          if (a.author && a.author !== "[Removed]") msg += `│ ✍️ Author: ${a.author}\n`;
+          if (sourceName) msg += `📰 Source: ${sourceName}\n`;
+          if (a.author && a.author !== "[Removed]") msg += `✍️ Author: ${a.author}\n`;
           if (a.publishedAt) {
             const pubDate = new Date(a.publishedAt);
-            msg += `│ 📅 Published: ${pubDate.toLocaleDateString()} ${pubDate.toLocaleTimeString()}\n`;
+            msg += `📅 Published: ${pubDate.toLocaleDateString()} ${pubDate.toLocaleTimeString()}\n`;
           }
-          if (a.category) msg += `│ 📂 Category: ${a.category}\n`;
+          if (a.category) msg += `📂 Category: ${a.category}\n`;
           if (a.description && a.description !== "[Removed]") {
-            msg += `│ 📝 ${a.description}\n`;
+            msg += `📝 ${a.description}\n`;
           }
           if (a.content && a.content !== "[Removed]" && !a.description) {
-            msg += `│ 📝 ${a.content}\n`;
+            msg += `📝 ${a.content}\n`;
           }
-          if (a.url) msg += `│ 🔗 ${a.url}\n`;
-          msg += `└──────────────────\n\n`;
+          if (a.url) msg += `🔗 ${a.url}\n`;
+          msg += `\n`;
         });
 
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
@@ -835,58 +825,56 @@ const commands = [
         const md = data.market_data;
         const price = md?.current_price;
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 💰 *CRYPTOCURRENCY* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `💰 *CRYPTOCURRENCY*\n\n`;
         msg += `🪙 *${data.name}* (${data.symbol?.toUpperCase()})\n`;
         if (data.market_cap_rank) msg += `🏆 Market Cap Rank: #${data.market_cap_rank}\n`;
         msg += `\n`;
 
-        msg += `┌─── *Current Price* ───\n`;
-        msg += `│ 💵 USD: $${price?.usd?.toLocaleString() || "N/A"}\n`;
-        msg += `│ 💶 EUR: €${price?.eur?.toLocaleString() || "N/A"}\n`;
-        msg += `│ 💷 GBP: £${price?.gbp?.toLocaleString() || "N/A"}\n`;
-        if (price?.btc) msg += `│ ₿ BTC: ${price.btc}\n`;
-        msg += `└──────────────────\n\n`;
+        msg += `*Current Price*\n`;
+        msg += `💵 USD: $${price?.usd?.toLocaleString() || "N/A"}\n`;
+        msg += `💶 EUR: €${price?.eur?.toLocaleString() || "N/A"}\n`;
+        msg += `💷 GBP: £${price?.gbp?.toLocaleString() || "N/A"}\n`;
+        if (price?.btc) msg += `₿ BTC: ${price.btc}\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Price Changes* ───\n`;
+        msg += `*Price Changes*\n`;
         if (md?.price_change_percentage_1h_in_currency?.usd != null) {
-          msg += `│ 📊 1h: ${md.price_change_percentage_1h_in_currency.usd.toFixed(2)}%\n`;
+          msg += `📊 1h: ${md.price_change_percentage_1h_in_currency.usd.toFixed(2)}%\n`;
         }
         if (md?.price_change_percentage_24h != null) {
-          msg += `│ 📈 24h: ${md.price_change_percentage_24h.toFixed(2)}%\n`;
+          msg += `📈 24h: ${md.price_change_percentage_24h.toFixed(2)}%\n`;
         }
         if (md?.price_change_percentage_7d != null) {
-          msg += `│ 📉 7d: ${md.price_change_percentage_7d.toFixed(2)}%\n`;
+          msg += `📉 7d: ${md.price_change_percentage_7d.toFixed(2)}%\n`;
         }
         if (md?.price_change_percentage_30d != null) {
-          msg += `│ 📊 30d: ${md.price_change_percentage_30d.toFixed(2)}%\n`;
+          msg += `📊 30d: ${md.price_change_percentage_30d.toFixed(2)}%\n`;
         }
         if (md?.price_change_percentage_1y != null) {
-          msg += `│ 📊 1y: ${md.price_change_percentage_1y.toFixed(2)}%\n`;
+          msg += `📊 1y: ${md.price_change_percentage_1y.toFixed(2)}%\n`;
         }
-        msg += `└──────────────────\n\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Market Data* ───\n`;
-        msg += `│ 💎 Market Cap: $${md?.market_cap?.usd?.toLocaleString() || "N/A"}\n`;
-        msg += `│ 📊 24h Volume: $${md?.total_volume?.usd?.toLocaleString() || "N/A"}\n`;
-        if (md?.circulating_supply) msg += `│ 🔄 Circulating: ${Math.round(md.circulating_supply).toLocaleString()}\n`;
-        if (md?.total_supply) msg += `│ 📦 Total Supply: ${Math.round(md.total_supply).toLocaleString()}\n`;
-        if (md?.max_supply) msg += `│ 🔒 Max Supply: ${Math.round(md.max_supply).toLocaleString()}\n`;
-        msg += `└──────────────────\n\n`;
+        msg += `*Market Data*\n`;
+        msg += `💎 Market Cap: $${md?.market_cap?.usd?.toLocaleString() || "N/A"}\n`;
+        msg += `📊 24h Volume: $${md?.total_volume?.usd?.toLocaleString() || "N/A"}\n`;
+        if (md?.circulating_supply) msg += `🔄 Circulating: ${Math.round(md.circulating_supply).toLocaleString()}\n`;
+        if (md?.total_supply) msg += `📦 Total Supply: ${Math.round(md.total_supply).toLocaleString()}\n`;
+        if (md?.max_supply) msg += `🔒 Max Supply: ${Math.round(md.max_supply).toLocaleString()}\n`;
+        msg += `\n`;
 
         if (md?.ath?.usd) {
-          msg += `┌─── *All-Time Records* ───\n`;
-          msg += `│ 🚀 ATH: $${md.ath.usd.toLocaleString()}`;
+          msg += `*All-Time Records*\n`;
+          msg += `🚀 ATH: $${md.ath.usd.toLocaleString()}`;
           if (md.ath_date?.usd) msg += ` (${new Date(md.ath_date.usd).toLocaleDateString()})`;
           msg += `\n`;
-          if (md.ath_change_percentage?.usd != null) msg += `│    Change from ATH: ${md.ath_change_percentage.usd.toFixed(2)}%\n`;
+          if (md.ath_change_percentage?.usd != null) msg += `Change from ATH: ${md.ath_change_percentage.usd.toFixed(2)}%\n`;
           if (md?.atl?.usd != null) {
-            msg += `│ 📉 ATL: $${md.atl.usd.toLocaleString()}`;
+            msg += `📉 ATL: $${md.atl.usd.toLocaleString()}`;
             if (md.atl_date?.usd) msg += ` (${new Date(md.atl_date.usd).toLocaleDateString()})`;
             msg += `\n`;
           }
-          msg += `└──────────────────\n\n`;
+          msg += `\n`;
         }
 
         if (data.description?.en) {
@@ -926,38 +914,36 @@ const commands = [
         const data = await fetchJson(`https://ipwhois.app/json/${text}`);
         if (data?.success === false) return m.reply(`❌ ${data.message || "Invalid IP address"}`);
 
-        let msg = `╔══════════════════════════╗\n`;
-        msg += `║ 🌐 *IP LOOKUP* ║\n`;
-        msg += `╚══════════════════════════╝\n\n`;
+        let msg = `🌐 *IP LOOKUP*\n\n`;
         msg += `📡 *${data.ip}*\n\n`;
 
-        msg += `┌─── *Location* ───\n`;
-        if (data.country) msg += `│ 🌍 Country: ${data.country}`;
+        msg += `*Location*\n`;
+        if (data.country) msg += `🌍 Country: ${data.country}`;
         if (data.country_code) msg += ` (${data.country_code})`;
         if (data.country_flag) msg += ` ${data.country_flag}`;
         msg += `\n`;
-        if (data.region) msg += `│ 📍 Region: ${data.region}\n`;
-        if (data.city) msg += `│ 🏙️ City: ${data.city}\n`;
-        if (data.latitude && data.longitude) msg += `│ 🗺️ Coordinates: ${data.latitude}, ${data.longitude}\n`;
-        if (data.postal) msg += `│ 📮 Postal Code: ${data.postal}\n`;
-        if (data.continent) msg += `│ 🌍 Continent: ${data.continent}\n`;
-        msg += `└──────────────────\n\n`;
+        if (data.region) msg += `📍 Region: ${data.region}\n`;
+        if (data.city) msg += `🏙️ City: ${data.city}\n`;
+        if (data.latitude && data.longitude) msg += `🗺️ Coordinates: ${data.latitude}, ${data.longitude}\n`;
+        if (data.postal) msg += `📮 Postal Code: ${data.postal}\n`;
+        if (data.continent) msg += `🌍 Continent: ${data.continent}\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Network* ───\n`;
-        if (data.isp) msg += `│ 🏢 ISP: ${data.isp}\n`;
-        if (data.org) msg += `│ 🔧 Organization: ${data.org}\n`;
-        if (data.asn) msg += `│ 📡 ASN: ${data.asn}\n`;
-        if (data.type) msg += `│ 📂 Type: ${data.type}\n`;
-        msg += `└──────────────────\n\n`;
+        msg += `*Network*\n`;
+        if (data.isp) msg += `🏢 ISP: ${data.isp}\n`;
+        if (data.org) msg += `🔧 Organization: ${data.org}\n`;
+        if (data.asn) msg += `📡 ASN: ${data.asn}\n`;
+        if (data.type) msg += `📂 Type: ${data.type}\n`;
+        msg += `\n`;
 
-        msg += `┌─── *Timezone* ───\n`;
-        if (data.timezone) msg += `│ 🕐 Timezone: ${data.timezone}\n`;
-        if (data.timezone_name) msg += `│ 📛 Name: ${data.timezone_name}\n`;
-        if (data.timezone_gmt) msg += `│ 🌐 GMT Offset: ${data.timezone_gmt}\n`;
-        if (data.currency) msg += `│ 💰 Currency: ${data.currency}\n`;
-        if (data.currency_code) msg += `│ 💱 Currency Code: ${data.currency_code}\n`;
-        if (data.country_phone) msg += `│ ☎️ Phone Code: +${data.country_phone}\n`;
-        msg += `└──────────────────\n\n`;
+        msg += `*Timezone & Locale*\n`;
+        if (data.timezone) msg += `🕐 Timezone: ${data.timezone}\n`;
+        if (data.timezone_name) msg += `📛 Name: ${data.timezone_name}\n`;
+        if (data.timezone_gmt) msg += `🌐 GMT Offset: ${data.timezone_gmt}\n`;
+        if (data.currency) msg += `💰 Currency: ${data.currency}\n`;
+        if (data.currency_code) msg += `💱 Currency Code: ${data.currency_code}\n`;
+        if (data.country_phone) msg += `☎️ Phone Code: +${data.country_phone}\n`;
+        msg += `\n`;
 
         const flags = [];
         if (data.security) {

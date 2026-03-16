@@ -178,12 +178,13 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         updateGroupSetting(m.chat, "welcome", 1);
-        await m.reply("✅ Welcome messages enabled!");
+        await m.reply("✅ Welcome messages enabled. New members will receive a greeting.");
       } else if (text === "off") {
         updateGroupSetting(m.chat, "welcome", 0);
-        await m.reply("✅ Welcome messages disabled!");
+        await m.reply("✅ Welcome messages disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}welcome on/off`);
+        const current = getGroupSettings(m.chat)?.welcome ? "on" : "off";
+        await m.reply(`Usage: ${config.PREFIX}welcome on/off\nCurrent: ${current}`);
       }
     },
   },
@@ -210,12 +211,13 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         updateGroupSetting(m.chat, "goodbye", 1);
-        await m.reply("✅ Goodbye messages enabled!");
+        await m.reply("✅ Goodbye messages enabled. Departing members will get a farewell message.");
       } else if (text === "off") {
         updateGroupSetting(m.chat, "goodbye", 0);
-        await m.reply("✅ Goodbye messages disabled!");
+        await m.reply("✅ Goodbye messages disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}goodbye on/off`);
+        const current = getGroupSettings(m.chat)?.goodbye ? "on" : "off";
+        await m.reply(`Usage: ${config.PREFIX}goodbye on/off\nCurrent: ${current}`);
       }
     },
   },
@@ -252,7 +254,10 @@ const commands = [
         updateGroupSetting(m.chat, "antilink", 0);
         await m.reply("✅ Anti-link disabled!");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}antilink on [warn/delete/kick]\n${config.PREFIX}antilink off`);
+        const settings = getGroupSettings(m.chat);
+        const enabled = settings?.antilink ? "on" : "off";
+        const action = settings?.antilink_action || "warn";
+        await m.reply(`Usage: ${config.PREFIX}antilink on [warn/delete/kick]\n${config.PREFIX}antilink off\nCurrent: ${enabled} (${action})`);
       }
     },
   },

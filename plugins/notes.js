@@ -14,10 +14,16 @@ const commands = [
       }
       const name = args[0].toLowerCase();
       const content = args.slice(1).join(" ");
+      if (!/^[a-z0-9_-]{2,40}$/i.test(name)) {
+        return m.reply("❌ Note name must be 2-40 characters and use letters, numbers, _ or - only.");
+      }
+      if (content.length < 2) {
+        return m.reply("❌ Note content is too short.");
+      }
       m.react("⏳");
       try {
         addNote(m.chat, name, content, m.sender);
-        await m.reply(`✅ Note *${name}* saved successfully!`);
+        await m.reply(`✅ Note *${name}* saved.\n📝 Length: ${content.length} characters`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -40,9 +46,14 @@ const commands = [
         const note = getNote(m.chat, name);
         if (!note) {
           m.react("❌");
-          return m.reply("❌ Note not found.");
+          return m.reply(`❌ Note *${name}* not found.\nUse ${config.PREFIX}notes to list saved notes.`);
         }
-        await m.reply(`📝 *${name}*\n\n${note.content}`);
+        const author = note.created_by ? `@${note.created_by.split("@")[0]}` : "Unknown";
+        const created = note.created_at ? new Date(note.created_at).toLocaleString() : "Unknown";
+        await sock.sendMessage(m.chat, {
+          text: `📝 *${name}*\n\n${note.content}\n\n👤 Saved by: ${author}\n🕒 Saved at: ${created}`,
+          mentions: note.created_by ? [note.created_by] : [],
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -63,8 +74,13 @@ const commands = [
       const name = args[0].toLowerCase();
       m.react("⏳");
       try {
+        const existed = getNote(m.chat, name);
+        if (!existed) {
+          m.react("❌");
+          return m.reply(`❌ Note *${name}* does not exist.`);
+        }
         deleteNote(m.chat, name);
-        await m.reply(`✅ Note *${name}* deleted!`);
+        await m.reply(`✅ Note *${name}* deleted.`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -86,9 +102,15 @@ const commands = [
           return m.reply("📭 No notes saved in this group.");
         }
         let msg = `📝 *Saved Notes (${notes.length})*\n\n`;
-        msg += notes.map((n, i) => `${i + 1}. *${n.name}*`).join("\n");
+        msg += notes.map((n, i) => {
+          const owner = n.created_by ? `@${n.created_by.split("@")[0]}` : "unknown";
+          return `${i + 1}. *${n.name}* — ${owner}`;
+        }).join("\n");
         msg += `\n\nUse ${config.PREFIX}note <name> to view a note.`;
-        await m.reply(msg);
+        await sock.sendMessage(m.chat, {
+          text: msg,
+          mentions: notes.filter((n) => !!n.created_by).map((n) => n.created_by),
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");

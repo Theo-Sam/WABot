@@ -45,6 +45,7 @@ const commands = [
       try {
         const chats = await sock.groupFetchAllParticipating();
         const groups = Object.keys(chats);
+        if (!groups.length) return m.reply("ℹ️ No groups found for broadcast.");
         let sent = 0;
         for (const jid of groups) {
           try {
@@ -52,7 +53,7 @@ const commands = [
             sent++;
           } catch {}
         }
-        await m.reply(`✅ Broadcast sent to ${sent}/${groups.length} groups.`);
+        await m.reply(`✅ Broadcast complete.\nDelivered: ${sent}/${groups.length} groups.`);
       } catch (err) {
         await m.reply("❌ Broadcast failed.");
       }
@@ -126,19 +127,17 @@ const commands = [
     handler: async (sock, m) => {
       const sys = getSystemInfo();
       const mem = process.memoryUsage();
-      const text = `📊 *Bot Status*
-
-⏱️ Uptime: ${runtime()}
-📡 Mode: ${config.MODE}
-🔑 Prefix: ${config.PREFIX}
-
-💻 *System*
-▸ RAM Used: ${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB
-▸ Total RAM: ${sys.totalMem}
-▸ Free RAM: ${sys.freeMem}
-▸ CPUs: ${sys.cpus}
-▸ Platform: ${sys.platform}
-▸ Node: ${sys.nodeVersion}`;
+      const text = `📊 *Bot Status*\n\n` +
+        `⏱️ Uptime: ${runtime()}\n` +
+        `📡 Mode: ${config.MODE}\n` +
+        `🔑 Prefix: ${config.PREFIX}\n\n` +
+        `💻 *System*\n` +
+        `RAM Used: ${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB\n` +
+        `Total RAM: ${sys.totalMem}\n` +
+        `Free RAM: ${sys.freeMem}\n` +
+        `CPUs: ${sys.cpus}\n` +
+        `Platform: ${sys.platform}\n` +
+        `Node: ${sys.nodeVersion}`;
       await m.reply(text);
     },
   },
@@ -204,6 +203,7 @@ const commands = [
       banned.forEach((b, i) => {
         msg += `${i + 1}. ${b.jid.split("@")[0]}${b.reason ? ` — ${b.reason}` : ""}\n`;
       });
+      msg += `\nUse ${config.PREFIX}unban @user to remove a ban.`;
       await m.reply(msg);
     },
   },

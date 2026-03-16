@@ -3,6 +3,14 @@ const { tempFile } = require("../lib/helpers");
 const fs = require("fs");
 const path = require("path");
 
+function cleanupFiles(...files) {
+  for (const file of files) {
+    try {
+      if (file && fs.existsSync(file)) fs.unlinkSync(file);
+    } catch {}
+  }
+}
+
 const commands = [
   {
     name: ["toaudio", "mp3", "tomp3"],
@@ -23,12 +31,11 @@ const commands = [
         });
         const audioBuffer = fs.readFileSync(output);
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
-        fs.unlinkSync(input);
-        fs.unlinkSync(output);
+        cleanupFiles(input, output);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to convert to audio.");
+        await m.reply("❌ Failed to convert to audio. Ensure ffmpeg is installed and media is valid.");
       }
     },
   },
@@ -58,12 +65,11 @@ const commands = [
         });
         const videoBuffer = fs.readFileSync(output);
         await sock.sendMessage(m.chat, { video: videoBuffer }, { quoted: { key: m.key, message: m.message } });
-        fs.unlinkSync(input);
-        fs.unlinkSync(output);
+        cleanupFiles(input, output);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to convert to video.");
+        await m.reply("❌ Failed to convert to video. Ensure ffmpeg is installed and media is valid.");
       }
     },
   },
@@ -86,12 +92,11 @@ const commands = [
         });
         const pttBuffer = fs.readFileSync(output);
         await sock.sendMessage(m.chat, { audio: pttBuffer, mimetype: "audio/ogg; codecs=opus", ptt: true }, { quoted: { key: m.key, message: m.message } });
-        fs.unlinkSync(input);
-        fs.unlinkSync(output);
+        cleanupFiles(input, output);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to convert to voice note.");
+        await m.reply("❌ Failed to convert to voice note. Ensure ffmpeg is installed and media is valid.");
       }
     },
   },
@@ -106,6 +111,7 @@ const commands = [
       try {
         const buffer = await media.download();
         await sock.sendMessage(m.chat, { video: buffer, gifPlayback: true }, { quoted: { key: m.key, message: m.message } });
+        await m.reply("✅ Converted and sent as GIF playback.");
         m.react("✅");
       } catch {
         m.react("❌");
@@ -148,7 +154,7 @@ const commands = [
       if (!text || !text.includes("x")) return m.reply(`Usage: ${config.PREFIX}resize <width>x<height>\nExample: ${config.PREFIX}resize 500x500`);
       m.react("⏳");
       try {
-        const [w, h] = text.split("x").map(Number);
+        const [w, h] = text.toLowerCase().split("x").map(Number);
         if (!w || !h || w > 4096 || h > 4096) return m.reply("❌ Invalid size. Max 4096x4096.");
         const buffer = await media.download();
         const sharp = require("sharp");
@@ -259,6 +265,7 @@ const commands = [
       m.react("⏳");
       try {
         const degrees = parseInt(text) || 90;
+        if (Math.abs(degrees) > 3600) return m.reply("❌ Invalid degrees. Keep value between -3600 and 3600.");
         const buffer = await media.download();
         const sharp = require("sharp");
         const rotated = await sharp(buffer).rotate(degrees).jpeg({ quality: 90 }).toBuffer();

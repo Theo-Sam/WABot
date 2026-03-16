@@ -11,12 +11,13 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         updateGroupSetting(m.chat, "antiviewonce", 1);
-        await m.reply("✅ Anti-ViewOnce enabled! View once messages will be reposted.");
+        await m.reply("✅ Anti-ViewOnce enabled. Captured view-once content will be saved and sent to owner DM.");
       } else if (text === "off") {
         updateGroupSetting(m.chat, "antiviewonce", 0);
-        await m.reply("✅ Anti-ViewOnce disabled!");
+        await m.reply("✅ Anti-ViewOnce disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}antiviewonce on/off`);
+        const current = getGroupSettings(m.chat)?.antiviewonce ? "on" : "off";
+        await m.reply(`Usage: ${config.PREFIX}antiviewonce on/off\nCurrent: ${current}`);
       }
     },
   },
@@ -29,12 +30,13 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         updateGroupSetting(m.chat, "antidelete", 1);
-        await m.reply("✅ Anti-Delete enabled! Deleted messages will be reposted.");
+        await m.reply("✅ Anti-Delete enabled. Deleted content will be saved and sent to owner DM.");
       } else if (text === "off") {
         updateGroupSetting(m.chat, "antidelete", 0);
-        await m.reply("✅ Anti-Delete disabled!");
+        await m.reply("✅ Anti-Delete disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}antidelete on/off`);
+        const current = getGroupSettings(m.chat)?.antidelete ? "on" : "off";
+        await m.reply(`Usage: ${config.PREFIX}antidelete on/off\nCurrent: ${current}`);
       }
     },
   },
@@ -47,12 +49,13 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         updateGroupSetting(m.chat, "antispam", 1);
-        await m.reply("✅ Anti-Spam enabled!");
+        await m.reply("✅ Anti-spam enabled. Repeated/flood messages will be controlled.");
       } else if (text === "off") {
         updateGroupSetting(m.chat, "antispam", 0);
-        await m.reply("✅ Anti-Spam disabled!");
+        await m.reply("✅ Anti-spam disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}antispam on/off`);
+        const current = getGroupSettings(m.chat)?.antispam ? "on" : "off";
+        await m.reply(`Usage: ${config.PREFIX}antispam on/off\nCurrent: ${current}`);
       }
     },
   },
@@ -64,10 +67,10 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         config.AUTO_READ = "on";
-        await m.reply("✅ Auto-read enabled!");
+        await m.reply("✅ Auto-read enabled. Incoming chats will be marked as read automatically.");
       } else if (text === "off") {
         config.AUTO_READ = "off";
-        await m.reply("✅ Auto-read disabled!");
+        await m.reply("✅ Auto-read disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}autoread on/off\nCurrent: ${config.AUTO_READ}`);
       }
@@ -81,10 +84,10 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         config.AUTO_STATUS_VIEW = "on";
-        await m.reply("✅ Auto-status view enabled!");
+        await m.reply("✅ Auto-status view enabled. New statuses will be marked as seen.");
       } else if (text === "off") {
         config.AUTO_STATUS_VIEW = "off";
-        await m.reply("✅ Auto-status view disabled!");
+        await m.reply("✅ Auto-status view disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}autostatus on/off\nCurrent: ${config.AUTO_STATUS_VIEW}`);
       }
@@ -101,7 +104,7 @@ const commands = [
         await m.reply("✅ Anti-call enabled! All calls will be rejected.");
       } else if (text === "off") {
         config.ANTI_CALL = "off";
-        await m.reply("✅ Anti-call disabled!");
+        await m.reply("✅ Anti-call disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}anticall on/off\nCurrent: ${config.ANTI_CALL}`);
       }
@@ -115,10 +118,10 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         config.AUTO_BIO = "on";
-        await m.reply("✅ Auto-bio enabled!");
+        await m.reply("✅ Auto-bio enabled. Bio will refresh based on your configured template.");
       } else if (text === "off") {
         config.AUTO_BIO = "off";
-        await m.reply("✅ Auto-bio disabled!");
+        await m.reply("✅ Auto-bio disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}autobio on/off\nCurrent: ${config.AUTO_BIO}`);
       }
@@ -161,7 +164,7 @@ const commands = [
         return m.reply(`Usage: ${config.PREFIX}disappear off/24h/7d/90d`);
       }
       await sock.sendMessage(m.chat, { disappearingMessagesInChat: durations[text] || false });
-      await m.reply(`✅ Disappearing messages ${text === "off" ? "disabled" : `set to ${text}`}!`);
+      await m.reply(`✅ Disappearing messages ${text === "off" ? "disabled" : `set to ${text}`}.`);
     },
   },
   {
@@ -271,7 +274,7 @@ const commands = [
     admin: true,
     handler: async (sock, m) => {
       const code = await sock.groupInviteCode(m.chat);
-      await m.reply(`🔗 *Group Invite Link*\n\nhttps://chat.whatsapp.com/${code}`);
+      await m.reply(`🔗 *Group Invite Link*\n\nhttps://chat.whatsapp.com/${code}\n\n_Only share this with trusted members._`);
     },
   },
   {

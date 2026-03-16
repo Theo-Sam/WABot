@@ -1,5 +1,12 @@
 const config = require("../config");
-const { fetchBuffer, fetchJson, isUrl, getSelfJid } = require("../lib/helpers");
+const { fetchBuffer, fetchJson, isUrl, getSelfJid, pickNonRepeating } = require("../lib/helpers");
+
+const imageSearchCaptions = [
+  "🔍 *Image Search Result*",
+  "🖼️ *Found This For You*",
+  "✨ *Visual Match*",
+  "📸 *Top Image Pick*",
+];
 
 const commands = [
   {
@@ -23,9 +30,10 @@ const commands = [
         }
 
         const buffer = await fetchBuffer(imageUrl);
+        const heading = pickNonRepeating(imageSearchCaptions, `${m.chat}:img-caption`, { maxHistory: 2 });
         await sock.sendMessage(m.chat, {
           image: buffer,
-          caption: `🔍 *Image Search*\nQuery: ${text}\n\n_Powered by Desam Tech_`,
+          caption: `${heading}\nQuery: ${text}\n\n_Powered by Desam Tech_`,
         }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {

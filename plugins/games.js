@@ -1,4 +1,5 @@
 const config = require("../config");
+const { pickNonRepeating } = require("../lib/helpers");
 
 const tttGames = new Map();
 
@@ -44,6 +45,14 @@ const truthQuestions = [
   "What's the most embarrassing thing in your search history?", "What's a secret you kept from your parents?",
   "If you could swap lives with someone for a day, who would it be?",
   "What's the most trouble you've gotten into?", "What's your weirdest habit?",
+  "What's one thing you pretend to like but actually don't?",
+  "Which app do you waste the most time on?",
+  "What's your most regrettable impulse buy?",
+  "What rumor about you is actually true?",
+  "What's one goal you keep postponing?",
+  "What's the most awkward DM you've ever sent?",
+  "What's your most irrational fear?",
+  "What's one thing you'd never post publicly?",
 ];
 
 const dareActions = [
@@ -57,6 +66,14 @@ const dareActions = [
   "Set your status to something embarrassing for 30 minutes!", "Send the 5th photo in your gallery!",
   "Type a message with your eyes closed!", "Rate everyone in this group out of 10!",
   "Share the last YouTube video you watched!", "Do your best impression of a celebrity!",
+  "Use only voice notes for your next 3 messages!",
+  "Send a one-line rap about your day!",
+  "Let the group choose your next status caption!",
+  "Describe your mood using only 3 emojis!",
+  "Say something nice about each person who replies next!",
+  "Send a selfie in black-and-white mode!",
+  "Write a mini poem in 20 seconds!",
+  "Post your current battery percentage in chat!",
 ];
 
 const wouldYouRatherOptions = [
@@ -75,6 +92,33 @@ const wouldYouRatherOptions = [
   ["speak all languages", "play all instruments"],
   ["live forever", "live a short but perfect life"],
   ["be able to read minds", "be able to see the future"],
+  ["lose all your old memories", "never make new memories"],
+  ["work your dream job for low pay", "work a boring job for high pay"],
+  ["have free travel forever", "have free food forever"],
+  ["be respected by everyone", "be loved by everyone"],
+  ["always know when someone is lying", "always make people trust you"],
+  ["give up music", "give up movies"],
+];
+
+const riddles = [
+  { q: "What has keys but no locks?", a: "A piano" },
+  { q: "What has a head and a tail but no body?", a: "A coin" },
+  { q: "What gets wetter the more it dries?", a: "A towel" },
+  { q: "What can you break without touching it?", a: "A promise" },
+  { q: "What goes up but never comes down?", a: "Your age" },
+  { q: "What has many teeth but can't bite?", a: "A comb" },
+  { q: "What can travel around the world while staying in a corner?", a: "A stamp" },
+  { q: "What has one eye but can't see?", a: "A needle" },
+  { q: "What has hands but can't clap?", a: "A clock" },
+  { q: "What can you hold without touching it?", a: "A conversation" },
+  { q: "What is full of holes but still holds water?", a: "A sponge" },
+  { q: "What runs but never walks?", a: "Water" },
+  { q: "What is always coming but never arrives?", a: "Tomorrow" },
+  { q: "What has a neck but no head?", a: "A bottle" },
+  { q: "What can be cracked, made, told, and played?", a: "A joke" },
+  { q: "The more you take, the more you leave behind. What am I?", a: "Footsteps" },
+  { q: "What has cities, but no houses; forests, but no trees; and water, but no fish?", a: "A map" },
+  { q: "What can fill a room but takes up no space?", a: "Light" },
 ];
 
 const commands = [
@@ -140,8 +184,8 @@ const commands = [
     category: "fun",
     desc: "Get a truth question",
     handler: async (sock, m) => {
-      const q = truthQuestions[Math.floor(Math.random() * truthQuestions.length)];
-      await m.reply(`🤔 *Truth*\n\n${q}`);
+      const q = pickNonRepeating(truthQuestions, `${m.chat}:truth`, { maxHistory: 8 });
+      await m.reply(`🤔 *Truth Challenge*\n\n${q}\n\n_Reply honestly or type ${config.PREFIX}dare for a challenge._`);
     },
   },
   {
@@ -149,8 +193,8 @@ const commands = [
     category: "fun",
     desc: "Get a dare challenge",
     handler: async (sock, m) => {
-      const d = dareActions[Math.floor(Math.random() * dareActions.length)];
-      await m.reply(`😈 *Dare*\n\n${d}`);
+      const d = pickNonRepeating(dareActions, `${m.chat}:dare`, { maxHistory: 8 });
+      await m.reply(`😈 *Dare Challenge*\n\n${d}\n\n_Type ${config.PREFIX}truth for a question instead._`);
     },
   },
   {
@@ -158,12 +202,13 @@ const commands = [
     category: "fun",
     desc: "Random truth or dare",
     handler: async (sock, m) => {
-      if (Math.random() < 0.5) {
-        const q = truthQuestions[Math.floor(Math.random() * truthQuestions.length)];
-        await m.reply(`🤔 *Truth*\n\n${q}`);
+      const mode = pickNonRepeating(["truth", "dare"], `${m.chat}:tod-mode`, { maxHistory: 1 });
+      if (mode === "truth") {
+        const q = pickNonRepeating(truthQuestions, `${m.chat}:truth`, { maxHistory: 8 });
+        await m.reply(`🤔 *Truth Challenge*\n\n${q}`);
       } else {
-        const d = dareActions[Math.floor(Math.random() * dareActions.length)];
-        await m.reply(`😈 *Dare*\n\n${d}`);
+        const d = pickNonRepeating(dareActions, `${m.chat}:dare`, { maxHistory: 8 });
+        await m.reply(`😈 *Dare Challenge*\n\n${d}`);
       }
     },
   },
@@ -172,8 +217,8 @@ const commands = [
     category: "fun",
     desc: "Would you rather",
     handler: async (sock, m) => {
-      const opt = wouldYouRatherOptions[Math.floor(Math.random() * wouldYouRatherOptions.length)];
-      await m.reply(`🤔 *Would You Rather*\n\nA) ${opt[0]}\n\nor\n\nB) ${opt[1]}`);
+      const opt = pickNonRepeating(wouldYouRatherOptions, `${m.chat}:wyr`, { maxHistory: 8 });
+      await m.reply(`🤔 *Would You Rather*\n\nA) ${opt[0]}\n\nB) ${opt[1]}\n\n_Vote with A or B in chat._`);
     },
   },
   {
@@ -212,24 +257,7 @@ const commands = [
     category: "fun",
     desc: "Get a riddle",
     handler: async (sock, m) => {
-      const riddles = [
-        { q: "What has keys but no locks?", a: "A piano" },
-        { q: "What has a head and a tail but no body?", a: "A coin" },
-        { q: "What gets wetter the more it dries?", a: "A towel" },
-        { q: "What can you break without touching it?", a: "A promise" },
-        { q: "What goes up but never comes down?", a: "Your age" },
-        { q: "What has many teeth but can't bite?", a: "A comb" },
-        { q: "What can travel around the world while staying in a corner?", a: "A stamp" },
-        { q: "What has one eye but can't see?", a: "A needle" },
-        { q: "What has hands but can't clap?", a: "A clock" },
-        { q: "What can you hold without touching it?", a: "A conversation" },
-        { q: "What is full of holes but still holds water?", a: "A sponge" },
-        { q: "What runs but never walks?", a: "Water" },
-        { q: "What is always coming but never arrives?", a: "Tomorrow" },
-        { q: "What has a neck but no head?", a: "A bottle" },
-        { q: "What can be cracked, made, told, and played?", a: "A joke" },
-      ];
-      const r = riddles[Math.floor(Math.random() * riddles.length)];
+      const r = pickNonRepeating(riddles, `${m.chat}:riddle`, { maxHistory: 8 });
       await m.reply(`🧩 *Riddle*\n\n${r.q}\n\n_Answer will be revealed in 15 seconds..._`);
       setTimeout(async () => {
         await sock.sendMessage(m.chat, { text: `✅ Answer: *${r.a}*` });
@@ -277,7 +305,7 @@ const commands = [
       if (!text || !text.includes(",")) return m.reply(`Usage: ${config.PREFIX}choose option1, option2, option3`);
       const options = text.split(",").map((o) => o.trim()).filter(Boolean);
       if (options.length < 2) return m.reply("Provide at least 2 options separated by commas.");
-      const picked = options[Math.floor(Math.random() * options.length)];
+      const picked = pickNonRepeating(options, `${m.chat}:pickone:${options.join("|").toLowerCase()}`, { maxHistory: Math.min(3, options.length - 1) });
       await m.reply(`🎲 *Random Pick*\n\nOptions: ${options.join(", ")}\n\n🎯 I choose: *${picked}*`);
     },
   },

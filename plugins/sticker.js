@@ -83,7 +83,7 @@ const commands = [
       const media = m.isImage || m.isVideo ? m : m.quoted && (m.quoted.isImage || m.quoted.isVideo) ? m.quoted : null;
 
       if (!media) {
-        return m.reply(`Send or reply to an image/video with ${config.PREFIX}sticker`);
+        return m.reply(`Send or reply to an image/video with ${config.PREFIX}sticker\nOptional: ${config.PREFIX}sticker pack|author`);
       }
 
       m.react("⏳");
@@ -93,6 +93,9 @@ const commands = [
         const [pack, author] = (text || "").split("|").map((s) => s?.trim());
         const stickerBuf = await createSticker(buffer, { pack, author });
         await sock.sendMessage(m.chat, { sticker: stickerBuf }, { quoted: { key: m.key, message: m.message } });
+        if (pack || author) {
+          await m.reply(`✅ Sticker created${pack ? ` | Pack: ${pack}` : ""}${author ? ` | Author: ${author}` : ""}.`);
+        }
         m.react("✅");
       } catch (err) {
         console.error("[DESAM] Sticker error:", err);
@@ -117,6 +120,7 @@ const commands = [
         const buffer = await media.download();
         const pngBuf = await sharp(buffer).png().toBuffer();
         await sock.sendMessage(m.chat, { image: pngBuf }, { quoted: { key: m.key, message: m.message } });
+        await m.reply("✅ Sticker converted to image.");
         m.react("✅");
       } catch (err) {
         console.error("[DESAM] toimg error:", err);
@@ -138,9 +142,10 @@ const commands = [
       m.react("⏳");
       try {
         const buffer = await media.download();
-        const [pack, author] = (text || "Desam Tech|Desam Bot").split("|").map((s) => s?.trim());
+        const [pack, author] = (text || `${config.BOT_NAME}|Desam Tech`).split("|").map((s) => s?.trim());
         const stickerBuf = await createSticker(buffer, { pack, author });
         await sock.sendMessage(m.chat, { sticker: stickerBuf }, { quoted: { key: m.key, message: m.message } });
+        await m.reply(`✅ Sticker metadata updated | Pack: ${pack || config.BOT_NAME} | Author: ${author || "Desam Tech"}`);
         m.react("✅");
       } catch (err) {
         m.react("❌");

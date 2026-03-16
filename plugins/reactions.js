@@ -10,6 +10,7 @@ const commands = [
       if (!m.quoted) return m.reply(`Reply to a message with ${config.PREFIX}react <emoji>`);
       if (!text) return m.reply("Provide an emoji to react with.");
       await sock.sendMessage(m.chat, { react: { text: text.trim(), key: m.quoted.key } });
+      await m.reply("✅ Reaction sent.");
     },
   },
   {
@@ -32,7 +33,7 @@ const commands = [
       if (!m.quoted) return m.reply("Reply to a message to copy its text.");
       const text = m.quoted.body || "";
       if (!text) return m.reply("No text found in that message.");
-      await m.reply(text);
+      await m.reply(`📋 *Copied Text*\n\n${text}`);
     },
   },
   {
@@ -43,6 +44,7 @@ const commands = [
       if (!m.quoted) return m.reply("Reply to a bot message to delete it.");
       if (!m.quoted.key.fromMe) return m.reply("I can only delete my own messages.");
       await sock.sendMessage(m.chat, { delete: m.quoted.key });
+      await m.reply("✅ Message deleted.");
     },
   },
   {
@@ -59,6 +61,7 @@ const commands = [
       await sock.sendMessage(m.chat, {
         poll: { name: question, values: options, selectableCount: 1 },
       });
+      await m.reply(`✅ Poll created with ${options.length} option(s).`);
     },
   },
   {
@@ -149,6 +152,7 @@ const commands = [
           contacts: [{ vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${num}\nTEL;type=CELL;waid=${num}:+${num}\nEND:VCARD` }],
         },
       }, { quoted: { key: m.key, message: m.message } });
+      await m.reply("✅ Contact card sent.");
     },
   },
   {
@@ -162,6 +166,7 @@ const commands = [
       await sock.sendMessage(m.chat, {
         location: { degreesLatitude: lat, degreesLongitude: lon },
       });
+      await m.reply("✅ Location sent.");
     },
   },
   {

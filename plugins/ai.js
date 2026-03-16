@@ -1,6 +1,7 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, normalizeAiText } = require("../lib/helpers");
+const { fetchJson, normalizeAiText } = require("../lib/helpers");
 const axios = require("axios");
+const sharp = require("sharp");
 
 const AI_PERSONAS = {
   openai: null,
@@ -30,6 +31,112 @@ async function pollinate(prompt, persona = "openai") {
   const answer = res.data?.choices?.[0]?.message?.content;
   if (!answer || answer.length < 2) throw new Error("empty");
   return normalizeAiText(answer, { keepLightFormatting: true });
+}
+
+async function fetchGeneratedImage(prompt) {
+  const encodedPrompt = encodeURIComponent(prompt);
+  const base = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
+  const endpoints = [
+    `${base}?model=flux&width=1024&height=1024&nologo=true&enhance=true&seed=${Date.now()}`,
+    `${base}?model=turbo&width=1024&height=1024&nologo=true&seed=${Date.now() + 1}`,
+    `${base}?width=1024&height=1024&nologo=true&seed=${Date.now() + 2}`,
+    `${base}?model=flux&width=768&height=768&nologo=true&seed=${Date.now() + 3}`,
+  ];
+
+  for (const url of endpoints) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await axios.get(url, {
+          responseType: "arraybuffer",
+          timeout: 45000,
+          headers: { Accept: "image/*" },
+          validateStatus: (status) => status >= 200 && status < 500,
+        });
+        const contentType = String(res.headers?.["content-type"] || "").toLowerCase();
+        const buffer = Buffer.from(res.data || []);
+        if (contentType.startsWith("image/") && buffer.length >= 2048) return buffer;
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+
+  return createLocalPromptArt(prompt);
+}
+
+function hashText(input) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return hash >>> 0;
+}
+
+function clampText(text, max) {
+  if (!text) return "";
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function pickPalette(seed) {
+  const palettes = [
+    ["#0B1D3A", "#13315C", "#0FA3B1", "#BEE9E8"],
+    ["#1A1A2E", "#16213E", "#0F3460", "#E94560"],
+    ["#102A43", "#243B53", "#486581", "#F0B429"],
+    ["#1B4332", "#2D6A4F", "#40916C", "#D8F3DC"],
+  ];
+  return palettes[seed % palettes.length];
+}
+
+function randomFromSeed(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 0xFFFFFFFF;
+  };
+}
+
+async function createLocalPromptArt(prompt) {
+  const width = 1024;
+  const height = 1024;
+  const seed = hashText(prompt || "image");
+  const rand = randomFromSeed(seed);
+  const [c1, c2, c3, c4] = pickPalette(seed);
+  const safePrompt = clampText(String(prompt || ""), 180)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
+  let shapes = "";
+  for (let i = 0; i < 26; i++) {
+    const x = Math.floor(rand() * width);
+    const y = Math.floor(rand() * height);
+    const r = Math.floor(40 + rand() * 220);
+    const fill = [c2, c3, c4][Math.floor(rand() * 3)];
+    const opacity = (0.12 + rand() * 0.35).toFixed(2);
+    shapes += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" opacity="${opacity}"/>`;
+  }
+
+  const svg = `
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${c1}"/>
+        <stop offset="55%" stop-color="${c2}"/>
+        <stop offset="100%" stop-color="${c3}"/>
+      </linearGradient>
+      <filter id="blur"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#bg)"/>
+    <g filter="url(#blur)">${shapes}</g>
+    <rect x="64" y="700" width="896" height="260" rx="24" fill="#000000" opacity="0.42"/>
+    <text x="96" y="756" font-size="30" font-family="Arial, sans-serif" fill="#FFFFFF" font-weight="700">AI Prompt</text>
+    <text x="96" y="808" font-size="28" font-family="Arial, sans-serif" fill="#FFFFFF">${safePrompt}</text>
+    <text x="96" y="932" font-size="24" font-family="Arial, sans-serif" fill="#FFFFFF" opacity="0.9">Fallback render (free mode) • seed ${seed}</text>
+  </svg>`;
+
+  return sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
 }
 
 const commands = [
@@ -126,14 +233,13 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}dalle <prompt>`);
       m.react("🎨");
       try {
-        const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
-        const imgBuffer = await fetchBuffer(imgUrl);
-        if (!imgBuffer || imgBuffer.length < 1000) return m.reply("⏳ Image generation is currently busy. Try again soon!");
+        const imgBuffer = await fetchGeneratedImage(text);
+        if (!imgBuffer) return m.reply("⏳ Image generation is currently busy. Try again in a moment.");
         await sock.sendMessage(m.chat, { image: imgBuffer, caption: `🎨 *AI Generated Image*\n\nPrompt: ${text}\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Image generation servers are currently busy. Try again soon!");
+        await m.reply("⏳ Image generation temporarily failed after retries. Please try again.");
       }
     },
   },
@@ -295,7 +401,6 @@ const commands = [
       m.react("⏳");
       try {
         const buffer = await media.download();
-        const sharp = require("sharp");
         const enhanced = await sharp(buffer)
           .resize({ width: 2048, withoutEnlargement: false })
           .sharpen({ sigma: 1.5 })
