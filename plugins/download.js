@@ -71,23 +71,82 @@ async function ytDownloadVideo(url) {
 }
 
 async function igDownload(url) {
-  const endpoints = [
-    async () => {
-      const res = await axios.post("https://fastdl.app/api/convert", new URLSearchParams({ url }), { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } });
-      const dlUrl = res.data?.url || res.data?.result?.[0]?.url;
-      if (dlUrl) return await fetchBuffer(dlUrl);
-      return null;
-    },
-    async () => {
-      const res = await axios.get(`https://api.igdownloader.app/api/v1/download?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-      const dlUrl = res.data?.data?.[0]?.url;
-      if (dlUrl) return await fetchBuffer(dlUrl);
-      return null;
-    },
-  ];
-  for (const fn of endpoints) {
-    try { const buf = await fn(); if (buf?.length > 1000) return buf; } catch {}
-  }
+  const cleanUrl = url.split("?")[0].replace(/\/$/, "");
+
+  // 1. cobalt.tools — open-source, most reliable
+  try {
+    const res = await axios.post(
+      "https://api.cobalt.tools/api/json",
+      { url: cleanUrl },
+      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+    );
+    const d = res.data;
+    if ((d.status === "redirect" || d.status === "stream") && d.url) {
+      const buf = await fetchBuffer(d.url, { timeout: 60000 });
+      if (buf?.length > 1000) return { buffer: buf, type: "video" };
+    }
+    if (d.status === "picker" && d.picker?.length) {
+      const first = d.picker[0];
+      const buf = await fetchBuffer(first.url, { timeout: 60000 });
+      if (buf?.length > 1000) return { buffer: buf, type: first.type === "photo" ? "image" : "video" };
+    }
+  } catch {}
+
+  // 2. saveig.app
+  try {
+    const res = await axios.get(
+      `https://saveig.app/api/?url=${encodeURIComponent(cleanUrl)}`,
+      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } }
+    );
+    const item = res.data?.data?.[0] || res.data?.results?.[0];
+    if (item?.url) {
+      const buf = await fetchBuffer(item.url, { timeout: 60000 });
+      if (buf?.length > 1000) return { buffer: buf, type: item.type === "image" ? "image" : "video" };
+    }
+  } catch {}
+
+  // 3. fastdl.app
+  try {
+    const res = await axios.post(
+      "https://fastdl.app/api/convert",
+      new URLSearchParams({ url: cleanUrl }),
+      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded" } }
+    );
+    const dlUrl = res.data?.url || res.data?.result?.[0]?.url;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
+      if (buf?.length > 1000) return { buffer: buf, type: "video" };
+    }
+  } catch {}
+
+  // 4. igdownloader.app
+  try {
+    const res = await axios.get(
+      `https://api.igdownloader.app/api/v1/download?url=${encodeURIComponent(cleanUrl)}`,
+      { timeout: 15000 }
+    );
+    const item = res.data?.data?.[0];
+    if (item?.url) {
+      const buf = await fetchBuffer(item.url, { timeout: 60000 });
+      if (buf?.length > 1000) return { buffer: buf, type: item.type === "GraphImage" ? "image" : "video" };
+    }
+  } catch {}
+
+  // 5. sssinstagram (scraper fallback)
+  try {
+    const res = await axios.post(
+      "https://sssinstagram.com/api/convert",
+      new URLSearchParams({ q: cleanUrl }),
+      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded" } }
+    );
+    const items = res.data?.data || res.data?.medias || [];
+    const item = items[0];
+    if (item?.url) {
+      const buf = await fetchBuffer(item.url, { timeout: 60000 });
+      if (buf?.length > 1000) return { buffer: buf, type: item.type === "image" ? "image" : "video" };
+    }
+  } catch {}
+
   return null;
 }
 
@@ -267,9 +326,15 @@ const commands = [
       if (!/instagram\.com|instagr\.am/i.test(text)) return m.reply("❌ Please provide a valid Instagram URL.");
       m.react("⏳");
       try {
-        let mediaBuffer = await igDownload(text);
-        if (!mediaBuffer) return m.reply("❌ Could not download Instagram media. The download servers may be busy.");
-        await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `📸 Instagram Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        const result = await igDownload(text);
+        if (!result) return m.reply("❌ Could not download Instagram media. The link may be private, expired, or the download servers are busy. Try again shortly.");
+        const { buffer, type } = result;
+        const caption = `📸 Instagram Download\n\n_${config.BOT_NAME}_`;
+        if (type === "image") {
+          await sock.sendMessage(m.chat, { image: buffer, caption }, { quoted: { key: m.key, message: m.message } });
+        } else {
+          await sock.sendMessage(m.chat, { video: buffer, caption }, { quoted: { key: m.key, message: m.message } });
+        }
         m.react("✅");
       } catch {
         m.react("❌");
