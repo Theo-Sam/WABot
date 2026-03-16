@@ -6,3 +6,7 @@ backups/
 *.db
 *.log
 *.tmp
+.current_session_id
+.bad_mac_detected
+.force_qr_mode
+baileys_store.json
