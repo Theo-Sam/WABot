@@ -151,28 +151,108 @@ async function igDownload(url) {
 }
 
 async function fbDownload(url) {
-  const endpoints = [
-    async () => {
-      const res = await axios.get(`https://api.fbdownloader.app/api/v1/download?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-      const dlUrl = res.data?.data?.hd || res.data?.data?.sd;
-      if (dlUrl) return await fetchBuffer(dlUrl);
-      return null;
-    },
-  ];
-  for (const fn of endpoints) {
-    try { const buf = await fn(); if (buf?.length > 1000) return buf; } catch {}
-  }
+  // 1. cobalt.tools
+  try {
+    const res = await axios.post(
+      "https://api.cobalt.tools/api/json",
+      { url },
+      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+    );
+    const d = res.data;
+    if ((d.status === "redirect" || d.status === "stream") && d.url) {
+      const buf = await fetchBuffer(d.url, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+  } catch {}
+
+  // 2. fdown.net
+  try {
+    const res = await axios.get(
+      `https://fdown.net/api/v1?url=${encodeURIComponent(url)}`,
+      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } }
+    );
+    const dlUrl = res.data?.hd_url || res.data?.sd_url || res.data?.url;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+  } catch {}
+
+  // 3. fbdownloader.app (original)
+  try {
+    const res = await axios.get(
+      `https://api.fbdownloader.app/api/v1/download?url=${encodeURIComponent(url)}`,
+      { timeout: 15000 }
+    );
+    const dlUrl = res.data?.data?.hd || res.data?.data?.sd;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+  } catch {}
+
+  // 4. getfvid
+  try {
+    const res = await axios.post(
+      "https://getfvid.com/api/convert",
+      new URLSearchParams({ url }),
+      { timeout: 15000, headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0" } }
+    );
+    const dlUrl = res.data?.hd || res.data?.sd || res.data?.links?.[0]?.url;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+  } catch {}
+
   return null;
 }
 
 async function twitterDownload(url) {
+  // 1. cobalt.tools
+  try {
+    const res = await axios.post(
+      "https://api.cobalt.tools/api/json",
+      { url },
+      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+    );
+    const d = res.data;
+    if ((d.status === "redirect" || d.status === "stream") && d.url) {
+      const buf = await fetchBuffer(d.url, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+    if (d.status === "picker" && d.picker?.length) {
+      const buf = await fetchBuffer(d.picker[0].url, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+  } catch {}
+
+  // 2. vxtwitter
   try {
     const tweetId = url.match(/status\/(\d+)/)?.[1];
-    if (!tweetId) return null;
-    const data = await fetchJson(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
-    const mediaUrl = data?.media_extended?.[0]?.url || data?.mediaURLs?.[0];
-    if (mediaUrl) return await fetchBuffer(mediaUrl);
+    if (tweetId) {
+      const data = await fetchJson(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
+      const mediaUrl = data?.media_extended?.[0]?.url || data?.mediaURLs?.[0];
+      if (mediaUrl) {
+        const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+        if (buf?.length > 1000) return buf;
+      }
+    }
   } catch {}
+
+  // 3. fxtwitter
+  try {
+    const tweetId = url.match(/status\/(\d+)/)?.[1];
+    if (tweetId) {
+      const data = await fetchJson(`https://api.fxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
+      const mediaUrl = data?.tweet?.media?.videos?.[0]?.url || data?.tweet?.media?.photos?.[0]?.url;
+      if (mediaUrl) {
+        const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+        if (buf?.length > 1000) return buf;
+      }
+    }
+  } catch {}
+
   return null;
 }
 
@@ -280,12 +360,27 @@ const commands = [
       m.react("⏳");
       try {
         let videoBuffer = null;
+        // 1. cobalt.tools
         try {
-          const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text, hd: 1 }), { timeout: 15000 });
-          const playUrl = data.data?.data?.hdplay || data.data?.data?.play;
-          if (playUrl) videoBuffer = await fetchBuffer(playUrl);
+          const res = await axios.post(
+            "https://api.cobalt.tools/api/json",
+            { url: text },
+            { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+          );
+          const d = res.data;
+          if ((d.status === "redirect" || d.status === "stream") && d.url) {
+            videoBuffer = await fetchBuffer(d.url, { timeout: 60000 });
+          }
         } catch {}
-        if (!videoBuffer) return m.reply("❌ Could not download TikTok video.");
+        // 2. tikwm (fallback)
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text, hd: 1 }), { timeout: 15000 });
+            const playUrl = data.data?.data?.hdplay || data.data?.data?.play;
+            if (playUrl) videoBuffer = await fetchBuffer(playUrl);
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download TikTok video. The link may be expired or region-locked.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -303,12 +398,21 @@ const commands = [
       m.react("⏳");
       try {
         let audioBuffer = null;
+        // 1. tikwm background music
         try {
           const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text }), { timeout: 15000 });
           const musicUrl = data.data?.data?.music;
           if (musicUrl) audioBuffer = await fetchBuffer(musicUrl);
         } catch {}
-        if (!audioBuffer) return m.reply("❌ Could not download TikTok audio.");
+        // 2. tikwm play audio fallback
+        if (!audioBuffer || audioBuffer.length < 1000) {
+          try {
+            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text, hd: 1 }), { timeout: 15000 });
+            const playUrl = data.data?.data?.play;
+            if (playUrl) audioBuffer = await fetchBuffer(playUrl);
+          } catch {}
+        }
+        if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download TikTok audio.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -393,10 +497,22 @@ const commands = [
         try {
           const trackMatch = text.match(/track\/([a-zA-Z0-9]+)/);
           if (trackMatch) {
-            const searchQuery = text;
-            const results = await play.search(searchQuery, { limit: 1, source: { youtube: "video" } }).catch(() => []);
-            if (results.length) {
-              audioBuffer = await ytDownloadAudio(results[0].url);
+            // Get track title via Spotify oEmbed (no auth required)
+            let searchQuery = "";
+            try {
+              const oembed = await fetchJson(`https://open.spotify.com/oembed?url=${encodeURIComponent(text)}`, { timeout: 10000 });
+              if (oembed?.title) searchQuery = oembed.title;
+            } catch {}
+            if (!searchQuery) {
+              // Fallback: try spotifydown metadata
+              try {
+                const meta = await fetchJson(`https://api.spotifydown.com/metadata/track/${trackMatch[1]}`, { timeout: 10000 });
+                if (meta?.title) searchQuery = `${meta.title} ${meta.artists || ""}`;
+              } catch {}
+            }
+            if (searchQuery) {
+              const results = await play.search(searchQuery, { limit: 1, source: { youtube: "video" } }).catch(() => []);
+              if (results.length) audioBuffer = await ytDownloadAudio(results[0].url);
             }
           }
         } catch {}
@@ -598,15 +714,43 @@ const commands = [
       m.react("⏳");
       try {
         let mediaBuffer = null;
+        let isVideo = true;
+        // 1. cobalt.tools
         try {
-          const jsonUrl = text.replace(/\/?$/, ".json");
-          const data = await fetchJson(jsonUrl);
-          const post = data?.[0]?.data?.children?.[0]?.data;
-          const videoUrl = post?.secure_media?.reddit_video?.fallback_url || post?.url_overridden_by_dest;
-          if (videoUrl) mediaBuffer = await fetchBuffer(videoUrl);
+          const res = await axios.post(
+            "https://api.cobalt.tools/api/json",
+            { url: text },
+            { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+          );
+          const d = res.data;
+          if ((d.status === "redirect" || d.status === "stream") && d.url) {
+            mediaBuffer = await fetchBuffer(d.url, { timeout: 60000 });
+          }
+          if (d.status === "picker" && d.picker?.length) {
+            mediaBuffer = await fetchBuffer(d.picker[0].url, { timeout: 60000 });
+            isVideo = d.picker[0].type !== "photo";
+          }
         } catch {}
-        if (!mediaBuffer) return m.reply("❌ Could not download Reddit media.");
-        await sock.sendMessage(m.chat, { video: mediaBuffer, caption: `🔴 Reddit Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        // 2. Reddit JSON API fallback
+        if (!mediaBuffer || mediaBuffer.length < 1000) {
+          try {
+            const jsonUrl = text.replace(/\/?$/, ".json");
+            const data = await fetchJson(jsonUrl);
+            const post = data?.[0]?.data?.children?.[0]?.data;
+            if (post) {
+              isVideo = !!post.secure_media?.reddit_video;
+              const mediaUrl = post.secure_media?.reddit_video?.fallback_url || post.url_overridden_by_dest;
+              if (mediaUrl) mediaBuffer = await fetchBuffer(mediaUrl);
+            }
+          } catch {}
+        }
+        if (!mediaBuffer || mediaBuffer.length < 1000) return m.reply("❌ Could not download Reddit media.");
+        const caption = `🔴 Reddit Download\n\n_${config.BOT_NAME}_`;
+        if (isVideo) {
+          await sock.sendMessage(m.chat, { video: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
+        } else {
+          await sock.sendMessage(m.chat, { image: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
+        }
         m.react("✅");
       } catch {
         m.react("❌");
