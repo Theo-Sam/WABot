@@ -3,7 +3,7 @@ const { fetchJson, fetchBuffer, sendImageOrText, replyLongText } = require("../l
 
 const commands = [
   {
-    name: ["score", "livescore", "scores", "sc"],
+    name: ["score", "livescore", "scores"],
     category: "sports",
     desc: "Get live football scores",
     handler: async (sock, m, { text }) => {

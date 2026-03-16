@@ -813,7 +813,7 @@ const commands = [
     },
   },
   {
-    name: ["crypto", "coin", "cry"],
+    name: ["crypto", "coin"],
     category: "search",
     desc: "Get cryptocurrency price",
     handler: async (sock, m, { text }) => {

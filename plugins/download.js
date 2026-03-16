@@ -301,7 +301,7 @@ const commands = [
     },
   },
   {
-    name: ["video", "ytmp4", "ytvideo", "v"],
+    name: ["video", "ytmp4", "ytvideo", "youtube", "yt", "v"],
     category: "download",
     desc: "Download YouTube video",
     handler: async (sock, m, { text }) => {
@@ -485,7 +485,7 @@ const commands = [
     },
   },
   {
-    name: ["spotify", "spdl", "sp"],
+    name: ["spotify", "spdl"],
     category: "download",
     desc: "Download Spotify track",
     handler: async (sock, m, { text }) => {
@@ -526,7 +526,7 @@ const commands = [
     },
   },
   {
-    name: ["pinterest", "pin"],
+    name: ["pinterest", "pintdl"],
     category: "download",
     desc: "Search Pinterest images",
     handler: async (sock, m, { text }) => {
@@ -702,6 +702,48 @@ const commands = [
       } catch {
         m.react("❌");
         await m.reply("❌ Failed to download from Google Drive.");
+      }
+    },
+  },
+  {
+    name: ["soundcloud", "scdl", "sc"],
+    category: "download",
+    desc: "Download from SoundCloud",
+    handler: async (sock, m, { text }) => {
+      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}soundcloud <SoundCloud URL>`);
+      if (!/soundcloud\.com/i.test(text)) return m.reply("❌ Please provide a valid SoundCloud URL.");
+      m.react("⏳");
+      try {
+        let audioBuffer = null;
+        // 1. cobalt.tools
+        try {
+          const res = await axios.post(
+            "https://api.cobalt.tools/api/json",
+            { url: text },
+            { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+          );
+          const d = res.data;
+          if ((d.status === "redirect" || d.status === "stream") && d.url) {
+            audioBuffer = await fetchBuffer(d.url, { timeout: 60000 });
+          }
+        } catch {}
+        // 2. scdl API fallback
+        if (!audioBuffer || audioBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(
+              `https://api.scdl.cc/resolve?url=${encodeURIComponent(text)}`,
+              { timeout: 15000 }
+            );
+            const dlUrl = res?.download_url || res?.stream_url;
+            if (dlUrl) audioBuffer = await fetchBuffer(dlUrl, { timeout: 60000 });
+          } catch {}
+        }
+        if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download SoundCloud track. The link may be private or the servers are busy.");
+        await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download SoundCloud track.");
       }
     },
   },
