@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, sendImageOrText } = require("../lib/helpers");
+const { fetchJson, fetchBuffer, sendImageOrText, replyLongText } = require("../lib/helpers");
 const axios = require("axios");
 
 async function fetchWallpaperBuffer(query) {
@@ -88,7 +88,7 @@ const commands = [
           msg += `\n`;
         });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await m.reply(msg);
+        await replyLongText(m, msg);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -146,7 +146,7 @@ const commands = [
             return;
           }
         }
-        await m.reply(msg);
+        await replyLongText(m, msg);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -385,7 +385,7 @@ const commands = [
           msg += `🔗 https://youtube.com/watch?v=${r.videoId}\n\n`;
         });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await m.reply(msg);
+        await replyLongText(m, msg);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -783,7 +783,7 @@ const commands = [
         msg += `🔎 Topic: *${query}*\n`;
         msg += `📅 ${new Date().toLocaleDateString()}\n\n`;
 
-        articles.slice(0, 5).forEach((a, i) => {
+        articles.forEach((a, i) => {
           msg += `*${i + 1}. ${a.title}*\n`;
           const sourceName = a.source?.name || a.source || "";
           if (sourceName) msg += `📰 Source: ${sourceName}\n`;
@@ -804,7 +804,7 @@ const commands = [
         });
 
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await m.reply(msg);
+        await replyLongText(m, msg);
         m.react("✅");
       } catch {
         m.react("❌");

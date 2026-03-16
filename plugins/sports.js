@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, sendImageOrText } = require("../lib/helpers");
+const { fetchJson, fetchBuffer, sendImageOrText, replyLongText } = require("../lib/helpers");
 
 const commands = [
   {
@@ -27,7 +27,7 @@ const commands = [
           msg += `🏆 ${data.leagues?.[0]?.name || league}\n`;
           if (data.leagues?.[0]?.season?.displayName) msg += `📅 Season: ${data.leagues[0].season.displayName}\n`;
           msg += `\n`;
-          data.events.slice(0, 15).forEach((match) => {
+          data.events.forEach((match) => {
             const status = match.status?.type?.shortDetail || "";
             const statusState = match.status?.type?.state || "";
             const comp = match.competitions[0];
@@ -43,7 +43,7 @@ const commands = [
             msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-          await m.reply(msg);
+          await replyLongText(m, msg);
         } else {
           await m.reply(`⏳ No live matches right now for "${league}". Try again later!\n\n💡 Available: premier league, la liga, bundesliga, serie a, ligue 1, champions league`);
         }
@@ -77,7 +77,7 @@ const commands = [
         if (data?.events?.length) {
           let msg = `📅 *UPCOMING FIXTURES*\n\n`;
           msg += `🏆 League: ${data.events[0]?.strLeague || league}\n\n`;
-          data.events.slice(0, 10).forEach((e, i) => {
+          data.events.forEach((e, i) => {
             msg += `*Match ${i + 1}*\n`;
             msg += `🏠 ${e.strHomeTeam} vs 🛫 ${e.strAwayTeam}\n`;
             msg += `📅 ${e.dateEvent} ⏰ ${e.strTime || "TBD"}\n`;
@@ -86,7 +86,7 @@ const commands = [
             msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-          await m.reply(msg);
+          await replyLongText(m, msg);
         } else {
           await m.reply(`📅 No upcoming fixtures found for "${league}".`);
         }
@@ -118,21 +118,25 @@ const commands = [
         const date = new Date();
         const startYear = date.getMonth() < 7 ? date.getFullYear() - 1 : date.getFullYear();
         const season = `${startYear}-${startYear + 1}`;
-        const data = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=${leagueId}&s=${season}`).catch(() => null);
+        let data = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=${leagueId}&s=${season}`).catch(() => null);
+        if (!data?.table?.length || data.table.length < 10) {
+          const fallback = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=${leagueId}`).catch(() => null);
+          if (fallback?.table?.length) data = fallback;
+        }
         if (data?.table?.length) {
           const table = data.table;
           let msg = `🏆 *LEAGUE STANDINGS*\n\n`;
           msg += `🏆 ${table[0]?.strLeague || league}\n`;
           msg += `📅 Season: ${season}\n\n`;
           msg += `*# Team | P W D L | Pts*\n`;
-          table.slice(0, 20).forEach((t) => {
+          table.forEach((t) => {
             const name = t.strTeam || "???";
             const pos = String(t.intRank).padStart(2);
             msg += `${pos}. ${name} | ${t.intPlayed} ${t.intWin} ${t.intDraw} ${t.intLoss} | *${t.intPoints}*\n`;
           });
           msg += `\n`;
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-          await m.reply(msg);
+          await replyLongText(m, msg);
         } else {
           await m.reply(`❌ Standings not found for "${league}". Try: premier league, la liga, bundesliga, serie a, ligue 1`);
         }
@@ -337,7 +341,7 @@ const commands = [
         const data = await fetchJson("https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id=4387").catch(() => null);
         if (data?.events?.length) {
           let msg = `🏀 *RECENT NBA GAMES*\n\n`;
-          data.events.slice(0, 10).forEach((e, i) => {
+          data.events.forEach((e, i) => {
             msg += `*Game ${i + 1}*\n`;
             msg += `🏠 ${e.strHomeTeam} *${e.intHomeScore || "?"}*\n`;
             msg += `🛫 ${e.strAwayTeam} *${e.intAwayScore || "?"}*\n`;
@@ -347,7 +351,7 @@ const commands = [
             msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-          await m.reply(msg);
+          await replyLongText(m, msg);
         } else {
           await m.reply("🏀 No recent NBA games found.");
         }
