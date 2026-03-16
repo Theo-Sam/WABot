@@ -2,7 +2,7 @@
 
 A powerful multi-device WhatsApp bot built with Node.js and Baileys v7. Features **520+ commands and aliases** across 19 plugin categories including AI, downloads, games, group management, religious content, sports, education, utilities, and much more.
 
-Powered by **Desam Tech** · [Join our WhatsApp Channel](https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h)
+Author: **Sam Theophilus** · [Join our WhatsApp Channel](https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h)
 
 ---
 
@@ -105,6 +105,8 @@ npm run doctor
 ---
 
 ## Command List
+
+If you want to use the bot, visit [https://desamwabot.app](https://desamwabot.app).
 
 ### Main (5 commands)
 
