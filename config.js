@@ -59,7 +59,7 @@ module.exports = {
   TIMEZONE: process.env.TIMEZONE || "Africa/Accra",
   AUTO_READ: process.env.AUTO_READ || "off",
   AUTO_STATUS_VIEW: process.env.AUTO_STATUS_VIEW || "off",
-  ANTI_CALL: process.env.ANTI_CALL || "on",
+  ANTI_CALL: process.env.ANTI_CALL || "off",
   ANTI_CALL_MSG: process.env.ANTI_CALL_MSG || "❌ Calls are not allowed. This bot rejects all calls.",
   AUTO_BIO: process.env.AUTO_BIO || "off",
   AUTO_BIO_MSG: process.env.AUTO_BIO_MSG || "🤖 Desam WABot | {time} | {date}",
