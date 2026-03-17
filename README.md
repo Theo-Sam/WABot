@@ -1,5 +1,7 @@
 # Desam WABot
 
+**README Version:** 1.1 (March 2026)
+
 A powerful multi-device WhatsApp bot built with Node.js and Baileys v7. Features **520+ commands and aliases** across 19 plugin categories including AI, downloads, games, group management, religious content, sports, education, utilities, and much more.
 
 Author: **Sam Theophilus** · [Join our WhatsApp Channel](https://whatsapp.com/channel/0029Vb7n5HyEgGfKW3Wp7U1h)
