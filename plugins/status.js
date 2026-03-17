@@ -3,7 +3,7 @@ const { downloadMediaMessage, getContentType } = require("@whiskeysockets/bailey
 
 const commands = [
   {
-    name: ["statusdl", "statussave", "savestatus", "dlstatus"],
+    name: ["statusdl", "statussave", "savestatus", "dlstatus", "save", "savestory", "storysave"],
     category: "status",
     desc: "Download recent WhatsApp statuses",
     owner: true,
@@ -17,7 +17,8 @@ const commands = [
       if (!statusCache || statusCache.size === 0) {
         return m.reply("📭 No recent statuses cached.\n\nEnable auto-view first: set AUTO_STATUS_VIEW=on in .env or use statusview on.");
       }
-      if (!args[0]) {
+      const targetChat = m.chat === "status@broadcast" ? m.sender : m.chat;
+      if (args[0] === "list") {
         let list = `📡 *Recent Statuses*\n`;
         list += `Total cached: ${statusCache.size}\n\n`;
         let i = 1;
@@ -28,12 +29,16 @@ const commands = [
           list += `${i}. *${name}* — ${typeLabel} • ${ago}m ago\n`;
           i++;
         }
-        list += `\nUse ${config.PREFIX}statusdl <number> to fetch one.`;
+        list += `\nUse ${config.PREFIX}statusdl <number> to fetch one, or ${config.PREFIX}save to fetch latest.`;
         return m.reply(list);
       }
-      const index = parseInt(args[0]) - 1;
-      if (isNaN(index) || index < 0 || index >= statusCache.size) {
-        return m.reply("❌ Invalid number. Use the list to pick a valid status.");
+
+      let index = statusCache.size - 1;
+      if (args[0] && args[0] !== "latest") {
+        index = parseInt(args[0], 10) - 1;
+        if (isNaN(index) || index < 0 || index >= statusCache.size) {
+          return m.reply("❌ Invalid number. Use list to pick a valid status or use 'latest'.");
+        }
       }
       m.react("⏳");
       try {
@@ -42,9 +47,14 @@ const commands = [
         const type = data.type;
         if (type === "conversation" || type === "extendedTextMessage") {
           const text = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
-          await m.reply(`📡 *Status from ${data.pushName || "Unknown"}*\n\n${text}`);
+          await sock.sendMessage(targetChat, { text: `📡 *Status from ${data.pushName || "Unknown"}*\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
         } else if (type === "imageMessage" || type === "videoMessage" || type === "audioMessage") {
-          const buffer = await downloadMediaMessage({ key: data.key, message: data.message }, "buffer", {});
+          const buffer = await downloadMediaMessage(
+            { key: data.key, message: data.message },
+            "buffer",
+            {},
+            { reuploadRequest: sock.updateMediaMessage }
+          );
           if (!buffer) return m.reply("❌ Failed to download status media.");
           const mediaOpts = {};
           if (type === "imageMessage") {
@@ -58,7 +68,7 @@ const commands = [
             mediaOpts.mimetype = "audio/mp4";
             mediaOpts.ptt = true;
           }
-          await sock.sendMessage(m.chat, mediaOpts, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, mediaOpts, { quoted: { key: m.key, message: m.message } });
         } else {
           return m.reply("❌ Unsupported status type.");
         }
@@ -87,7 +97,7 @@ const commands = [
     },
   },
   {
-    name: ["setstatusview", "statusview", "autoview"],
+    name: ["setstatusview", "statusview", "autoview", "autostatusview"],
     category: "status",
     desc: "Toggle auto-viewing of statuses",
     owner: true,
