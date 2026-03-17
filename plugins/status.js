@@ -8,13 +8,25 @@ const commands = [
     desc: "Download recent WhatsApp statuses",
     owner: true,
     handler: async (sock, m, { args }) => {
+      const quotedStatusData =
+        m.chat === "status@broadcast" && m.quoted
+          ? {
+              key: m.quoted.key,
+              message: m.quoted.message,
+              type: m.quoted.type,
+              sender: m.quoted.sender,
+              pushName: m.quoted.pushName || m.quoted.sender?.split("@")[0] || "Unknown",
+              timestamp: Date.now(),
+            }
+          : null;
+
       let statusCache;
       try {
         statusCache = require("../lib/connection").statusCache;
       } catch {
         return m.reply("❌ Status cache not available.");
       }
-      if (!statusCache || statusCache.size === 0) {
+      if (!quotedStatusData && (!statusCache || statusCache.size === 0)) {
         return m.reply("📭 No recent statuses cached.\n\nEnable auto-view first: set AUTO_STATUS_VIEW=on in .env or use statusview on.");
       }
       const targetChat = m.chat === "status@broadcast" ? m.sender : m.chat;
@@ -42,8 +54,19 @@ const commands = [
       }
       m.react("⏳");
       try {
-        const entries = [...statusCache.entries()];
-        const [id, data] = entries[index];
+        let data;
+        if (quotedStatusData && (!args[0] || args[0] === "latest")) {
+          data = quotedStatusData;
+        } else {
+          const entries = [...statusCache.entries()];
+          const [, selectedData] = entries[index];
+          data = selectedData;
+        }
+
+        if (!data) {
+          return m.reply("❌ Could not find a status to save.");
+        }
+
         const type = data.type;
         if (type === "conversation" || type === "extendedTextMessage") {
           const text = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
