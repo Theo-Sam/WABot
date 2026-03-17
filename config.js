@@ -100,5 +100,6 @@ module.exports = {
   CHATBOT: process.env.CHATBOT || "off",
   AUTO_STATUS_REACT: "off",
   DEVICE_MODE: process.env.DEVICE_MODE || "Android",
+  BROWSER_VERSION: process.env.BROWSER_VERSION || "120.0.0",
   ACCEPT_ANY_SESSION: resolvedAcceptAnySession,
 };
