@@ -40,9 +40,9 @@ function readSessionFromFile(sessionFileValue) {
 }
 
 function readSessionFromVaultToken(sessionValue) {
-  if (!sessionValue) return "";
+  if (!sessionValue) return undefined;
   const token = String(sessionValue).trim();
-  if (!/^desam_[a-zA-Z0-9_-]+$/.test(token)) return "";
+  if (!/^desam_[a-zA-Z0-9_-]+$/.test(token)) return undefined;
 
   const configuredDir = process.env.SESSION_VAULT_DIR || "";
   const candidates = [
@@ -66,13 +66,16 @@ function readSessionFromVaultToken(sessionValue) {
   }
 
   console.warn(`[DESAM] SESSION_ID token provided but no vault file was found for ${token}`);
-  return "";
+  return null;
 }
 
 const sessionFromEnv = process.env.SESSION_ID || "";
 const sessionFromFile = readSessionFromFile(process.env.SESSION_FILE || "");
 const sessionFromVault = readSessionFromVaultToken(sessionFromEnv);
-const resolvedSessionId = sessionFromVault || sessionFromEnv || sessionFromFile;
+const resolvedSessionId =
+  sessionFromVault === null
+    ? sessionFromFile || ""
+    : (sessionFromVault || sessionFromEnv || sessionFromFile);
 const acceptAnySessionRaw = String(process.env.ACCEPT_ANY_SESSION || "").trim().toLowerCase();
 const resolvedAcceptAnySession = acceptAnySessionRaw ? acceptAnySessionRaw === "on" : true;
 

@@ -63,6 +63,7 @@ Edit `.env` with your settings:
 | `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses                  | `off`                                |
 | `ANTI_CALL`        | Reject incoming calls automatically          | `on`                                 |
 | `CHATBOT`          | Enable AI chatbot mode                       | `off`                                |
+| `BROWSER_VERSION`  | WhatsApp Web browser version identity        | `120.0.0`                            |
 | `AUTO_BIO_MSG`     | Auto-update bio message template             | `🤖 Desam WABot \| {time} \| {date}` |
 
 > **MD Auth Note:** If `SESSION_ID` is empty, the bot starts in QR linking mode (WhatsApp -> Linked Devices) and stores persistent credentials in `auth_state/`.
