@@ -32,7 +32,7 @@ Author: **Sam Theophilus** · [Join our WhatsApp Channel](https://whatsapp.com/c
 ### Prerequisites
 
 - Node.js 20+
-- A WhatsApp session ID (scan QR or export from WhatsApp Web)
+- A WhatsApp account to link once via QR (Linked Devices)
 
 ### Installation
 
@@ -52,7 +52,7 @@ Edit `.env` with your settings:
 
 | Variable           | Description                                  | Default                              |
 | ------------------ | -------------------------------------------- | ------------------------------------ |
-| `SESSION_ID`       | Your WhatsApp session credentials (required) | —                                    |
+| `SESSION_ID`       | Optional session bootstrap payload           | —                                    |
 | `BOT_NAME`         | Bot display name                             | `Desam WABot`                        |
 | `PREFIX`           | Command prefix                               | `.`                                  |
 | `OWNER_NUMBER`     | Your WhatsApp number (with country code)     | —                                    |
@@ -65,6 +65,10 @@ Edit `.env` with your settings:
 | `CHATBOT`          | Enable AI chatbot mode                       | `off`                                |
 | `AUTO_BIO_MSG`     | Auto-update bio message template             | `🤖 Desam WABot \| {time} \| {date}` |
 
+> **MD Auth Note:** If `SESSION_ID` is empty, the bot starts in QR linking mode (WhatsApp -> Linked Devices) and stores persistent credentials in `auth_state/`.
+>
+> **Deployer Compatibility:** If your deploy system writes tokenized IDs like `desam_xxx`, set `SESSION_VAULT_DIR` to resolve `desam_xxx.txt` into a real Session ID payload at startup.
+>
 > **Note:** Values in `.env` always take priority over any environment variables set elsewhere.
 
 ### Running

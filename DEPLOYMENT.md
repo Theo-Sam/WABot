@@ -5,7 +5,7 @@ This bot runs as a background worker and uses local SQLite only.
 ## Requirements
 
 - Node.js 20 to 24
-- A valid `SESSION_ID` or `SESSION_FILE`
+- WhatsApp account for one-time linked-device pairing (QR)
 - Writable local disk for `auth_state` and the SQLite file
 
 ## Environment
@@ -18,11 +18,16 @@ Provider-specific starter templates are available in `deploy/env/`:
 - `deploy/env/heroku.env.example`
 - `deploy/env/do-worker.env.example`
 
-Required:
+Optional bootstrap:
 
 ```env
-SESSION_ID=your_session_payload
+# Leave empty to pair via QR on first run
+SESSION_ID=
 ```
+
+If your deploy medium passes tokenized IDs like `desam_xxx`, set `SESSION_VAULT_DIR` to the folder that contains matching files (for example `desam_xxx.txt`).
+
+If you use an external session generator/medium, paste its MD `SESSION_ID` value here before deploying to VPS. In that case, the bot boots directly from the provided session (no on-server QR scan).
 
 Recommended:
 
@@ -39,6 +44,7 @@ CHATBOT=off
 DEVICE_MODE=Android
 LOG_LEVEL=info
 DEBUG_LOGS=off
+SESSION_VAULT_DIR=/opt/desam-bots/sessions
 ```
 
 ## Preflight Check
@@ -88,7 +94,7 @@ npm run save:24x7
 
 Notes:
 
-- Put the real `SESSION_ID` in `.env` before starting.
+- If `SESSION_ID` is empty, start once and scan the terminal QR from WhatsApp -> Linked Devices.
 - Keep `data/` and `auth_state/` on persistent disk.
 - Use `npm run logs:24x7` to inspect runtime logs.
 - Run `npm run backup:state` before major updates.

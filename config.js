@@ -39,18 +39,52 @@ function readSessionFromFile(sessionFileValue) {
   }
 }
 
+function readSessionFromVaultToken(sessionValue) {
+  if (!sessionValue) return "";
+  const token = String(sessionValue).trim();
+  if (!/^desam_[a-zA-Z0-9_-]+$/.test(token)) return "";
+
+  const configuredDir = process.env.SESSION_VAULT_DIR || "";
+  const candidates = [
+    configuredDir,
+    "/opt/desam-bots/sessions",
+    path.join(__dirname, "sessions"),
+  ].filter(Boolean);
+
+  for (const baseDir of candidates) {
+    const tokenPath = path.join(baseDir, `${token}.txt`);
+    if (!fs.existsSync(tokenPath)) continue;
+
+    try {
+      const value = fs.readFileSync(tokenPath, "utf8").trim();
+      if (!value) continue;
+      console.log(`[DESAM] Resolved SESSION_ID token from vault (${tokenPath})`);
+      return value;
+    } catch (error) {
+      console.warn(`[DESAM] Failed reading SESSION_ID vault token at ${tokenPath}: ${error.message}`);
+    }
+  }
+
+  console.warn(`[DESAM] SESSION_ID token provided but no vault file was found for ${token}`);
+  return "";
+}
+
 const sessionFromEnv = process.env.SESSION_ID || "";
 const sessionFromFile = readSessionFromFile(process.env.SESSION_FILE || "");
-const resolvedSessionId = sessionFromEnv || sessionFromFile;
+const sessionFromVault = readSessionFromVaultToken(sessionFromEnv);
+const resolvedSessionId = sessionFromVault || sessionFromEnv || sessionFromFile;
+const acceptAnySessionRaw = String(process.env.ACCEPT_ANY_SESSION || "").trim().toLowerCase();
+const resolvedAcceptAnySession = acceptAnySessionRaw ? acceptAnySessionRaw === "on" : true;
 
 console.log(`[DESAM] process.env.SESSION_ID starts with: ${resolvedSessionId ? resolvedSessionId.substring(0, 20) : "empty"}`);
 if (!resolvedSessionId) {
-  console.warn(`[DESAM] ⚠️  No SESSION_ID found. Provide SESSION_ID or SESSION_FILE (QR login is disabled).`);
+  console.warn(`[DESAM] ℹ️  No SESSION_ID found. Bot will start in QR linking mode and persist multi-device credentials in auth_state.`);
 }
 
 module.exports = {
   SESSION_ID: resolvedSessionId,
   SESSION_FILE: process.env.SESSION_FILE || "",
+  SESSION_VAULT_DIR: process.env.SESSION_VAULT_DIR || "",
   SQLITE_PATH: process.env.SQLITE_PATH || "./data/bot.db",
   BOT_NAME: process.env.BOT_NAME || "Desam WABot",
   PREFIX: process.env.PREFIX || ".",
@@ -66,5 +100,5 @@ module.exports = {
   CHATBOT: process.env.CHATBOT || "off",
   AUTO_STATUS_REACT: "off",
   DEVICE_MODE: process.env.DEVICE_MODE || "Android",
-  ACCEPT_ANY_SESSION: process.env.ACCEPT_ANY_SESSION === "on" ? true : true,
+  ACCEPT_ANY_SESSION: resolvedAcceptAnySession,
 };

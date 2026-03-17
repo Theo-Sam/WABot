@@ -60,11 +60,11 @@ function main() {
     `Node ${process.versions.node} detected. Required range is >=20 <25.`
   );
 
-  check(
+  warn(
     !!config.SESSION_ID,
-    'WhatsApp session configured',
+    'WhatsApp session bootstrap',
     'SESSION_ID or SESSION_FILE is present.',
-    'Missing SESSION_ID/SESSION_FILE. The bot cannot start without a valid external session.'
+    'SESSION_ID/SESSION_FILE not set. Bot can still start and pair via QR, then persist auth in auth_state/.'
   );
 
   const dbPath = getDatabasePath();
