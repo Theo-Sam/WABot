@@ -16,6 +16,7 @@ const config = require('./config');
 const { startBot } = require('./lib/bot');
 const { ensureDatabaseReady, closeDb, getDatabasePath } = require('./lib/database');
 const { startServer } = require('./lib/server');
+const { getState } = require('./lib/botState');
 
 console.clear();
 console.log(`
@@ -39,12 +40,23 @@ function verifyStartupRequirements() {
 }
 
 let shuttingDown = false;
+let healthTimer = null;
+let healthRecoveries = 0;
+
+const HEALTH_CHECK_INTERVAL_MS = Number(process.env.BOT_HEALTHCHECK_INTERVAL_MS || 60_000);
+const MAX_DISCONNECTED_MS = Number(process.env.BOT_MAX_DISCONNECTED_MS || 10 * 60_000);
+const MAX_STARTING_MS = Number(process.env.BOT_MAX_STARTING_MS || 10 * 60_000);
+const MAX_HEALTH_RECOVERIES = Number(process.env.BOT_MAX_HEALTH_RECOVERIES || 3);
 
 async function gracefulShutdown(signal, exitCode = 0) {
   if (shuttingDown) {
     return;
   }
   shuttingDown = true;
+  if (healthTimer) {
+    clearInterval(healthTimer);
+    healthTimer = null;
+  }
   console.log(`\n✋ [${signal}] Shutting down gracefully...`);
   try {
     const { shutdownBot } = require('./lib/bot');
@@ -59,6 +71,54 @@ async function gracefulShutdown(signal, exitCode = 0) {
     exitCode = 1;
   }
   process.exit(exitCode);
+}
+
+function startHealthWatchdog() {
+  if (healthTimer) {
+    clearInterval(healthTimer);
+  }
+
+  healthTimer = setInterval(async () => {
+    if (shuttingDown) {
+      return;
+    }
+
+    const state = getState();
+    const now = Date.now();
+    const statusUpdatedAt = state.statusUpdatedAt || state.lastUpdated || now;
+    const statusAge = now - statusUpdatedAt;
+
+    if (state.status === 'connected') {
+      healthRecoveries = 0;
+      return;
+    }
+
+    if (state.status === 'waiting_for_pair') {
+      return;
+    }
+
+    const unhealthyStarting = state.status === 'starting' && statusAge > MAX_STARTING_MS;
+    const unhealthyDisconnected = state.status === 'disconnected' && statusAge > MAX_DISCONNECTED_MS;
+    const unhealthyUnknown = (!state.status || state.status === 'pairing_success') && statusAge > MAX_DISCONNECTED_MS;
+
+    if (!unhealthyStarting && !unhealthyDisconnected && !unhealthyUnknown) {
+      return;
+    }
+
+    console.warn(`[WATCHDOG] Unhealthy state detected: status=${state.status || 'unknown'} ageMs=${statusAge}. Attempting recovery...`);
+    try {
+      await startBot();
+      healthRecoveries += 1;
+    } catch (error) {
+      healthRecoveries += 1;
+      console.error(`[WATCHDOG] Recovery attempt failed: ${error.message}`);
+    }
+
+    if (healthRecoveries >= MAX_HEALTH_RECOVERIES) {
+      console.error('[WATCHDOG] Max recovery attempts reached. Exiting for PM2 restart.');
+      process.exit(1);
+    }
+  }, HEALTH_CHECK_INTERVAL_MS);
 }
 
 // Global error handlers
@@ -85,6 +145,7 @@ process.on('SIGTERM', () => {
   try {
     verifyStartupRequirements();
     startServer();
+    startHealthWatchdog();
     console.log('🚀 Starting bot...\n');
     await startBot();
     console.log('\n✅ Bot is ready!');
