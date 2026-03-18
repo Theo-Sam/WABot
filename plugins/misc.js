@@ -211,8 +211,9 @@ const commands = [
         await sock.sendMessage(m.chat, { image: buffer, caption: "💻 *Code Snippet*" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
-        m.react("❌");
-        await m.reply("⏳ The Code Snippet API is currently overloaded.");
+        const preview = String(code).trim().slice(0, 3000);
+        await m.reply(`💻 *Code Snippet (fallback)*\n\n\`\`\`\n${preview}\n\`\`\`\n\n⚠️ Image renderer is temporarily unavailable, so I sent plain code instead.`);
+        m.react("✅");
       }
     },
   },

@@ -233,7 +233,18 @@ async function searchSportsDbLeague(text) {
 
   const direct = await fetchJson(`${SPORTSDB_BASE}/search_all_leagues.php?l=${encodeURIComponent(text)}`).catch(() => null);
   const found = (direct?.countries || []).find((row) => String(row?.strSport || "").toLowerCase() === "soccer");
-  if (!found?.idLeague) return null;
+  if (!found?.idLeague) {
+    const byCountry = await fetchJson(`${SPORTSDB_BASE}/search_all_leagues.php?c=${encodeURIComponent(text)}`).catch(() => null);
+    const countryFound = (byCountry?.countries || []).find((row) => String(row?.strSport || "").toLowerCase() === "soccer");
+    if (!countryFound?.idLeague) return null;
+    return {
+      key: normalizeLeagueText(countryFound.strLeague),
+      display: countryFound.strLeague,
+      sportsDbId: String(countryFound.idLeague),
+      espnCode: null,
+      aliases: [normalizeLeagueText(countryFound.strLeague), normalizeLeagueText(countryFound.strLeagueAlternate)].filter(Boolean),
+    };
+  }
   return {
     key: normalizeLeagueText(found.strLeague),
     display: found.strLeague,
@@ -550,11 +561,24 @@ const commands = [
       m.react("⚽");
       try {
         const all = await getSportsDbSoccerLeagues();
-        const matches = all.filter((row) => {
+        let matches = all.filter((row) => {
           const n1 = normalizeLeagueText(row.display);
           const n2 = normalizeLeagueText(row.altDisplay);
           return n1.includes(query) || query.includes(n1) || (n2 && (n2.includes(query) || query.includes(n2)));
         }).slice(0, 50);
+
+        if (!matches.length) {
+          const countryData = await fetchJson(`${SPORTSDB_BASE}/search_all_leagues.php?c=${encodeURIComponent(text)}`).catch(() => null);
+          matches = (countryData?.countries || [])
+            .filter((row) => String(row?.strSport || "").toLowerCase() === "soccer")
+            .map((row) => ({
+              sportsDbId: String(row.idLeague || "").trim(),
+              display: String(row.strLeague || "").trim(),
+              altDisplay: String(row.strLeagueAlternate || "").trim(),
+            }))
+            .filter((row) => row.sportsDbId && row.display)
+            .slice(0, 50);
+        }
 
         if (!matches.length) {
           return m.reply(`❌ No leagues found for "${text}".`);
