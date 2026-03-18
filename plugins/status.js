@@ -1,4 +1,6 @@
 const config = require("../config");
+const path = require("path");
+const { setEnvValue } = require("../lib/env-util");
 const { downloadMediaMessage, getContentType, jidNormalizedUser } = require("@whiskeysockets/baileys");
 
 function isAutoStatusViewEnabled() {
@@ -152,19 +154,27 @@ const commands = [
     owner: true,
     handler: async (sock, m, { text }) => {
       const mode = String(text || "").trim().toLowerCase();
+      const envPath = path.join(__dirname, "..", ".env");
+      let newValue = config.AUTO_STATUS_VIEW;
       if (!mode || mode === "toggle") {
-        config.AUTO_STATUS_VIEW = isAutoStatusViewEnabled() ? "off" : "on";
-        console.log(`[DESAM-STATUS] AUTO_STATUS_VIEW toggled ${String(config.AUTO_STATUS_VIEW).toUpperCase()} via statusview command.`);
-        return m.reply(`✅ Auto status view is now *${config.AUTO_STATUS_VIEW}*.`);
+        newValue = isAutoStatusViewEnabled() ? "off" : "on";
+        config.AUTO_STATUS_VIEW = newValue;
+        setEnvValue(envPath, "AUTO_STATUS_VIEW", newValue);
+        console.log(`[DESAM-STATUS] AUTO_STATUS_VIEW toggled ${String(newValue).toUpperCase()} via statusview command.`);
+        return m.reply(`✅ Auto status view is now *${newValue}* (persisted).`);
       }
       if (mode === "on") {
-        config.AUTO_STATUS_VIEW = "on";
+        newValue = "on";
+        config.AUTO_STATUS_VIEW = newValue;
+        setEnvValue(envPath, "AUTO_STATUS_VIEW", newValue);
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via statusview command.");
-        await m.reply("✅ Auto status view enabled. New statuses will be marked as seen automatically.");
+        await m.reply("✅ Auto status view enabled. New statuses will be marked as seen automatically. (persisted)");
       } else if (mode === "off") {
-        config.AUTO_STATUS_VIEW = "off";
+        newValue = "off";
+        config.AUTO_STATUS_VIEW = newValue;
+        setEnvValue(envPath, "AUTO_STATUS_VIEW", newValue);
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via statusview command.");
-        await m.reply("✅ Auto status view disabled.");
+        await m.reply("✅ Auto status view disabled. (persisted)");
       } else if (mode === "status" || mode === "state") {
         await m.reply(`ℹ️ Auto status view is currently *${config.AUTO_STATUS_VIEW || "off"}*.`);
       } else {
