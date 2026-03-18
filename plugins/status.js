@@ -1,8 +1,20 @@
 const config = require("../config");
-const { downloadMediaMessage, getContentType } = require("@whiskeysockets/baileys");
+const { downloadMediaMessage, getContentType, jidNormalizedUser } = require("@whiskeysockets/baileys");
 
 function isAutoStatusViewEnabled() {
   return String(config.AUTO_STATUS_VIEW || "off").toLowerCase() === "on";
+}
+
+function getOwnerJid(sock) {
+  const ownerNumber = String(config.OWNER_NUMBER || "").replace(/[^0-9]/g, "");
+  if (ownerNumber) return jidNormalizedUser(`${ownerNumber}@s.whatsapp.net`);
+  if (sock?.user?.id) return jidNormalizedUser(sock.user.id);
+  return "";
+}
+
+function getStatusSaveTargetChat(sock, m) {
+  if (m.chat !== "status@broadcast") return m.chat;
+  return getOwnerJid(sock) || m.sender || m.chat;
 }
 
 const commands = [
@@ -39,7 +51,7 @@ const commands = [
           : `Enable auto-view with ${config.PREFIX}statusview on or set AUTO_STATUS_VIEW=on in .env, then try again after a new status arrives.`;
         return m.reply(`📭 No recent statuses cached.\n\nAUTO_STATUS_VIEW is currently: *${autoViewState}*\n${guidance}`);
       }
-      const targetChat = m.chat === "status@broadcast" ? m.sender : m.chat;
+      const targetChat = getStatusSaveTargetChat(sock, m);
       const arg0 = String(args[0] || "").toLowerCase();
       const orderedEntries = [...statusCache.entries()].sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0));
       if (arg0 === "list") {
@@ -93,10 +105,10 @@ const commands = [
           const mediaOpts = {};
           if (type === "imageMessage") {
             mediaOpts.image = buffer;
-            mediaOpts.caption = `📡 Status from *${data.pushName}*`;
+            mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
           } else if (type === "videoMessage") {
             mediaOpts.video = buffer;
-            mediaOpts.caption = `📡 Status from *${data.pushName}*`;
+            mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
           } else {
             mediaOpts.audio = buffer;
             mediaOpts.mimetype = "audio/mp4";
@@ -134,12 +146,17 @@ const commands = [
     },
   },
   {
-    name: ["setstatusview", "statusview", "autoview", "autostatusview"],
+    name: ["setstatusview", "statusview", "autoview", "autostatusview", "autostatus"],
     category: "status",
     desc: "Toggle auto-viewing of statuses",
     owner: true,
     handler: async (sock, m, { text }) => {
       const mode = String(text || "").trim().toLowerCase();
+      if (!mode || mode === "toggle") {
+        config.AUTO_STATUS_VIEW = isAutoStatusViewEnabled() ? "off" : "on";
+        console.log(`[DESAM-STATUS] AUTO_STATUS_VIEW toggled ${String(config.AUTO_STATUS_VIEW).toUpperCase()} via statusview command.`);
+        return m.reply(`✅ Auto status view is now *${config.AUTO_STATUS_VIEW}*.`);
+      }
       if (mode === "on") {
         config.AUTO_STATUS_VIEW = "on";
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via statusview command.");
@@ -148,8 +165,10 @@ const commands = [
         config.AUTO_STATUS_VIEW = "off";
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via statusview command.");
         await m.reply("✅ Auto status view disabled.");
+      } else if (mode === "status" || mode === "state") {
+        await m.reply(`ℹ️ Auto status view is currently *${config.AUTO_STATUS_VIEW || "off"}*.`);
       } else {
-        await m.reply(`Usage: ${config.PREFIX}autoview on/off\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);
+        await m.reply(`Usage: ${config.PREFIX}autoview on/off/toggle\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);
       }
     },
   },
