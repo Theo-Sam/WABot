@@ -29,7 +29,11 @@ const commands = [
       console.log(`[DESAM-STATUS] Status retrieval requested by ${m.sender} | cached_records=${statusCache?.size || 0}`);
       if (!quotedStatusData && (!statusCache || statusCache.size === 0)) {
         console.log("[DESAM-STATUS] Status retrieval returned empty cache.");
-        return m.reply("📭 No recent statuses cached.\n\nEnable auto-view first: set AUTO_STATUS_VIEW=on in .env or use statusview on.");
+        const autoViewState = String(config.AUTO_STATUS_VIEW || "off").toLowerCase() === "on" ? "on" : "off";
+        const guidance = autoViewState === "on"
+          ? "Auto-view is already ON. Ask a contact to post a new status, wait a few seconds, then run statusdl list again."
+          : `Enable auto-view with ${config.PREFIX}statusview on or set AUTO_STATUS_VIEW=on in .env, then try again after a new status arrives.`;
+        return m.reply(`📭 No recent statuses cached.\n\nAUTO_STATUS_VIEW is currently: *${autoViewState}*\n${guidance}`);
       }
       const targetChat = m.chat === "status@broadcast" ? m.sender : m.chat;
       if (args[0] === "list") {

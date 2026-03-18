@@ -95,7 +95,7 @@ module.exports = {
   OWNER_NUMBER: process.env.OWNER_NUMBER || "",
   TIMEZONE: process.env.TIMEZONE || "Africa/Accra",
   AUTO_READ: process.env.AUTO_READ || "off",
-  AUTO_STATUS_VIEW: process.env.AUTO_STATUS_VIEW || "off",
+  AUTO_STATUS_VIEW: process.env.AUTO_STATUS_VIEW || "on",
   ANTI_CALL: process.env.ANTI_CALL || "off",
   ANTI_CALL_MSG: process.env.ANTI_CALL_MSG || "❌ Calls are not allowed. This bot rejects all calls.",
   AUTO_BIO: process.env.AUTO_BIO || "off",

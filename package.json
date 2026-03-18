@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "doctor": "node scripts/doctor.js",
+    "verify:status-cache": "node scripts/verify-status-cache.js",
     "backup:state": "node scripts/backup-state.js",
     "restore:state": "node scripts/restore-state.js",
     "start:24x7": "pm2 start ecosystem.config.cjs --only wabot",

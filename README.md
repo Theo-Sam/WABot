@@ -60,7 +60,7 @@ Edit `.env` with your settings:
 | `TIMEZONE`         | Timezone for time-based features             | `Africa/Accra`                       |
 | `SQLITE_PATH`      | SQLite database file path                    | `./data/bot.db`                      |
 | `AUTO_READ`        | Auto-read incoming messages                  | `off`                                |
-| `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses                  | `off`                                |
+| `AUTO_STATUS_VIEW` | Auto-view WhatsApp statuses                  | `on`                                 |
 | `ANTI_CALL`        | Reject incoming calls automatically          | `on`                                 |
 | `CHATBOT`          | Enable AI chatbot mode                       | `off`                                |
 | `BROWSER_VERSION`  | WhatsApp Web browser version identity        | `120.0.0`                            |
