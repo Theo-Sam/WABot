@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, isUrl, tempFile, pickNonRepeating } = require("../lib/helpers");
+const { fetchJson, fetchBuffer, isUrl, extractUrls, tempFile, pickNonRepeating } = require("../lib/helpers");
 const fs = require("fs");
 const axios = require("axios");
 const play = require("play-dl");
@@ -71,7 +71,7 @@ async function ytDownloadVideo(url) {
 }
 
 async function igDownload(url) {
-  const cleanUrl = url.split("?")[0].replace(/\/$/, "");
+  const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "");
 
   // 1. cobalt.tools — open-source, most reliable
   try {
@@ -147,7 +147,60 @@ async function igDownload(url) {
     }
   } catch {}
 
+  // 6. ddinstagram HTML fallback (often survives API outages)
+  try {
+    const ddUrl = cleanUrl
+      .replace(/^https?:\/\/(www\.)?instagram\.com/i, "https://ddinstagram.com")
+      .replace(/^https?:\/\/instagr\.am/i, "https://ddinstagram.com");
+    const res = await axios.get(ddUrl, {
+      timeout: 20000,
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    const html = String(res.data || "");
+    const mediaMatch =
+      html.match(/<meta[^>]+property=["']og:video["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+    const mediaUrl = mediaMatch?.[1];
+    if (mediaUrl && /^https?:\/\//i.test(mediaUrl)) {
+      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+      if (buf?.length > 1000) {
+        const isImage = /og:image/i.test(mediaMatch?.[0] || "") || /\.(jpe?g|png|webp)(\?|$)/i.test(mediaUrl);
+        return { buffer: buf, type: isImage ? "image" : "video" };
+      }
+    }
+  } catch {}
+
   return null;
+}
+
+function normalizeInputUrl(raw) {
+  const cleaned = String(raw || "")
+    .replace(/[\u200B-\u200F\uFEFF\u2060]/g, "")
+    .trim()
+    .replace(/^<|>$/g, "")
+    .replace(/[),.!?;]+$/g, "");
+
+  if (!cleaned) return "";
+  if (/^https?:\/\//i.test(cleaned)) return cleaned;
+  if (/^(www\.)?[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(cleaned)) return `https://${cleaned}`;
+  return cleaned;
+}
+
+function resolveInputUrl(text, m) {
+  const direct = normalizeInputUrl(text);
+  if (direct && isUrl(direct)) return direct;
+
+  const fromText = extractUrls(String(text || ""))[0];
+  if (fromText) return normalizeInputUrl(fromText);
+
+  const quotedBody = String(m?.quoted?.body || "");
+  const fromQuoted = extractUrls(quotedBody)[0];
+  if (fromQuoted) return normalizeInputUrl(fromQuoted);
+
+  return "";
 }
 
 async function fbDownload(url) {
@@ -356,7 +409,8 @@ const commands = [
     category: "download",
     desc: "Download TikTok video",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}tiktok <TikTok URL>`);
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tiktok <TikTok URL>`);
       m.react("⏳");
       try {
         let videoBuffer = null;
@@ -364,7 +418,7 @@ const commands = [
         try {
           const res = await axios.post(
             "https://api.cobalt.tools/api/json",
-            { url: text },
+            { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
           const d = res.data;
@@ -375,7 +429,7 @@ const commands = [
         // 2. tikwm (fallback)
         if (!videoBuffer || videoBuffer.length < 1000) {
           try {
-            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text, hd: 1 }), { timeout: 15000 });
+            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
             const playUrl = data.data?.data?.hdplay || data.data?.data?.play;
             if (playUrl) videoBuffer = await fetchBuffer(playUrl);
           } catch {}
@@ -394,20 +448,21 @@ const commands = [
     category: "download",
     desc: "Download TikTok audio",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}tta <TikTok URL>`);
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tta <TikTok URL>`);
       m.react("⏳");
       try {
         let audioBuffer = null;
         // 1. tikwm background music
         try {
-          const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text }), { timeout: 15000 });
+          const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl }), { timeout: 15000 });
           const musicUrl = data.data?.data?.music;
           if (musicUrl) audioBuffer = await fetchBuffer(musicUrl);
         } catch {}
         // 2. tikwm play audio fallback
         if (!audioBuffer || audioBuffer.length < 1000) {
           try {
-            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: text, hd: 1 }), { timeout: 15000 });
+            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
             const playUrl = data.data?.data?.play;
             if (playUrl) audioBuffer = await fetchBuffer(playUrl);
           } catch {}
@@ -426,11 +481,12 @@ const commands = [
     category: "download",
     desc: "Download Instagram post/reel",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
-      if (!/instagram\.com|instagr\.am/i.test(text)) return m.reply("❌ Please provide a valid Instagram URL.");
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
+      if (!/instagram\.com|instagr\.am/i.test(targetUrl)) return m.reply("❌ Please provide a valid Instagram URL.");
       m.react("⏳");
       try {
-        const result = await igDownload(text);
+        const result = await igDownload(targetUrl);
         if (!result) return m.reply("❌ Could not download Instagram media. The link may be private, expired, or the download servers are busy. Try again shortly.");
         const { buffer, type } = result;
         const caption = `📸 Instagram Download\n\n_${config.BOT_NAME}_`;
@@ -451,11 +507,12 @@ const commands = [
     category: "download",
     desc: "Download Facebook video",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
-      if (!/facebook\.com|fb\.watch|fb\.com/i.test(text)) return m.reply("❌ Please provide a valid Facebook URL.");
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
+      if (!/facebook\.com|fb\.watch|fb\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Facebook URL.");
       m.react("⏳");
       try {
-        let videoBuffer = await fbDownload(text);
+        let videoBuffer = await fbDownload(targetUrl);
         if (!videoBuffer) return m.reply("❌ Could not download Facebook video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📘 Facebook Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -470,11 +527,12 @@ const commands = [
     category: "download",
     desc: "Download Twitter/X video",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
-      if (!/twitter\.com|x\.com/i.test(text)) return m.reply("❌ Please provide a valid Twitter/X URL.");
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
+      if (!/twitter\.com|x\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Twitter/X URL.");
       m.react("⏳");
       try {
-        let videoBuffer = await twitterDownload(text);
+        let videoBuffer = await twitterDownload(targetUrl);
         if (!videoBuffer) return m.reply("❌ Could not download Twitter video. The download servers may be busy.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🐦 Twitter/X Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -489,18 +547,19 @@ const commands = [
     category: "download",
     desc: "Download Spotify track",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}spotify <Spotify URL>`);
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}spotify <Spotify URL>`);
       m.react("⏳");
       try {
-        if (!isUrl(text)) return m.reply("❌ Please provide a Spotify URL.");
+        if (!/spotify\.com/i.test(targetUrl)) return m.reply("❌ Please provide a Spotify URL.");
         let audioBuffer = null;
         try {
-          const trackMatch = text.match(/track\/([a-zA-Z0-9]+)/);
+          const trackMatch = targetUrl.match(/track\/([a-zA-Z0-9]+)/);
           if (trackMatch) {
             // Get track title via Spotify oEmbed (no auth required)
             let searchQuery = "";
             try {
-              const oembed = await fetchJson(`https://open.spotify.com/oembed?url=${encodeURIComponent(text)}`, { timeout: 10000 });
+              const oembed = await fetchJson(`https://open.spotify.com/oembed?url=${encodeURIComponent(targetUrl)}`, { timeout: 10000 });
               if (oembed?.title) searchQuery = oembed.title;
             } catch {}
             if (!searchQuery) {
@@ -572,11 +631,12 @@ const commands = [
     category: "download",
     desc: "Download from MediaFire",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}mediafire <MediaFire URL>`);
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}mediafire <MediaFire URL>`);
       m.react("⏳");
       try {
-        if (!/^https?:\/\/(www\.)?mediafire\.com\//i.test(text)) return m.reply("❌ Please provide a valid MediaFire URL.");
-        const html = await axios.get(text, { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" }, maxRedirects: 3 });
+        if (!/^https?:\/\/(www\.)?mediafire\.com\//i.test(targetUrl)) return m.reply("❌ Please provide a valid MediaFire URL.");
+        const html = await axios.get(targetUrl, { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" }, maxRedirects: 3 });
         const match = html.data?.match(/href="(https:\/\/download[^"]+)"/);
         if (!match?.[1]) return m.reply("❌ Could not extract download link from MediaFire.");
         const buffer = await fetchBuffer(match[1]);
@@ -689,10 +749,11 @@ const commands = [
     category: "download",
     desc: "Download from Google Drive",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}gdrive <Google Drive URL>`);
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}gdrive <Google Drive URL>`);
       m.react("⏳");
       try {
-        const match = text.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        const match = targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
         if (!match) return m.reply("❌ Invalid Google Drive URL.");
         const fileId = match[1];
         const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
@@ -710,8 +771,9 @@ const commands = [
     category: "download",
     desc: "Download from SoundCloud",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}soundcloud <SoundCloud URL>`);
-      if (!/soundcloud\.com/i.test(text)) return m.reply("❌ Please provide a valid SoundCloud URL.");
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}soundcloud <SoundCloud URL>`);
+      if (!/soundcloud\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid SoundCloud URL.");
       m.react("⏳");
       try {
         let audioBuffer = null;
@@ -719,7 +781,7 @@ const commands = [
         try {
           const res = await axios.post(
             "https://api.cobalt.tools/api/json",
-            { url: text },
+            { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
           const d = res.data;
@@ -731,7 +793,7 @@ const commands = [
         if (!audioBuffer || audioBuffer.length < 1000) {
           try {
             const res = await fetchJson(
-              `https://api.scdl.cc/resolve?url=${encodeURIComponent(text)}`,
+              `https://api.scdl.cc/resolve?url=${encodeURIComponent(targetUrl)}`,
               { timeout: 15000 }
             );
             const dlUrl = res?.download_url || res?.stream_url;
@@ -752,7 +814,8 @@ const commands = [
     category: "download",
     desc: "Download Reddit video/image",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}reddit <Reddit URL>`);
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}reddit <Reddit URL>`);
       m.react("⏳");
       try {
         let mediaBuffer = null;
@@ -761,7 +824,7 @@ const commands = [
         try {
           const res = await axios.post(
             "https://api.cobalt.tools/api/json",
-            { url: text },
+            { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
           const d = res.data;
@@ -776,7 +839,7 @@ const commands = [
         // 2. Reddit JSON API fallback
         if (!mediaBuffer || mediaBuffer.length < 1000) {
           try {
-            const jsonUrl = text.replace(/\/?$/, ".json");
+            const jsonUrl = targetUrl.replace(/\/?$/, ".json");
             const data = await fetchJson(jsonUrl);
             const post = data?.[0]?.data?.children?.[0]?.data;
             if (post) {

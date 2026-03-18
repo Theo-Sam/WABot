@@ -1,6 +1,10 @@
 const config = require("../config");
 const { downloadMediaMessage, getContentType } = require("@whiskeysockets/baileys");
 
+function isAutoStatusViewEnabled() {
+  return String(config.AUTO_STATUS_VIEW || "off").toLowerCase() === "on";
+}
+
 const commands = [
   {
     name: ["statusdl", "statussave", "savestatus", "dlstatus", "save", "savestory", "storysave"],
@@ -29,18 +33,20 @@ const commands = [
       console.log(`[DESAM-STATUS] Status retrieval requested by ${m.sender} | cached_records=${statusCache?.size || 0}`);
       if (!quotedStatusData && (!statusCache || statusCache.size === 0)) {
         console.log("[DESAM-STATUS] Status retrieval returned empty cache.");
-        const autoViewState = String(config.AUTO_STATUS_VIEW || "off").toLowerCase() === "on" ? "on" : "off";
+        const autoViewState = isAutoStatusViewEnabled() ? "on" : "off";
         const guidance = autoViewState === "on"
           ? "Auto-view is already ON. Ask a contact to post a new status, wait a few seconds, then run statusdl list again."
           : `Enable auto-view with ${config.PREFIX}statusview on or set AUTO_STATUS_VIEW=on in .env, then try again after a new status arrives.`;
         return m.reply(`📭 No recent statuses cached.\n\nAUTO_STATUS_VIEW is currently: *${autoViewState}*\n${guidance}`);
       }
       const targetChat = m.chat === "status@broadcast" ? m.sender : m.chat;
-      if (args[0] === "list") {
+      const arg0 = String(args[0] || "").toLowerCase();
+      const orderedEntries = [...statusCache.entries()].sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0));
+      if (arg0 === "list") {
         let list = `📡 *Recent Statuses*\n`;
-        list += `Total cached: ${statusCache.size}\n\n`;
+        list += `Total cached: ${orderedEntries.length}\n\n`;
         let i = 1;
-        for (const [id, data] of statusCache) {
+        for (const [, data] of orderedEntries) {
           const name = data.pushName || data.sender?.split("@")[0] || "Unknown";
           const typeLabel = data.type?.replace("Message", "") || "text";
           const ago = Math.floor((Date.now() - data.timestamp) / 60000);
@@ -51,21 +57,20 @@ const commands = [
         return m.reply(list);
       }
 
-      let index = statusCache.size - 1;
-      if (args[0] && args[0] !== "latest") {
-        index = parseInt(args[0], 10) - 1;
-        if (isNaN(index) || index < 0 || index >= statusCache.size) {
+      let index = orderedEntries.length - 1;
+      if (arg0 && arg0 !== "latest") {
+        index = parseInt(arg0, 10) - 1;
+        if (isNaN(index) || index < 0 || index >= orderedEntries.length) {
           return m.reply("❌ Invalid number. Use list to pick a valid status or use 'latest'.");
         }
       }
       m.react("⏳");
       try {
         let data;
-        if (quotedStatusData && (!args[0] || args[0] === "latest")) {
+        if (quotedStatusData && (!arg0 || arg0 === "latest")) {
           data = quotedStatusData;
         } else {
-          const entries = [...statusCache.entries()];
-          const [, selectedData] = entries[index];
+          const [, selectedData] = orderedEntries[index] || [];
           data = selectedData;
         }
 
@@ -73,7 +78,7 @@ const commands = [
           return m.reply("❌ Could not find a status to save.");
         }
 
-        const type = data.type;
+        const type = data.type || getContentType(data.message) || Object.keys(data.message || {})[0];
         if (type === "conversation" || type === "extendedTextMessage") {
           const text = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
           await sock.sendMessage(targetChat, { text: `📡 *Status from ${data.pushName || "Unknown"}*\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
@@ -114,11 +119,12 @@ const commands = [
     desc: "Toggle auto-react to statuses",
     owner: true,
     handler: async (sock, m, { text }) => {
-      if (text === "on") {
+      const mode = String(text || "").trim().toLowerCase();
+      if (mode === "on") {
         config.AUTO_STATUS_REACT = "on";
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled ON via command.");
         await m.reply("✅ Auto status react enabled. The bot will react to viewed statuses.");
-      } else if (text === "off") {
+      } else if (mode === "off") {
         config.AUTO_STATUS_REACT = "off";
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled OFF via command.");
         await m.reply("✅ Auto status react disabled.");
@@ -133,11 +139,12 @@ const commands = [
     desc: "Toggle auto-viewing of statuses",
     owner: true,
     handler: async (sock, m, { text }) => {
-      if (text === "on") {
+      const mode = String(text || "").trim().toLowerCase();
+      if (mode === "on") {
         config.AUTO_STATUS_VIEW = "on";
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via statusview command.");
         await m.reply("✅ Auto status view enabled. New statuses will be marked as seen automatically.");
-      } else if (text === "off") {
+      } else if (mode === "off") {
         config.AUTO_STATUS_VIEW = "off";
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via statusview command.");
         await m.reply("✅ Auto status view disabled.");
