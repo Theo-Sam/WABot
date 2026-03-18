@@ -26,7 +26,9 @@ const commands = [
       } catch {
         return m.reply("❌ Status cache not available.");
       }
+      console.log(`[DESAM-STATUS] Status retrieval requested by ${m.sender} | cached_records=${statusCache?.size || 0}`);
       if (!quotedStatusData && (!statusCache || statusCache.size === 0)) {
+        console.log("[DESAM-STATUS] Status retrieval returned empty cache.");
         return m.reply("📭 No recent statuses cached.\n\nEnable auto-view first: set AUTO_STATUS_VIEW=on in .env or use statusview on.");
       }
       const targetChat = m.chat === "status@broadcast" ? m.sender : m.chat;
@@ -110,9 +112,11 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         config.AUTO_STATUS_REACT = "on";
+        console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled ON via command.");
         await m.reply("✅ Auto status react enabled. The bot will react to viewed statuses.");
       } else if (text === "off") {
         config.AUTO_STATUS_REACT = "off";
+        console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled OFF via command.");
         await m.reply("✅ Auto status react disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}statusreact on/off\nCurrent: ${config.AUTO_STATUS_REACT || "off"}`);
@@ -127,9 +131,11 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         config.AUTO_STATUS_VIEW = "on";
+        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via statusview command.");
         await m.reply("✅ Auto status view enabled. New statuses will be marked as seen automatically.");
       } else if (text === "off") {
         config.AUTO_STATUS_VIEW = "off";
+        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via statusview command.");
         await m.reply("✅ Auto status view disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}autoview on/off\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);

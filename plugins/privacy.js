@@ -84,9 +84,11 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (text === "on") {
         config.AUTO_STATUS_VIEW = "on";
+        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via autostatus command.");
         await m.reply("✅ Auto-status view enabled. New statuses will be marked as seen.");
       } else if (text === "off") {
         config.AUTO_STATUS_VIEW = "off";
+        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via autostatus command.");
         await m.reply("✅ Auto-status view disabled.");
       } else {
         await m.reply(`Usage: ${config.PREFIX}autostatus on/off\nCurrent: ${config.AUTO_STATUS_VIEW}`);
