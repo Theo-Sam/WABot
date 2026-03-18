@@ -15,9 +15,31 @@ const commands = [
       if (isNaN(amount)) return m.reply("Invalid amount.");
       m.react("💱");
       try {
-        const data = await fetchJson(`https://api.exchangerate-api.com/v4/latest/${from}`);
-        if (!data?.rates?.[to]) return m.reply(`❌ Invalid currency code. Example: USD, EUR, GBP, GHS, NGN, KES`);
-        const rate = data.rates[to];
+        let rate = null;
+
+        const data = await fetchJson(`https://api.exchangerate-api.com/v4/latest/${from}`).catch(() => null);
+        if (data?.rates?.[to]) {
+          rate = Number(data.rates[to]);
+        }
+
+        if (!rate) {
+          const frankfurter = await fetchJson(`https://api.frankfurter.app/latest?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).catch(() => null);
+          if (frankfurter?.rates?.[to]) {
+            rate = Number(frankfurter.rates[to]);
+          }
+        }
+
+        if (!rate) {
+          const exchangerateHost = await fetchJson(`https://api.exchangerate.host/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&amount=1`).catch(() => null);
+          if (Number.isFinite(Number(exchangerateHost?.result))) {
+            rate = Number(exchangerateHost.result);
+          }
+        }
+
+        if (!rate || !Number.isFinite(rate)) {
+          return m.reply(`❌ Invalid currency code or provider unavailable. Example: USD, EUR, GBP, GHS, NGN, KES`);
+        }
+
         const result = (amount * rate).toFixed(2);
         const reverseRate = (1 / rate).toFixed(6);
         let msg = `💱 *Currency Converter*\n\n`;
@@ -445,9 +467,9 @@ const commands = [
       m.react("🔢");
       try {
         const [triviaData, mathData, yearData] = await Promise.all([
-          fetchJson(`http://numbersapi.com/${num}/trivia?json`).catch(() => null),
-          fetchJson(`http://numbersapi.com/${num}/math?json`).catch(() => null),
-          fetchJson(`http://numbersapi.com/${num}/year?json`).catch(() => null),
+          fetchJson(`https://numbersapi.com/${num}/trivia?json`).catch(() => null),
+          fetchJson(`https://numbersapi.com/${num}/math?json`).catch(() => null),
+          fetchJson(`https://numbersapi.com/${num}/year?json`).catch(() => null),
         ]);
 
         let msg = `🔢 *Number Facts*\n\n`;
@@ -456,6 +478,12 @@ const commands = [
         if (triviaData?.text) msg += `📌 *Trivia:* ${triviaData.text}\n\n`;
         if (mathData?.text) msg += `🧮 *Math:* ${mathData.text}\n\n`;
         if (yearData?.text) msg += `📅 *Year:* ${yearData.text}\n\n`;
+
+        if (!triviaData?.text && !mathData?.text && !yearData?.text) {
+          msg += `📌 *Trivia:* ${num} is ${num % 2 === 0 ? "an even" : "an odd"} number.\n\n`;
+          msg += `🧮 *Math:* Square = ${num * num}, Cube = ${num * num * num}.\n\n`;
+          msg += `📅 *Year:* ${num} in Roman numerals is ${toRoman(Math.max(1, Math.min(num, 3999)))}.\n\n`;
+        }
 
         msg += `*Properties*\n`;
         msg += `${num % 2 === 0 ? "Even" : "Odd"} number\n`;
@@ -495,5 +523,22 @@ const commands = [
     },
   },
 ];
+
+function toRoman(value) {
+  const map = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+  ];
+  let n = value;
+  let out = "";
+  for (const [k, s] of map) {
+    while (n >= k) {
+      out += s;
+      n -= k;
+    }
+  }
+  return out;
+}
 
 module.exports = { commands };

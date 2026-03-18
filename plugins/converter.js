@@ -278,7 +278,7 @@ const commands = [
     },
   },
   {
-    name: ["flipimg", "imgflip", "vflip", "flip"],
+    name: ["flipimg", "imgflip", "vflip"],
     category: "media",
     desc: "Flip image vertically",
     handler: async (sock, m) => {

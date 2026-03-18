@@ -1,12 +1,11 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, isUrl, extractUrls, tempFile, pickNonRepeating } = require("../lib/helpers");
+const { fetchJson, fetchBuffer, postJson, isUrl, extractUrls, tempFile, pickNonRepeating } = require("../lib/helpers");
 const fs = require("fs");
 const axios = require("axios");
 const play = require("play-dl");
 
 const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
-  "https://invidious.fdn.fr",
   "https://vid.puffyan.us",
   "https://invidious.nerdvpn.de",
 ];
@@ -75,12 +74,11 @@ async function igDownload(url) {
 
   // 1. cobalt.tools — open-source, most reliable
   try {
-    const res = await axios.post(
+    const d = await postJson(
       "https://api.cobalt.tools/api/json",
       { url: cleanUrl },
       { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
     );
-    const d = res.data;
     if ((d.status === "redirect" || d.status === "stream") && d.url) {
       const buf = await fetchBuffer(d.url, { timeout: 60000 });
       if (buf?.length > 1000) return { buffer: buf, type: "video" };
@@ -92,84 +90,32 @@ async function igDownload(url) {
     }
   } catch {}
 
-  // 2. saveig.app
+  // 2. fastdl.app
   try {
-    const res = await axios.get(
-      `https://saveig.app/api/?url=${encodeURIComponent(cleanUrl)}`,
-      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } }
-    );
-    const item = res.data?.data?.[0] || res.data?.results?.[0];
-    if (item?.url) {
-      const buf = await fetchBuffer(item.url, { timeout: 60000 });
-      if (buf?.length > 1000) return { buffer: buf, type: item.type === "image" ? "image" : "video" };
-    }
-  } catch {}
-
-  // 3. fastdl.app
-  try {
-    const res = await axios.post(
+    const data = await postJson(
       "https://fastdl.app/api/convert",
       new URLSearchParams({ url: cleanUrl }),
       { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded" } }
     );
-    const dlUrl = res.data?.url || res.data?.result?.[0]?.url;
+    const dlUrl = data?.url || data?.result?.[0]?.url;
     if (dlUrl) {
       const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
       if (buf?.length > 1000) return { buffer: buf, type: "video" };
     }
   } catch {}
 
-  // 4. igdownloader.app
+  // 3. sssinstagram (scraper fallback)
   try {
-    const res = await axios.get(
-      `https://api.igdownloader.app/api/v1/download?url=${encodeURIComponent(cleanUrl)}`,
-      { timeout: 15000 }
-    );
-    const item = res.data?.data?.[0];
-    if (item?.url) {
-      const buf = await fetchBuffer(item.url, { timeout: 60000 });
-      if (buf?.length > 1000) return { buffer: buf, type: item.type === "GraphImage" ? "image" : "video" };
-    }
-  } catch {}
-
-  // 5. sssinstagram (scraper fallback)
-  try {
-    const res = await axios.post(
+    const data = await postJson(
       "https://sssinstagram.com/api/convert",
       new URLSearchParams({ q: cleanUrl }),
       { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded" } }
     );
-    const items = res.data?.data || res.data?.medias || [];
+    const items = data?.data || data?.medias || [];
     const item = items[0];
     if (item?.url) {
       const buf = await fetchBuffer(item.url, { timeout: 60000 });
       if (buf?.length > 1000) return { buffer: buf, type: item.type === "image" ? "image" : "video" };
-    }
-  } catch {}
-
-  // 6. ddinstagram HTML fallback (often survives API outages)
-  try {
-    const ddUrl = cleanUrl
-      .replace(/^https?:\/\/(www\.)?instagram\.com/i, "https://ddinstagram.com")
-      .replace(/^https?:\/\/instagr\.am/i, "https://ddinstagram.com");
-    const res = await axios.get(ddUrl, {
-      timeout: 20000,
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
-    const html = String(res.data || "");
-    const mediaMatch =
-      html.match(/<meta[^>]+property=["']og:video["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
-    const mediaUrl = mediaMatch?.[1];
-    if (mediaUrl && /^https?:\/\//i.test(mediaUrl)) {
-      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-      if (buf?.length > 1000) {
-        const isImage = /og:image/i.test(mediaMatch?.[0] || "") || /\.(jpe?g|png|webp)(\?|$)/i.test(mediaUrl);
-        return { buffer: buf, type: isImage ? "image" : "video" };
-      }
     }
   } catch {}
 
@@ -206,12 +152,11 @@ function resolveInputUrl(text, m) {
 async function fbDownload(url) {
   // 1. cobalt.tools
   try {
-    const res = await axios.post(
+    const d = await postJson(
       "https://api.cobalt.tools/api/json",
       { url },
       { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
     );
-    const d = res.data;
     if ((d.status === "redirect" || d.status === "stream") && d.url) {
       const buf = await fetchBuffer(d.url, { timeout: 60000 });
       if (buf?.length > 1000) return buf;
@@ -220,38 +165,11 @@ async function fbDownload(url) {
 
   // 2. fdown.net
   try {
-    const res = await axios.get(
+    const data = await fetchJson(
       `https://fdown.net/api/v1?url=${encodeURIComponent(url)}`,
       { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } }
     );
-    const dlUrl = res.data?.hd_url || res.data?.sd_url || res.data?.url;
-    if (dlUrl) {
-      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
-      if (buf?.length > 1000) return buf;
-    }
-  } catch {}
-
-  // 3. fbdownloader.app (original)
-  try {
-    const res = await axios.get(
-      `https://api.fbdownloader.app/api/v1/download?url=${encodeURIComponent(url)}`,
-      { timeout: 15000 }
-    );
-    const dlUrl = res.data?.data?.hd || res.data?.data?.sd;
-    if (dlUrl) {
-      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
-      if (buf?.length > 1000) return buf;
-    }
-  } catch {}
-
-  // 4. getfvid
-  try {
-    const res = await axios.post(
-      "https://getfvid.com/api/convert",
-      new URLSearchParams({ url }),
-      { timeout: 15000, headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Mozilla/5.0" } }
-    );
-    const dlUrl = res.data?.hd || res.data?.sd || res.data?.links?.[0]?.url;
+    const dlUrl = data?.hd_url || data?.sd_url || data?.url;
     if (dlUrl) {
       const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
       if (buf?.length > 1000) return buf;
@@ -264,12 +182,11 @@ async function fbDownload(url) {
 async function twitterDownload(url) {
   // 1. cobalt.tools
   try {
-    const res = await axios.post(
+    const d = await postJson(
       "https://api.cobalt.tools/api/json",
       { url },
       { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
     );
-    const d = res.data;
     if ((d.status === "redirect" || d.status === "stream") && d.url) {
       const buf = await fetchBuffer(d.url, { timeout: 60000 });
       if (buf?.length > 1000) return buf;
@@ -321,7 +238,7 @@ function formatVideoMeta(item = {}) {
 
 const commands = [
   {
-    name: ["play", "song", "music", "p", "m", "s"],
+    name: ["play", "song", "music", "p", "m"],
     category: "download",
     desc: "Play/download a song from YouTube",
     handler: async (sock, m, { text }) => {
@@ -416,12 +333,11 @@ const commands = [
         let videoBuffer = null;
         // 1. cobalt.tools
         try {
-          const res = await axios.post(
+          const d = await postJson(
             "https://api.cobalt.tools/api/json",
             { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
-          const d = res.data;
           if ((d.status === "redirect" || d.status === "stream") && d.url) {
             videoBuffer = await fetchBuffer(d.url, { timeout: 60000 });
           }
@@ -429,8 +345,8 @@ const commands = [
         // 2. tikwm (fallback)
         if (!videoBuffer || videoBuffer.length < 1000) {
           try {
-            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
-            const playUrl = data.data?.data?.hdplay || data.data?.data?.play;
+            const data = await postJson("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
+            const playUrl = data?.data?.hdplay || data?.data?.play;
             if (playUrl) videoBuffer = await fetchBuffer(playUrl);
           } catch {}
         }
@@ -455,15 +371,15 @@ const commands = [
         let audioBuffer = null;
         // 1. tikwm background music
         try {
-          const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl }), { timeout: 15000 });
-          const musicUrl = data.data?.data?.music;
+          const data = await postJson("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl }), { timeout: 15000 });
+          const musicUrl = data?.data?.music;
           if (musicUrl) audioBuffer = await fetchBuffer(musicUrl);
         } catch {}
         // 2. tikwm play audio fallback
         if (!audioBuffer || audioBuffer.length < 1000) {
           try {
-            const data = await axios.post("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
-            const playUrl = data.data?.data?.play;
+            const data = await postJson("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
+            const playUrl = data?.data?.play;
             if (playUrl) audioBuffer = await fetchBuffer(playUrl);
           } catch {}
         }
@@ -563,11 +479,9 @@ const commands = [
               if (oembed?.title) searchQuery = oembed.title;
             } catch {}
             if (!searchQuery) {
-              // Fallback: try spotifydown metadata
-              try {
-                const meta = await fetchJson(`https://api.spotifydown.com/metadata/track/${trackMatch[1]}`, { timeout: 10000 });
-                if (meta?.title) searchQuery = `${meta.title} ${meta.artists || ""}`;
-              } catch {}
+              // Fallback: derive a searchable title from URL path when metadata APIs are unavailable.
+              const slug = targetUrl.split("/track/")[1]?.split("?")[0] || "";
+              if (slug) searchQuery = slug.replace(/[-_]+/g, " ");
             }
             if (searchQuery) {
               const results = await play.search(searchQuery, { limit: 1, source: { youtube: "video" } }).catch(() => []);
@@ -779,27 +693,15 @@ const commands = [
         let audioBuffer = null;
         // 1. cobalt.tools
         try {
-          const res = await axios.post(
+          const d = await postJson(
             "https://api.cobalt.tools/api/json",
             { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
-          const d = res.data;
           if ((d.status === "redirect" || d.status === "stream") && d.url) {
             audioBuffer = await fetchBuffer(d.url, { timeout: 60000 });
           }
         } catch {}
-        // 2. scdl API fallback
-        if (!audioBuffer || audioBuffer.length < 1000) {
-          try {
-            const res = await fetchJson(
-              `https://api.scdl.cc/resolve?url=${encodeURIComponent(targetUrl)}`,
-              { timeout: 15000 }
-            );
-            const dlUrl = res?.download_url || res?.stream_url;
-            if (dlUrl) audioBuffer = await fetchBuffer(dlUrl, { timeout: 60000 });
-          } catch {}
-        }
         if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download SoundCloud track. The link may be private or the servers are busy.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -822,12 +724,11 @@ const commands = [
         let isVideo = true;
         // 1. cobalt.tools
         try {
-          const res = await axios.post(
+          const d = await postJson(
             "https://api.cobalt.tools/api/json",
             { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
-          const d = res.data;
           if ((d.status === "redirect" || d.status === "stream") && d.url) {
             mediaBuffer = await fetchBuffer(d.url, { timeout: 60000 });
           }

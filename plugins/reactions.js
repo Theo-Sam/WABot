@@ -26,7 +26,7 @@ const commands = [
     },
   },
   {
-    name: ["copy", "c"],
+    name: ["copy"],
     category: "misc",
     desc: "Copy text from replied message",
     handler: async (sock, m) => {

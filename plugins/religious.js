@@ -122,17 +122,42 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}quran <surah>:<ayah>\nExample: ${config.PREFIX}quran 1:1\n${config.PREFIX}quran 2:255`);
       m.react("📖");
       try {
-        const [surah, ayah] = text.split(":");
-        if (!surah || !ayah) return m.reply("Format: surah:ayah (e.g., 2:255)");
-        const data = await fetchJson(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/editions/quran-uthmani,en.sahih`);
-        if (!data?.data || data.data.length < 2) return m.reply("❌ Verse not found.");
-        const arabic = data.data[0];
-        const english = data.data[1];
+        const cleaned = String(text || "").trim();
+        const pair = cleaned.includes(":")
+          ? cleaned.split(":")
+          : cleaned.split(/\s+/);
+        const surah = Number.parseInt(pair[0], 10);
+        const ayah = Number.parseInt(pair[1], 10);
+
+        if (!Number.isFinite(surah) || !Number.isFinite(ayah)) {
+          return m.reply("Format: surah:ayah (e.g., 2:255) or surah ayah (e.g., 2 255)");
+        }
+        if (surah < 1 || surah > 114 || ayah < 1 || ayah > 286) {
+          return m.reply("❌ Invalid verse reference. Surah must be 1-114 and ayah must be a positive number.");
+        }
+
+        const bundled = await fetchJson(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/editions/quran-uthmani,en.sahih`).catch(() => null);
+        let arabic = bundled?.data?.find((x) => x?.edition?.identifier === "quran-uthmani") || bundled?.data?.[0] || null;
+        let english = bundled?.data?.find((x) => x?.edition?.identifier === "en.sahih") || bundled?.data?.[1] || null;
+
+        if (!arabic) {
+          const arRes = await fetchJson(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/quran-uthmani`).catch(() => null);
+          arabic = arRes?.data || null;
+        }
+        if (!english) {
+          const enRes = await fetchJson(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/en.sahih`).catch(() => null);
+          english = enRes?.data || null;
+        }
+
+        if (!arabic && !english) return m.reply("❌ Verse not found.");
+        const refSurahNameEn = arabic?.surah?.englishName || english?.surah?.englishName || `Surah ${surah}`;
+        const refSurahNameAr = arabic?.surah?.name || "";
+        const refAyah = arabic?.numberInSurah || english?.numberInSurah || ayah;
         let msg = `📖 *Al-Quran*\n\n`;
-        msg += `📌 *Surah ${arabic.surah.englishName} (${arabic.surah.name}) - Ayah ${arabic.numberInSurah}*\n\n`;
-        msg += `${arabic.text}\n\n`;
-        msg += `*Translation:*\n${english.text}\n\n`;
-        msg += `_Surah ${arabic.surah.number}, Ayah ${arabic.numberInSurah}_`;
+        msg += `📌 *${refSurahNameEn}${refSurahNameAr ? ` (${refSurahNameAr})` : ""} - Ayah ${refAyah}*\n\n`;
+        if (arabic?.text) msg += `${arabic.text}\n\n`;
+        if (english?.text) msg += `*Translation:*\n${english.text}\n\n`;
+        msg += `_Surah ${surah}, Ayah ${refAyah}_`;
         await m.reply(msg);
         m.react("✅");
       } catch {

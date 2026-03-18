@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchBuffer, fetchJson, isUrl, pickNonRepeating } = require("../lib/helpers");
+const { fetchBuffer, fetchJson, postJson, postBuffer, isUrl, pickNonRepeating } = require("../lib/helpers");
 
 const fallbackMemes = [
   { title: "When code works on first run", subtitle: "Everyone acts normal, but inside you're shocked.", subreddit: "programmerhumor" },
@@ -42,11 +42,10 @@ const commands = [
       try {
         const buffer = await media.download();
         const FormData = require("form-data");
-        const axios = require("axios");
         const form = new FormData();
         form.append("file", buffer, { filename: "qr.png", contentType: "image/png" });
-        const res = await axios.post("https://api.qrserver.com/v1/read-qr-code/", form, { headers: form.getHeaders(), timeout: 15000 });
-        const data = res.data?.[0]?.symbol?.[0]?.data;
+        const res = await postJson("https://api.qrserver.com/v1/read-qr-code/", form, { headers: form.getHeaders(), timeout: 15000 });
+        const data = res?.[0]?.symbol?.[0]?.data;
         if (!data) return m.reply("❌ No QR code detected.");
         await m.reply(`📱 *QR Code Content*\n\n${data}`);
         m.react("✅");
@@ -202,15 +201,13 @@ const commands = [
       if (!code) return m.reply(`Usage: ${config.PREFIX}carbon <code> or reply to a message`);
       m.react("⏳");
       try {
-        const axios = require("axios");
-        const res = await axios.post("https://carbonara.solopov.dev/api/cook", {
+        const buffer = await postBuffer("https://carbonara.solopov.dev/api/cook", {
           code: code,
           theme: "one-dark",
           fontFamily: "JetBrains Mono",
           fontSize: "14px",
           padding: "32px",
-        }, { responseType: "arraybuffer", timeout: 30000 });
-        const buffer = Buffer.from(res.data);
+        }, { timeout: 30000 });
         await sock.sendMessage(m.chat, { image: buffer, caption: "💻 *Code Snippet*" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {

@@ -1,6 +1,5 @@
 const config = require("../config");
-const { fetchJson, fetchBuffer, sendImageOrText, replyLongText } = require("../lib/helpers");
-const axios = require("axios");
+const { fetchJson, fetchBuffer, postJson, sendImageOrText, replyLongText } = require("../lib/helpers");
 
 async function fetchWallpaperBuffer(query) {
   const seed = Date.now();
@@ -27,7 +26,6 @@ async function fetchWallpaperBuffer(query) {
 
 const INVIDIOUS_INSTANCES = [
   "https://inv.nadeko.net",
-  "https://invidious.fdn.fr",
   "https://vid.puffyan.us",
   "https://invidious.nerdvpn.de",
 ];
@@ -486,8 +484,8 @@ const commands = [
       m.react("🎌");
       try {
         const query = `query ($search: String) { Media (search: $search, type: ANIME) { id title { romaji english native } episodes duration status season seasonYear averageScore meanScore popularity favourites genres tags { name rank } description(asHtml: false) coverImage { large } bannerImage startDate { year month day } endDate { year month day } studios { nodes { name isAnimationStudio } } source format countryOfOrigin isAdult siteUrl nextAiringEpisode { episode airingAt } rankings { rank type context } } }`;
-        const res = await axios.post("https://graphql.anilist.co", { query, variables: { search: text } }, { timeout: 15000 });
-        const anime = res.data?.data?.Media;
+        const data = await postJson("https://graphql.anilist.co", { query, variables: { search: text } }, { timeout: 15000 });
+        const anime = data?.data?.Media;
         if (!anime) return m.reply("❌ Anime not found.");
 
         let msg = `🎌 *Anime Info*\n\n`;
@@ -575,8 +573,8 @@ const commands = [
       m.react("📖");
       try {
         const query = `query ($search: String) { Media (search: $search, type: MANGA) { id title { romaji english native } chapters volumes status averageScore meanScore popularity favourites genres tags { name rank } description(asHtml: false) coverImage { large } startDate { year month day } endDate { year month day } staff { nodes { name { full } } } source format countryOfOrigin isAdult siteUrl rankings { rank type context } } }`;
-        const res = await axios.post("https://graphql.anilist.co", { query, variables: { search: text } }, { timeout: 15000 });
-        const manga = res.data?.data?.Media;
+        const data = await postJson("https://graphql.anilist.co", { query, variables: { search: text } }, { timeout: 15000 });
+        const manga = data?.data?.Media;
         if (!manga) return m.reply("❌ Manga not found.");
 
         let msg = `📖 *Manga Info*\n\n`;

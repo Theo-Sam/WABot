@@ -100,7 +100,7 @@ const commands = [
     },
   },
   {
-    name: ["couple", "ship", "match"],
+    name: ["couple", "match"],
     category: "fun",
     group: true,
     desc: "Match two group members for compatibility",

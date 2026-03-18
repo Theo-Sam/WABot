@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, normalizeAiText } = require("../lib/helpers");
+const { fetchJson, postJson, normalizeAiText } = require("../lib/helpers");
 const axios = require("axios");
 const sharp = require("sharp");
 
@@ -24,11 +24,11 @@ async function pollinate(prompt, persona = "openai") {
     content: "Reply in clean WhatsApp chat style. Use short paragraphs. Avoid markdown tables and avoid decorative formatting.",
   });
   messages.push({ role: "user", content: prompt });
-  const res = await axios.post("https://text.pollinations.ai/openai", {
+  const data = await postJson("https://text.pollinations.ai/openai", {
     model: "openai",
     messages,
   }, { timeout: 60000, headers: { "Content-Type": "application/json" } });
-  const answer = res.data?.choices?.[0]?.message?.content;
+  const answer = data?.choices?.[0]?.message?.content;
   if (!answer || answer.length < 2) throw new Error("empty");
   return normalizeAiText(answer, { keepLightFormatting: true });
 }
@@ -226,7 +226,7 @@ const commands = [
     },
   },
   {
-    name: ["dalle", "imagine", "generateimage", "imgai", "img", "draw"],
+    name: ["dalle", "imagine", "generateimage", "imgai", "draw"],
     category: "ai",
     desc: "Generate image with AI",
     handler: async (sock, m, { text }) => {

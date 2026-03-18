@@ -102,7 +102,7 @@ const commands = [
     },
   },
   {
-    name: ["weather", "wea"],
+    name: ["wea", "wthr"],
     category: "tools",
     desc: "Get weather info for a city",
     handler: async (sock, m, { text }) => {
@@ -138,10 +138,26 @@ const commands = [
     handler: async (sock, m) => {
       m.react("⏳");
       try {
-        const data = await fetchJson("https://api.quotable.io/random");
-        const author = data?.author || "Unknown";
-        const content = data?.content || "No quote text available.";
-        const tags = Array.isArray(data?.tags) && data.tags.length ? data.tags.slice(0, 3).join(", ") : "general";
+        let author = "Unknown";
+        let content = "No quote text available.";
+        let tags = "general";
+
+        const zen = await fetchJson("https://zenquotes.io/api/random").catch(() => null);
+        if (Array.isArray(zen) && zen[0]?.q) {
+          content = zen[0].q;
+          author = zen[0].a || author;
+          tags = "inspiration";
+        } else {
+          const data = await fetchJson("https://dummyjson.com/quotes/random").catch(() => null);
+          if (data?.quote) {
+            author = data.author || author;
+            content = data.quote;
+            tags = "general";
+          } else {
+            throw new Error("quote providers unavailable");
+          }
+        }
+
         const len = String(content).length;
         await m.reply(`📜 *Daily Quote*\n\n"${content}"\n\n— _${author}_\n🏷️ Tags: ${tags}\n📏 Length: ${len} chars`);
         m.react("✅");
