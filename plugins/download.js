@@ -1,6 +1,9 @@
 const config = require("../config");
 const { fetchJson, fetchBuffer, postJson, isUrl, extractUrls, tempFile, pickNonRepeating } = require("../lib/helpers");
 const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const { execFile } = require("child_process");
 const axios = require("axios");
 const play = require("play-dl");
 const { endpoints } = require("../lib/endpoints");
@@ -66,38 +69,125 @@ async function ytDownloadVideo(url) {
   return null;
 }
 
-const { getPost } = require('insta-fetcher');
-
+/**
+ * Download Instagram post/reel using yt-dlp (primary) and igApi with session (fallback).
+ * Set INSTAGRAM_SESSION=<your sessionid cookie value> in .env for private/restricted content.
+ */
 async function igDownload(url) {
-  try {
-    const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "");
-    try {
-      const d = await postJson(
-        endpoints.download.cobaltApiJson,
-        { url: cleanUrl },
-        { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
-      );
-      if ((d.status === "redirect" || d.status === "stream") && d.url) {
-        const buf = await fetchBuffer(d.url, { timeout: 60000 });
-        if (buf?.length > 1000) return { buffer: buf, type: 'video' };
-      }
-      if (d.status === "picker" && d.picker?.length) {
-        const buf = await fetchBuffer(d.picker[0].url, { timeout: 60000 });
-        if (buf?.length > 1000) return { buffer: buf, type: d.picker[0].type === 'photo' ? 'image' : 'video' };
-      }
-    } catch {}
+  const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "") + "/";
 
-    const { getPost } = require('insta-fetcher');
-    const data = await getPost(cleanUrl);
-    if (data && data.media && data.media.length > 0) {
-      const mediaItem = data.media[0];
-      const buf = await fetchBuffer(mediaItem.url, { timeout: 60000 });
-      if (buf?.length > 1000) {
-        return { buffer: buf, type: mediaItem.type === 'image' ? 'image' : 'video' };
-      }
-    }
+  // 1. yt-dlp (primary — most reliable, works for public content)
+  try {
+    const result = await igDownloadYtDlp(cleanUrl);
+    if (result) return result;
   } catch (err) {
-    console.error('[igDownload] error:', err);
+    console.error('[igDownload] yt-dlp error:', err.message);
+  }
+
+  // 2. igApi with session cookie (fallback — works if INSTAGRAM_SESSION is set)
+  const sessionCookie = process.env.INSTAGRAM_SESSION;
+  if (sessionCookie) {
+    try {
+      const result = await igDownloadWithSession(cleanUrl, sessionCookie);
+      if (result) return result;
+    } catch (err) {
+      console.error('[igDownload] igApi error:', err.message);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Use yt-dlp binary to download Instagram media.
+ * Requires INSTAGRAM_SESSION env variable (your Instagram sessionid cookie).
+ * Writes to a temp file, reads the buffer, then cleans up.
+ */
+function igDownloadYtDlp(url) {
+  return new Promise((resolve) => {
+    const sessionCookie = process.env.INSTAGRAM_SESSION;
+    if (!sessionCookie) {
+      resolve(null);
+      return;
+    }
+
+    const tmpDir = os.tmpdir();
+    const uniqueId = `ig_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const outTemplate = path.join(tmpDir, `${uniqueId}.%(ext)s`);
+    const cookieFile = path.join(tmpDir, `${uniqueId}_cookies.txt`);
+
+    // Write Netscape-format cookie file that yt-dlp accepts.
+    // Domain MUST start with '.' when the flag column is TRUE (include_subdomains).
+    const expires = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+    const cookieContent = [
+      '# Netscape HTTP Cookie File',
+      `.instagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${sessionCookie}`,
+      `.cdninstagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${sessionCookie}`,
+    ].join('\n');
+
+    try {
+      fs.writeFileSync(cookieFile, cookieContent);
+    } catch (e) {
+      console.error('[igDownload] Could not write cookie file:', e.message);
+      resolve(null);
+      return;
+    }
+
+    const args = [
+      '--quiet',
+      '--no-warnings',
+      '--no-playlist',
+      '--cookies', cookieFile,
+      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      '--merge-output-format', 'mp4',
+      '-o', outTemplate,
+      url,
+    ];
+
+    execFile('yt-dlp', args, { timeout: 90000 }, (err) => {
+      try { fs.unlinkSync(cookieFile); } catch {}
+
+      if (err && err.killed) {
+        console.error('[igDownload] yt-dlp timed out');
+        resolve(null);
+        return;
+      }
+
+      let found = null;
+      try {
+        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(uniqueId));
+        if (files.length > 0) {
+          const filePath = path.join(tmpDir, files[0]);
+          const buffer = fs.readFileSync(filePath);
+          try { fs.unlinkSync(filePath); } catch {}
+          const ext = path.extname(files[0]).toLowerCase();
+          const type = ['.mp4', '.mov', '.webm', '.mkv', '.avi'].includes(ext) ? 'video' : 'image';
+          if (buffer.length > 1000) found = { buffer, type };
+        }
+      } catch (readErr) {
+        console.error('[igDownload] yt-dlp file read error:', readErr.message);
+      }
+
+      resolve(found);
+    });
+  });
+}
+
+/**
+ * Use insta-fetcher igApi with a session cookie to download Instagram media.
+ * Requires INSTAGRAM_SESSION env variable to be set.
+ */
+async function igDownloadWithSession(url, sessionCookie) {
+  const { igApi } = require('insta-fetcher');
+  const ig = new igApi(sessionCookie);
+  const data = await ig.fetchPost(url);
+  if (!data || !data.media || data.media.length === 0) return null;
+  const mediaItem = data.media[0];
+  const mediaUrl = mediaItem.url || mediaItem.src;
+  if (!mediaUrl) return null;
+  const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+  if (buf?.length > 1000) {
+    return { buffer: buf, type: mediaItem.type === 'image' ? 'image' : 'video' };
   }
   return null;
 }
@@ -353,7 +443,12 @@ const commands = [
       m.react("⏳");
       try {
         const result = await igDownload(targetUrl);
-        if (!result) return m.reply("❌ Could not download Instagram media. The link may be private, expired, or the download servers are busy. Try again shortly.");
+        if (!result) {
+          const hint = process.env.INSTAGRAM_SESSION
+            ? "❌ Could not download. The post may be private, age-restricted, or removed."
+            : "❌ Could not download. Instagram requires login for most content.\n\nTo enable downloads, add your Instagram session cookie to the bot's settings:\n*INSTAGRAM_SESSION=<your sessionid value>*\n\n_Get it from your browser's cookies at instagram.com_";
+          return m.reply(hint);
+        }
         const { buffer, type } = result;
         const caption = `📸 Instagram Download\n\n_${config.BOT_NAME}_`;
         if (type === "image") {
