@@ -1,11 +1,14 @@
 const config = require("../config");
 const { fetchJson, fetchBuffer, postJson, sendImageOrText, replyLongText } = require("../lib/helpers");
+const { endpoints } = require("../lib/endpoints");
+
+const endpointsConfig = endpoints;
 
 async function fetchWallpaperBuffer(query) {
   const seed = Date.now();
   const prompt = encodeURIComponent(`beautiful wallpaper 4k ${query}`);
   const endpoints = [
-    `https://source.unsplash.com/random/1920x1080/?${encodeURIComponent(query)}`,
+    `${endpointsConfig.images.unsplashRandom}/1920x1080/?${encodeURIComponent(query)}`,
     `https://image.pollinations.ai/prompt/${prompt}?model=flux&width=1920&height=1080&nologo=true&seed=${seed}`,
     `https://image.pollinations.ai/prompt/${prompt}?model=turbo&width=1920&height=1080&nologo=true&seed=${seed + 1}`,
     `https://image.pollinations.ai/prompt/${prompt}?width=1920&height=1080&nologo=true&seed=${seed + 2}`,
@@ -24,18 +27,9 @@ async function fetchWallpaperBuffer(query) {
   return null;
 }
 
-const INVIDIOUS_INSTANCES = [
-  "https://inv.nadeko.net",
-  "https://vid.puffyan.us",
-  "https://invidious.nerdvpn.de",
-];
+const INVIDIOUS_INSTANCES = endpointsConfig.youtube.invidiousInstances;
 
-const SEARXNG_INSTANCES = [
-  "https://searx.be",
-  "https://search.sapti.me",
-  "https://searx.tiekoetter.com",
-  "https://search.ononoki.org",
-];
+const SEARXNG_INSTANCES = endpointsConfig.search.searxngInstances;
 
 async function searxSearch(query, categories = "general") {
   for (const inst of SEARXNG_INSTANCES) {
@@ -57,84 +51,52 @@ const commands = [
       m.react("🔍");
       try {
         const results = await searxSearch(text);
-        if (!results.length) {
-          try {
-            const ddg = await fetchJson(`https://api.duckduckgo.com/?q=${encodeURIComponent(text)}&format=json&no_html=1`);
-            if (ddg?.RelatedTopics?.length) {
-              let msg = `🔍 *Search Results for:* ${text}\n\n`;
-              ddg.RelatedTopics.slice(0, 7).forEach((r, i) => {
-                if (r.Text && r.FirstURL) {
-                  msg += `${i + 1}. ${r.Text}\n🔗 ${r.FirstURL}\n\n`;
-                }
-              });
-              msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-              await m.reply(msg);
-              try {
-                // Use open search fallback (searxng)
-                const results = await searxSearch(text);
-                if (!results.length) {
-                  return m.reply("\u23f3 No search results found. Try a different query.");
-                }
-                let msg = `\ud83d\udd0d *Search Results*\n\n`;
-                msg += `\ud83d\udd0e Query: *${text}*\n`;
-                msg += `\ud83d\udcca Showing top ${Math.min(results.length, 7)} results\n\n`;
-                results.slice(0, 7).forEach((r, i) => {
-                  msg += `*${i + 1}. ${r.title || "Untitled"}*\n`;
-                  if (r.content) msg += `${r.content.substring(0, 300)}\n`;
-                  if (r.url) msg += `\ud83d\udd17 ${r.url}\n`;
-                  if (r.engine) msg += `\ud83d\udd27 Source: ${r.engine}\n`;
-                  msg += `\n`;
-                });
-                msg += `_${config.BOT_NAME} | Powered by Desam Tech_ \u26a1`;
-                await replyLongText(m, msg);
-                m.react("\u2705");
-              } catch {
-                m.react("\u274c");
-                await m.reply("\u23f3 The search API is currently overloaded. Please try again later!");
-              }
-        ]);
-        if (!data?.extract) return m.reply("⏳ No Wikipedia article found or the API is busy.");
-
-        let fullExtract = "";
-        if (fullExtractData?.query?.pages) {
-          const pageContent = Object.values(fullExtractData.query.pages);
-          fullExtract = pageContent[0]?.extract || "";
-        }
-        if (!fullExtract) fullExtract = data.extract || "";
-
-        let msg = `📚 *Wikipedia*\n\n`;
-        msg += `📖 *${data.title}*\n`;
-        if (data.description) msg += `📝 _${data.description}_\n`;
-        msg += `\n`;
-        if (data.type) msg += `📂 Type: ${data.type}\n`;
-        if (data.timestamp) msg += `📅 Last Updated: ${new Date(data.timestamp).toLocaleDateString()}\n`;
-        if (data.coordinates) msg += `📍 Coordinates: ${data.coordinates.lat}, ${data.coordinates.lon}\n`;
-
-        if (catData?.query?.pages) {
-          const pages = Object.values(catData.query.pages);
-          const cats = pages[0]?.categories?.map(c => c.title?.replace("Category:", "")).filter(Boolean) || [];
-          if (cats.length) msg += `🏷️ Categories: ${cats.join(", ")}\n`;
+        if (results.length) {
+          let msg = `🔎 *Search Results*\n\n`;
+          msg += `🔎 Query: *${text}*\n`;
+          msg += `📊 Showing top ${Math.min(results.length, 7)} results\n\n`;
+          results.slice(0, 7).forEach((r, i) => {
+            msg += `*${i + 1}. ${r.title || "Untitled"}*\n`;
+            if (r.content) msg += `${String(r.content).substring(0, 300)}\n`;
+            if (r.url) msg += `🔗 ${r.url}\n`;
+            if (r.engine) msg += `🔧 Source: ${r.engine}\n`;
+            msg += `\n`;
+          });
+          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          await replyLongText(m, msg);
+          m.react("✅");
+          return;
         }
 
-        msg += `\n`;
-        msg += fullExtract.substring(0, 4000);
-        if (fullExtract.length > 4000) msg += "\n\n_(article truncated — read full article below)_";
-        if (data.content_urls?.desktop?.page) msg += `\n\n🔗 *Read More:* ${data.content_urls.desktop.page}`;
-        if (data.content_urls?.mobile?.page) msg += `\n📱 *Mobile:* ${data.content_urls.mobile.page}`;
-        msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        if (data.thumbnail?.source) {
-          const imgBuf = await fetchBuffer(data.thumbnail.source).catch(() => null);
-          if (imgBuf) {
-            await sendImageOrText(sock, m.chat, imgBuf, msg, m);
-            m.react("✅");
-            return;
+        // Fallback: DuckDuckGo Instant Answer API (stable, no key)
+        const ddg = await fetchJson(`https://api.duckduckgo.com/?q=${encodeURIComponent(text)}&format=json&no_html=1`).catch(() => null);
+        const topics = Array.isArray(ddg?.RelatedTopics) ? ddg.RelatedTopics : [];
+        const flat = [];
+        for (const t of topics) {
+          if (t?.Text && t?.FirstURL) flat.push({ text: t.Text, url: t.FirstURL });
+          if (Array.isArray(t?.Topics)) {
+            for (const s of t.Topics) {
+              if (s?.Text && s?.FirstURL) flat.push({ text: s.Text, url: s.FirstURL });
+            }
           }
         }
+        if (!flat.length) {
+          m.react("❌");
+          return m.reply("⏳ No search results found. Try a different query.");
+        }
+        let msg = `🔎 *Search Results*\n\n`;
+        msg += `🔎 Query: *${text}*\n\n`;
+        flat.slice(0, 7).forEach((r, i) => {
+          msg += `${i + 1}. ${r.text}\n🔗 ${r.url}\n\n`;
+        });
+        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await replyLongText(m, msg);
         m.react("✅");
+        return;
+
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Wikipedia API is currently overloaded. Please try again later!");
+        await m.reply("⏳ The search API is currently overloaded. Please try again later!");
       }
     },
   },
@@ -417,18 +379,11 @@ const commands = [
           const item = itunes?.results?.[0];
 
           if (!item) {
-            const omdbKey = process.env.OMDB_API_KEY || "";
-            if (!omdbKey) return m.reply("❌ Movie not found. You can set OMDB_API_KEY for an additional source.");
-            const data = await fetchJson(`https://www.omdbapi.com/?t=${encodeURIComponent(text)}&plot=full&apikey=${encodeURIComponent(omdbKey)}`);
-            if (data?.Response === "False") return m.reply("❌ Movie not found.");
-            posterUrl = data.Poster && data.Poster !== "N/A" ? data.Poster : "";
-            msg += `🎬 *${data.Title || text}* (${data.Year || "N/A"})\n\n`;
-            if (data.Genre && data.Genre !== "N/A") msg += `🎭 Genre: ${data.Genre}\n`;
-            if (data.Runtime && data.Runtime !== "N/A") msg += `⏱️ Runtime: ${data.Runtime}\n`;
-            if (data.imdbRating && data.imdbRating !== "N/A") msg += `⭐ IMDb: ${data.imdbRating}/10\n`;
-            if (data.Plot && data.Plot !== "N/A") msg += `\n📝 ${data.Plot}\n`;
-            if (data.imdbID) msg += `\n🔗 https://www.imdb.com/title/${data.imdbID}`;
-            msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+            return m.reply(
+              "❌ Movie not found via free sources.\n\n" +
+              "This bot is in *no-key* mode, so OMDb (requires API key) is disabled.\n" +
+              `Try a different title, or rely on TVMaze/iTunes results when available.`
+            );
           } else {
             posterUrl = item.artworkUrl100 ? item.artworkUrl100.replace("100x100bb", "600x600bb") : "";
             msg += `🎬 *${item.trackName || text}*\n\n`;
@@ -657,7 +612,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}weather <city>`);
       m.react("🌤️");
       try {
-        const data = await fetchJson(`https://wttr.in/${encodeURIComponent(text)}?format=j1`);
+        const data = await fetchJson(`${endpointsConfig.weather.wttrBase}/${encodeURIComponent(text)}?format=j1`);
         if (!data?.current_condition?.[0]) return m.reply("❌ City not found.");
         const c = data.current_condition[0];
         const area = data.nearest_area?.[0];
@@ -700,90 +655,40 @@ const commands = [
       m.react("📰");
       try {
         const query = text || "world";
-        let articles = [];
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+        const xml = await fetchJson(rssUrl, { timeout: 15000, responseType: "text" }).catch(() => "");
+        const source = "Google News RSS";
 
-        const gnewsKey = (process.env.GNEWS_API_KEY || "").trim();
-        const currentsKey = (process.env.CURRENTS_API_KEY || "").trim();
+        const decodeXml = (s) =>
+          String(s || "")
+            .replace(/<!\\[CDATA\\[|\\]\\]>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">");
 
-        const tasks = [];
-        const labels = [];
-
-        if (gnewsKey) {
-          tasks.push(fetchJson(`https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=10&token=${encodeURIComponent(gnewsKey)}`));
-          labels.push("gnews");
+        const items = [];
+        const itemMatches = String(xml).match(/<item>[\s\S]*?<\/item>/g) || [];
+        for (const block of itemMatches.slice(0, 10)) {
+          const title = decodeXml(block.match(/<title>([\s\S]*?)<\/title>/)?.[1]).trim();
+          const link = decodeXml(block.match(/<link>([\s\S]*?)<\/link>/)?.[1]).trim();
+          const pubDate = decodeXml(block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]).trim();
+          if (!title || !link) continue;
+          items.push({ title, url: link, publishedAt: pubDate, source });
         }
 
-        if (currentsKey) {
-          tasks.push(fetchJson(`https://api.currentsapi.services/v1/search?keywords=${encodeURIComponent(query)}&language=en&apiKey=${encodeURIComponent(currentsKey)}`));
-          labels.push("currents");
-        }
-
-        tasks.push(fetchJson(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent("https://news.google.com/rss/search?q=" + encodeURIComponent(query))}&count=10`));
-        labels.push("rss");
-
-        const results = await Promise.allSettled(tasks);
-
-        const byLabel = {};
-        labels.forEach((label, idx) => {
-          byLabel[label] = results[idx];
-        });
-
-        if (byLabel.gnews?.status === "fulfilled" && byLabel.gnews.value?.articles?.length) {
-          articles = byLabel.gnews.value.articles;
-        }
-
-        if (!articles.length && byLabel.currents?.status === "fulfilled" && byLabel.currents.value?.news?.length) {
-          articles = byLabel.currents.value.news.map(item => ({
-            title: item.title,
-            description: item.description || "",
-            url: item.url,
-            source: { name: item.author || "Currents" },
-            author: item.author,
-            publishedAt: item.published,
-            category: Array.isArray(item.category) ? item.category.join(", ") : item.category,
-          }));
-        }
-
-        if (!articles.length && byLabel.rss?.status === "fulfilled" && byLabel.rss.value?.items?.length) {
-          articles = byLabel.rss.value.items.map(item => ({
-            title: item.title,
-            description: item.description?.replace(/<[^>]+>/g, "").substring(0, 400) || "",
-            url: item.link,
-            source: { name: item.author || "Google News" },
-            author: item.author,
-            publishedAt: item.pubDate,
-          }));
-        }
-
-        articles = articles.filter(a =>
-          a.title && a.title !== "[Removed]" &&
-          (!a.description || a.description !== "[Removed]") &&
-          (!a.url || !a.url.includes("[Removed]"))
-        );
-
-        if (!articles.length) return m.reply("❌ No news found. Try a different search term.");
+        if (!items.length) return m.reply("❌ No news found. Try a different search term.");
 
         let msg = `📰 *LATEST NEWS*\n\n`;
         msg += `🔎 Topic: *${query}*\n`;
         msg += `📅 ${new Date().toLocaleDateString()}\n\n`;
 
-        articles.forEach((a, i) => {
+        items.forEach((a, i) => {
           msg += `*${i + 1}. ${a.title}*\n`;
-          const sourceName = a.source?.name || a.source || "";
-          if (sourceName) msg += `📰 Source: ${sourceName}\n`;
-          if (a.author && a.author !== "[Removed]") msg += `✍️ Author: ${a.author}\n`;
-          if (a.publishedAt) {
-            const pubDate = new Date(a.publishedAt);
-            msg += `📅 Published: ${pubDate.toLocaleDateString()} ${pubDate.toLocaleTimeString()}\n`;
-          }
-          if (a.category) msg += `📂 Category: ${a.category}\n`;
-          if (a.description && a.description !== "[Removed]") {
-            msg += `📝 ${a.description}\n`;
-          }
-          if (a.content && a.content !== "[Removed]" && !a.description) {
-            msg += `📝 ${a.content}\n`;
-          }
-          if (a.url) msg += `🔗 ${a.url}\n`;
+          msg += `📰 Source: ${a.source}\n`;
+          if (a.publishedAt) msg += `📅 Published: ${a.publishedAt}\n`;
+          msg += `🔗 ${a.url}\n`;
           msg += `\n`;
         });
 
@@ -895,7 +800,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}ip <IP address>`);
       m.react("🌐");
       try {
-        const data = await fetchJson(`https://ipwhois.app/json/${text}`);
+        const data = await fetchJson(`${endpointsConfig.ip.ipWhoisBase}/${encodeURIComponent(text)}`);
         if (data?.success === false) return m.reply(`❌ ${data.message || "Invalid IP address"}`);
 
         let msg = `🌐 *IP LOOKUP*\n\n`;

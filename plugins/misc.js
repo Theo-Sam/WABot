@@ -93,16 +93,8 @@ const commands = [
       if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}screenshot <URL>`);
       m.react("⏳");
       try {
-        const screenshotLayerKey = process.env.SCREENSHOTLAYER_ACCESS_KEY || "";
         const thumIoUrl = `https://image.thum.io/get/width/1920/noanimate/${text}`;
-        const layerUrl = screenshotLayerKey
-          ? `https://api.screenshotlayer.com/api/capture?access_key=${encodeURIComponent(screenshotLayerKey)}&url=${encodeURIComponent(text)}&viewport=1920x1080&fullpage=1&format=PNG`
-          : "";
-
-        const buffer = await Promise.any([
-          fetchBuffer(thumIoUrl),
-          ...(layerUrl ? [fetchBuffer(layerUrl)] : []),
-        ]).catch(() => null);
+        const buffer = await fetchBuffer(thumIoUrl).catch(() => null);
 
         if (!buffer) return m.reply("⏳ Screenshot service is currently busy. Try again later.");
         await sock.sendMessage(m.chat, { image: buffer, caption: `📸 *Screenshot*\n\n🔗 ${text}` }, { quoted: { key: m.key, message: m.message } });

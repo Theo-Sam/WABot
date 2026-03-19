@@ -1,9 +1,6 @@
 const config = require("../config");
 const { fetchBuffer, fetchJson } = require("../lib/helpers");
 
-const TENOR_API_KEY = process.env.TENOR_API_KEY || "LIVDSRZULELA";
-const GIPHY_API_KEY = process.env.GIPHY_API_KEY || "";
-
 const afkMap = new Map();
 
 function checkAfk(sock, m) {
@@ -45,14 +42,8 @@ const commands = [
         const emoji2 = emojis[1];
         let imgUrl = "";
 
-        if (TENOR_API_KEY) {
-          // Use open-source Emoji Kitchen API fallback (emojik.vercel.app)
-          imgUrl = `https://emojik.vercel.app/s/${encodeURIComponent(`${emoji1}_${emoji2}`)}?size=256`;
-        }
-
-        if (!imgUrl) {
-          imgUrl = `https://emojik.vercel.app/s/${encodeURIComponent(`${emoji1}_${emoji2}`)}?size=256`;
-        }
+        // No-key: open Emoji Kitchen renderer
+        imgUrl = `https://emojik.vercel.app/s/${encodeURIComponent(`${emoji1}_${emoji2}`)}?size=256`;
 
         const buffer = await fetchBuffer(imgUrl);
         const sharp = require("sharp");
@@ -76,18 +67,10 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}giphy <query>`);
       m.react("⏳");
       try {
-        let gifUrl = "";
-
-        const tenorUrl = `https://tenor.googleapis.com/v2/search?key=${encodeURIComponent(TENOR_API_KEY)}&q=${encodeURIComponent(text)}&limit=1&media_filter=gif`;
-        const tenorData = await fetchJson(tenorUrl).catch(() => null);
-        gifUrl = tenorData?.results?.[0]?.media_formats?.gif?.url || "";
-
-        if (!gifUrl && GIPHY_API_KEY) {
-          // Use open GIF search fallback (gif-search.vercel.app)
-          const gifApiUrl = `https://gif-search.vercel.app/api/search?q=${encodeURIComponent(text)}&limit=1`;
-          const gifData = await fetchJson(gifApiUrl).catch(() => null);
-          gifUrl = gifData?.results?.[0]?.url || "";
-        }
+        // No-key: use open GIF search
+        const gifApiUrl = `https://gif-search.vercel.app/api/search?q=${encodeURIComponent(text)}&limit=1`;
+        const gifData = await fetchJson(gifApiUrl).catch(() => null);
+        const gifUrl = gifData?.results?.[0]?.url || "";
 
         if (!gifUrl) return m.reply("❌ No GIF URL found.");
         const buffer = await fetchBuffer(gifUrl);

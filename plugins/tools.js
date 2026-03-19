@@ -1,5 +1,6 @@
 const config = require("../config");
-const { fetchBuffer, fetchJson, isUrl, parseMention, pickNonRepeating } = require("../lib/helpers");
+const { fetchBuffer, fetchJson, postJson, isUrl, parseMention, pickNonRepeating } = require("../lib/helpers");
+const { endpoints } = require("../lib/endpoints");
 
 const fallbackQuotes = [
   { text: "The only way to do great work is to love what you do.", author: "Steve Jobs", tag: "work" },
@@ -50,9 +51,35 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}tts <text>`);
       m.react("⏳");
       try {
-        const lang = "en";
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=tw-ob`;
-        const buffer = await fetchBuffer(url);
+        const lang = (process.env.TTS_LANG || "en").trim();
+        const googleKey = (process.env.GOOGLE_TTS_API_KEY || "").trim();
+
+        let buffer = null;
+        if (googleKey) {
+          const voiceName = (process.env.GOOGLE_TTS_VOICE || "").trim(); // optional
+          const body = {
+            input: { text },
+            voice: {
+              languageCode: lang,
+              ...(voiceName ? { name: voiceName } : {}),
+            },
+            audioConfig: { audioEncoding: "MP3" },
+          };
+          const data = await postJson(
+            `${endpoints.tts.googleCloudEndpoint}?key=${encodeURIComponent(googleKey)}`,
+            body,
+            { timeout: 20000, headers: { "Content-Type": "application/json" } }
+          ).catch(() => null);
+          if (data?.audioContent) {
+            buffer = Buffer.from(data.audioContent, "base64");
+          }
+        }
+
+        if (!buffer) {
+          const url = `${endpoints.tts.googleTranslateTtsBase}?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+          buffer = await fetchBuffer(url);
+        }
+
         await sock.sendMessage(m.chat, { audio: buffer, mimetype: "audio/mpeg", ptt: true }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
@@ -109,7 +136,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}weather <city>`);
       m.react("⏳");
       try {
-        const data = await fetchJson(`https://wttr.in/${encodeURIComponent(text)}?format=j1`);
+        const data = await fetchJson(`${endpoints.weather.wttrBase}/${encodeURIComponent(text)}?format=j1`);
         const cur = data.current_condition[0];
         const loc = data.nearest_area[0];
         const weather = `🌤️ *Weather for ${loc.areaName[0].value}, ${loc.country[0].value}*

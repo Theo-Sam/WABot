@@ -1,6 +1,30 @@
 const config = require("../config");
 const { fetchJson, fetchBuffer, sendImageOrText } = require("../lib/helpers");
+const { endpoints } = require("../lib/endpoints");
 const crypto = require("crypto");
+const os = require("os");
+
+function toRoman(value) {
+  const map = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+  ];
+  let n = value;
+  let out = "";
+  for (const [k, s] of map) {
+    while (n >= k) {
+      out += s;
+      n -= k;
+    }
+  }
+  return out;
+}
+
+async function resolveDns(domain, type) {
+  const url = `${endpoints.dns.googleResolveBase}?name=${encodeURIComponent(domain)}&type=${encodeURIComponent(type)}`;
+  return fetchJson(url).catch(() => null);
+}
 
 const commands = [
   {
@@ -12,32 +36,27 @@ const commands = [
       const amount = parseFloat(args[0]);
       const from = args[1].toUpperCase();
       const to = args[2].toUpperCase();
-      if (isNaN(amount)) return m.reply("Invalid amount.");
+      if (!Number.isFinite(amount)) return m.reply("Invalid amount.");
       m.react("💱");
       try {
         let rate = null;
 
-        const data = await fetchJson(`https://api.exchangerate-api.com/v4/latest/${from}`).catch(() => null);
-        if (data?.rates?.[to]) {
-          rate = Number(data.rates[to]);
-        }
+        const data = await fetchJson(`https://api.exchangerate-api.com/v4/latest/${encodeURIComponent(from)}`).catch(() => null);
+        if (data?.rates?.[to]) rate = Number(data.rates[to]);
 
         if (!rate) {
           const frankfurter = await fetchJson(`https://api.frankfurter.app/latest?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).catch(() => null);
-          if (frankfurter?.rates?.[to]) {
-            rate = Number(frankfurter.rates[to]);
-          }
+          if (frankfurter?.rates?.[to]) rate = Number(frankfurter.rates[to]);
         }
 
         if (!rate) {
-          const exchangerateHost = await fetchJson(`https://api.exchangerate.host/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&amount=1`).catch(() => null);
-          if (Number.isFinite(Number(exchangerateHost?.result))) {
-            rate = Number(exchangerateHost.result);
-          }
+          // Fallback: open.er-api.com (no key; subject to rate limits)
+          const er = await fetchJson(`https://open.er-api.com/v6/latest/${encodeURIComponent(from)}`).catch(() => null);
+          if (er?.result === "success" && er?.rates?.[to]) rate = Number(er.rates[to]);
         }
 
         if (!rate || !Number.isFinite(rate)) {
-          return m.reply(`❌ Invalid currency code or provider unavailable. Example: USD, EUR, GBP, GHS, NGN, KES`);
+          return m.reply("❌ Invalid currency code or provider unavailable. Example: USD, EUR, GBP, GHS, NGN, KES");
         }
 
         const result = (amount * rate).toFixed(2);
@@ -66,7 +85,7 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}country <country name>`);
       m.react("🌍");
       try {
-        const data = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`);
+        const data = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`).catch(() => null);
         if (!data?.[0]) return m.reply("❌ Country not found.");
         const c = data[0];
 
@@ -77,7 +96,7 @@ const commands = [
         if (c.name?.official) msg += `📛 Official: ${c.name.official}\n`;
         if (c.name?.nativeName) {
           const natives = Object.values(c.name.nativeName);
-          natives.forEach(n => {
+          natives.forEach((n) => {
             if (n.official) msg += `🏷️ Native: ${n.official} (${n.common})\n`;
           });
         }
@@ -109,44 +128,27 @@ const commands = [
         msg += `🏛️ UN Member: ${c.unMember ? "Yes ✅" : "No ❌"}\n`;
         msg += `🏛️ Independent: ${c.independent !== false ? "Yes ✅" : "No ❌"}\n`;
         if (c.currencies) {
-          const currencies = Object.entries(c.currencies).map(([code, cur]) =>
-            `${cur.name} (${cur.symbol || code})`
-          );
+          const currencies = Object.entries(c.currencies).map(([code, cur]) => `${cur.name} (${cur.symbol || code})`);
           msg += `💰 Currency: ${currencies.join(", ")}\n`;
-        }
-        if (c.gini) {
-          const giniEntries = Object.entries(c.gini);
-          if (giniEntries.length) msg += `📊 GINI Index: ${giniEntries[0][1]} (${giniEntries[0][0]})\n`;
         }
         msg += `\n`;
 
         msg += `*Practical Info*\n`;
         if (c.idd?.root) {
-          const suffixes = c.idd.suffixes?.slice(0, 3).map(s => c.idd.root + s).join(", ") || c.idd.root;
+          const suffixes = c.idd.suffixes?.slice(0, 3).map((s) => c.idd.root + s).join(", ") || c.idd.root;
           msg += `☎️ Calling Code: ${suffixes}\n`;
         }
         if (c.tld?.length) msg += `🔗 Domain: ${c.tld.join(", ")}\n`;
         msg += `🚗 Driving Side: ${c.car?.side === "right" ? "Right ➡️" : "Left ⬅️"}\n`;
-        if (c.car?.signs?.length) msg += `🚘 Car Signs: ${c.car.signs.join(", ")}\n`;
         if (c.timezones?.length) msg += `🕐 Timezones: ${c.timezones.join(", ")}\n`;
-        if (c.startOfWeek) msg += `📅 Week Starts: ${c.startOfWeek.charAt(0).toUpperCase() + c.startOfWeek.slice(1)}\n`;
-        if (c.postalCode?.format) msg += `📮 Postal Format: ${c.postalCode.format}\n`;
         msg += `\n`;
-
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
 
         const flagUrl = c.flags?.png;
-        const coatUrl = c.coatOfArms?.png;
         if (flagUrl) {
           const buf = await fetchBuffer(flagUrl).catch(() => null);
           if (buf) {
             await sendImageOrText(sock, m.chat, buf, msg, m);
-            if (coatUrl) {
-              const coatBuf = await fetchBuffer(coatUrl).catch(() => null);
-              if (coatBuf) {
-                await sendImageOrText(sock, m.chat, coatBuf, `🏛️ *Coat of Arms — ${c.name?.common}*`, m);
-              }
-            }
             m.react("✅");
             return;
           }
@@ -167,76 +169,49 @@ const commands = [
       if (args.length < 2) return m.reply(`Usage: ${config.PREFIX}bmi <weight_kg> <height_cm>\nExample: ${config.PREFIX}bmi 70 175`);
       const weight = parseFloat(args[0]);
       const heightCm = parseFloat(args[1]);
-      if (isNaN(weight) || isNaN(heightCm)) return m.reply("Invalid numbers.");
+      if (!Number.isFinite(weight) || !Number.isFinite(heightCm) || heightCm <= 0) return m.reply("Invalid numbers.");
       const heightM = heightCm / 100;
-      const bmi = (weight / (heightM * heightM)).toFixed(1);
-      try {
-        let rate = null;
-        // Use exchangerate.host (open, stable)
-        const exchangerateHost = await fetchJson(`https://api.exchangerate.host/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&amount=1`).catch(() => null);
-        if (Number.isFinite(Number(exchangerateHost?.result))) {
-          rate = Number(exchangerateHost.result);
-        }
-        if (!rate || !Number.isFinite(rate)) {
-          return m.reply(`\u274c Invalid currency code or provider unavailable. Example: USD, EUR, GBP, GHS, NGN, KES`);
-        }
-        const result = (amount * rate).toFixed(2);
-        const reverseRate = (1 / rate).toFixed(6);
-        let msg = `\ud83d\udcb1 *Currency Converter*\n\n`;
-        msg += `\ud83d\udcb5 ${amount.toLocaleString()} ${from}\n`;
-        msg += `\u2b07\ufe0f\n`;
-        msg += `\ud83d\udcb0 *${parseFloat(result).toLocaleString()} ${to}*\n\n`;
-        msg += `\ud83d\udcca 1 ${from} = ${rate.toFixed(4)} ${to}\n`;
-        msg += `\ud83d\udcca 1 ${to} = ${reverseRate} ${from}\n`;
-        msg += `\ud83d\udcc5 Updated: ${new Date().toLocaleDateString()}\n\n`;
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ \u26a1`;
-        await m.reply(msg);
-        m.react("\u2705");
-      } catch {
-        m.react("\u274c");
-        await m.reply("\u23f3 The Currency API is currently overloaded.");
+      const bmi = weight / (heightM * heightM);
+      const label =
+        bmi < 18.5 ? "Underweight" :
+        bmi < 25 ? "Normal" :
+        bmi < 30 ? "Overweight" :
+        "Obese";
+      return m.reply(`🧍 *BMI Calculator*\n\n⚖️ Weight: ${weight} kg\n📏 Height: ${heightCm} cm\n\n📊 BMI: *${bmi.toFixed(1)}* (${label})`);
+    },
+  },
+  {
+    name: ["age", "dob"],
+    category: "utility",
+    desc: "Calculate age from date (YYYY-MM-DD)",
+    handler: async (sock, m, { text }) => {
+      if (!text) return m.reply(`Usage: ${config.PREFIX}age <YYYY-MM-DD>\nExample: ${config.PREFIX}age 2000-01-31`);
+      const birth = new Date(text);
+      if (Number.isNaN(birth.getTime())) return m.reply("❌ Invalid date. Use format YYYY-MM-DD.");
+      const now = new Date();
+      let years = now.getFullYear() - birth.getFullYear();
+      let months = now.getMonth() - birth.getMonth();
+      let days = now.getDate() - birth.getDate();
+      if (days < 0) {
+        const prevMonthDays = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+        days += prevMonthDays;
+        months -= 1;
       }
-
-        const nextBirthday = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
-        if (nextBirthday < now) nextBirthday.setFullYear(now.getFullYear() + 1);
-        const daysUntilBday = Math.ceil((nextBirthday - now) / 86400000);
-
-        const zodiacSigns = [
-          { sign: "Capricorn ♑", start: [0, 20] }, { sign: "Aquarius ♒", start: [1, 19] },
-          { sign: "Pisces ♓", start: [2, 20] }, { sign: "Aries ♈", start: [3, 20] },
-          { sign: "Taurus ♉", start: [4, 20] }, { sign: "Gemini ♊", start: [5, 21] },
-          { sign: "Cancer ♋", start: [6, 22] }, { sign: "Leo ♌", start: [7, 23] },
-          { sign: "Virgo ♍", start: [8, 23] }, { sign: "Libra ♎", start: [9, 23] },
-          { sign: "Scorpio ♏", start: [10, 22] }, { sign: "Sagittarius ♐", start: [11, 22] },
-          { sign: "Capricorn ♑", start: [11, 32] }
-        ];
-        let zodiac = "Unknown";
-        const bm = birth.getMonth();
-        const bd = birth.getDate();
-        for (let i = 0; i < zodiacSigns.length - 1; i++) {
-          const curr = zodiacSigns[i];
-          const next = zodiacSigns[i + 1];
-          if ((bm === curr.start[0] && bd >= curr.start[1]) || (bm === next.start[0] && bd < next.start[1])) {
-            zodiac = curr.sign;
-            break;
-          }
-        }
-
-        let msg = `🎂 *Age Calculator*\n\n`;
-        msg += `📅 Born: ${text}\n`;
-        msg += `🔢 *${years} years, ${months} months, ${days} days*\n\n`;
-        msg += `📊 Total Days: ${totalDays.toLocaleString()}\n`;
-        msg += `📊 Total Weeks: ${totalWeeks.toLocaleString()}\n`;
-        msg += `⏰ Total Hours: ${totalHours.toLocaleString()}\n`;
-        msg += `⏱️ Total Minutes: ${totalMinutes.toLocaleString()}\n\n`;
-        msg += `🎂 Next Birthday: ${daysUntilBday} days away\n`;
-        msg += `♈ Zodiac: ${zodiac}\n`;
-        msg += `🌙 Born on: ${birth.toLocaleDateString("en-US", { weekday: "long" })}\n\n`;
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await m.reply(msg);
-      } catch {
-        await m.reply("❌ Invalid date. Use format YYYY-MM-DD.");
+      if (months < 0) {
+        months += 12;
+        years -= 1;
       }
+      const totalDays = Math.floor((now.getTime() - birth.getTime()) / 86400000);
+      const nextBirthday = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
+      if (nextBirthday < now) nextBirthday.setFullYear(now.getFullYear() + 1);
+      const daysUntilBday = Math.ceil((nextBirthday.getTime() - now.getTime()) / 86400000);
+      await m.reply(
+        `🎂 *Age Calculator*\n\n` +
+        `📅 Born: ${text}\n` +
+        `🔢 *${years} years, ${months} months, ${days} days*\n\n` +
+        `📊 Total Days: ${totalDays.toLocaleString()}\n` +
+        `🎂 Next Birthday: ${daysUntilBday} days away`
+      );
     },
   },
   {
@@ -244,30 +219,12 @@ const commands = [
     category: "utility",
     desc: "Generate random password",
     handler: async (sock, m, { text }) => {
-      const length = Math.min(Math.max(parseInt(text) || 16, 8), 64);
+      const length = Math.min(Math.max(parseInt(text, 10) || 16, 8), 64);
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=";
-      let password = "";
       const bytes = crypto.randomBytes(length);
-      for (let i = 0; i < length; i++) {
-        password += chars[bytes[i] % chars.length];
-      }
-      const hasUpper = /[A-Z]/.test(password);
-      const hasLower = /[a-z]/.test(password);
-      const hasDigit = /\d/.test(password);
-      const hasSpecial = /[!@#$%^&*()_+\-=]/.test(password);
-      const score = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
-      const strengthLabel = score === 4 && length >= 20 ? "Very Strong 💪" : score >= 3 && length >= 14 ? "Strong 🔒" : score >= 2 ? "Good 👍" : "Moderate ⚠️";
-
-      let msg = `🔐 *Password Generator*\n\n`;
-      msg += `\`\`\`${password}\`\`\`\n\n`;
-      msg += `📏 Length: ${length}\n`;
-      msg += `🔒 Strength: ${strengthLabel}\n`;
-      msg += `🔤 Uppercase: ${hasUpper ? "✅" : "❌"}\n`;
-      msg += `🔡 Lowercase: ${hasLower ? "✅" : "❌"}\n`;
-      msg += `🔢 Digits: ${hasDigit ? "✅" : "❌"}\n`;
-      msg += `🔣 Special: ${hasSpecial ? "✅" : "❌"}\n\n`;
-      msg += `_Save this somewhere safe!_`;
-      await m.reply(msg);
+      let password = "";
+      for (let i = 0; i < length; i++) password += chars[bytes[i] % chars.length];
+      await m.reply(`🔐 *Password Generator*\n\n\`\`\`${password}\`\`\`\n\n📏 Length: ${length}`);
     },
   },
   {
@@ -275,129 +232,104 @@ const commands = [
     category: "utility",
     desc: "Generate UUID",
     handler: async (sock, m) => {
-      const uuid = crypto.randomUUID();
-      await m.reply(`🆔 *UUID Generator*\n\n\`\`\`${uuid}\`\`\``);
+      await m.reply(`🆔 *UUID Generator*\n\n\`\`\`${crypto.randomUUID()}\`\`\``);
     },
   },
   {
     name: ["timestamp", "epoch", "unix", "ts"],
     category: "utility",
-    desc: "Get current Unix timestamp",
+    desc: "Get current Unix timestamp (or convert)",
     handler: async (sock, m, { text }) => {
-      if (text && !isNaN(text)) {
-        const date = new Date(parseInt(text) * (text.length <= 10 ? 1000 : 1));
-        return m.reply(`🕐 *Timestamp Converter*\n\n📌 Input: ${text}\n📅 Date: ${date.toUTCString()}\n🌍 Local: ${date.toLocaleString()}`);
+      if (text && !Number.isNaN(Number(text))) {
+        const n = Number(text);
+        const ms = String(text).length <= 10 ? n * 1000 : n;
+        const date = new Date(ms);
+        return m.reply(`🕐 *Timestamp Converter*\n\n📌 Input: ${text}\n📅 UTC: ${date.toUTCString()}\n🌍 Local: ${date.toLocaleString()}`);
       }
-      const now = Math.floor(Date.now() / 1000);
-      await m.reply(`🕐 *Unix Timestamp*\n\n📌 Seconds: \`${now}\`\n📌 Milliseconds: \`${Date.now()}\`\n📅 UTC: ${new Date().toUTCString()}`);
+      const nowSec = Math.floor(Date.now() / 1000);
+      await m.reply(`🕐 *Unix Timestamp*\n\n📌 Seconds: \`${nowSec}\`\n📌 Milliseconds: \`${Date.now()}\`\n📅 UTC: ${new Date().toUTCString()}`);
     },
   },
   {
     name: ["hash"],
     category: "utility",
-    desc: "Hash text (MD5/SHA256)",
+    desc: "Hash text (MD5/SHA1/SHA256)",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
       if (!input) return m.reply(`Usage: ${config.PREFIX}hash <text>`);
       const md5 = crypto.createHash("md5").update(input).digest("hex");
       const sha1 = crypto.createHash("sha1").update(input).digest("hex");
       const sha256 = crypto.createHash("sha256").update(input).digest("hex");
-      let msg = `🔐 *Hash Generator*\n\n`;
-      msg += `📝 Input: ${input.substring(0, 50)}${input.length > 50 ? "..." : ""}\n\n`;
-      msg += `*MD5:*\n\`\`\`${md5}\`\`\`\n\n`;
-      msg += `*SHA1:*\n\`\`\`${sha1}\`\`\`\n\n`;
-      msg += `*SHA256:*\n\`\`\`${sha256}\`\`\``;
-      await m.reply(msg);
+      await m.reply(
+        `🔐 *Hash Generator*\n\n` +
+        `*MD5:*\n\`\`\`${md5}\`\`\`\n\n` +
+        `*SHA1:*\n\`\`\`${sha1}\`\`\`\n\n` +
+        `*SHA256:*\n\`\`\`${sha256}\`\`\``
+      );
     },
   },
   {
     name: ["whois", "domain"],
     category: "utility",
-    desc: "Domain/WHOIS lookup",
+    desc: "DNS lookup (A/MX/NS/TXT/AAAA)",
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}whois <domain>`);
       m.react("⏳");
       try {
-        const domain = text.replace(/https?:\/\//g, "").split("/")[0];
-        const [dnsA, dnsMX, dnsNS, dnsAAAA, dnsTXT] = await Promise.all([
-          fetchJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`).catch(() => null),
-          fetchJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`).catch(() => null),
-          fetchJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=NS`).catch(() => null),
-          fetchJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=AAAA`).catch(() => null),
-          fetchJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=TXT`).catch(() => null),
+        const domain = String(text).replace(/^https?:\/\//i, "").split("/")[0].trim();
+        if (!domain) return m.reply("❌ Invalid domain.");
+        const [dnsA, dnsAAAA, dnsMX, dnsNS, dnsTXT] = await Promise.all([
+          resolveDns(domain, "A"),
+          resolveDns(domain, "AAAA"),
+          resolveDns(domain, "MX"),
+          resolveDns(domain, "NS"),
+          resolveDns(domain, "TXT"),
         ]);
-        let msg = `🌐 *Domain Lookup*\n\n`;
-        msg += `🌐 Domain: *${domain}*\n\n`;
 
-        if (dnsA?.Answer?.length) {
-          msg += `*A Records (IPv4)*\n`;
-          dnsA.Answer.forEach((r) => { if (r.type === 1) msg += `📌 ${r.data} (TTL: ${r.TTL}s)\n`; });
-          try {
-            // Use restcountries.com (open, stable)
-            const data = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`);
-            if (!data?.[0]) return m.reply("\u274c Country not found.");
-            const c = data[0];
-            let msg = `\ud83c\udf0d *Country Info*\n\n`;
-            msg += `${c.flag || ""} *${c.name?.common?.toUpperCase()}*\n\n`;
-            msg += `*Names*\n`;
-            if (c.name?.official) msg += `\ud83d\udcdb Official: ${c.name.official}\n`;
-            if (c.name?.nativeName) {
-              const natives = Object.values(c.name.nativeName);
-              natives.forEach(n => {
-                if (n.official) msg += `\ud83c\udff7\ufe0f Native: ${n.official} (${n.common})\n`;
-              });
-            }
-            if (c.altSpellings?.length) msg += `\u270f\ufe0f Alt Names: ${c.altSpellings.join(", ")}\n`;
-            if (c.cca2) msg += `\ud83d\udd24 ISO Code: ${c.cca2}${c.cca3 ? " / " + c.cca3 : ""}\n`;
-            if (c.cioc) msg += `\ud83c\udfc5 Olympic Code: ${c.cioc}\n`;
-            if (c.fifa) msg += `\u26bd FIFA Code: ${c.fifa}\n`;
-            msg += `\n`;
-            msg += `*Geography*\n`;
-            if (c.capital?.length) msg += `\ud83c\udfdb\ufe0f Capital: ${c.capital.join(", ")}\n`;
-            if (c.continents?.length) msg += `\ud83d\uddfa\ufe0f Continent: ${c.continents.join(", ")}\n`;
-            if (c.region) msg += `\ud83c\udf10 Region: ${c.region}\n`;
-            if (c.subregion) msg += `\ud83d\udccd Subregion: ${c.subregion}\n`;
-            if (c.latlng?.length) msg += `\ud83d\udccc Coordinates: ${c.latlng[0]}\u00b0, ${c.latlng[1]}\u00b0\n`;
-            if (c.area) msg += `\ud83d\udcd0 Area: ${c.area.toLocaleString()} km\u00b2\n`;
-            msg += `\ud83c\udfdd\ufe0f Landlocked: ${c.landlocked ? "Yes" : "No"}\n`;
-            if (c.borders?.length) msg += `\ud83d\udea7 Borders: ${c.borders.join(", ")}\n`;
-            if (c.maps?.googleMaps) msg += `\ud83d\udccd Google Maps: ${c.maps.googleMaps}\n`;
-            msg += `\n`;
-        await m.reply("⏳ The WHOIS API is currently overloaded.");
+        const formatAnswers = (resp, label, typeNum) => {
+          const answers = resp?.Answer || [];
+          const lines = answers.filter((a) => (typeNum ? a.type === typeNum : true)).map((a) => `- ${a.data} (TTL: ${a.TTL}s)`);
+          if (!lines.length) return "";
+          return `*${label}*\n${lines.join("\n")}\n\n`;
+        };
+
+        let msg = `🌐 *Domain Lookup*\n\n🌐 Domain: *${domain}*\n\n`;
+        msg += formatAnswers(dnsA, "A Records (IPv4)", 1);
+        msg += formatAnswers(dnsAAAA, "AAAA Records (IPv6)", 28);
+        msg += formatAnswers(dnsMX, "MX Records", 15);
+        msg += formatAnswers(dnsNS, "NS Records", 2);
+        msg += formatAnswers(dnsTXT, "TXT Records", 16);
+        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        await m.reply(msg.trim());
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("⏳ The DNS lookup API is currently overloaded.");
       }
     },
   },
   {
     name: ["speedtest", "speed", "spd"],
     category: "utility",
-    desc: "Check server speed info",
+    desc: "Check server speed info (light)",
     handler: async (sock, m) => {
       m.react("⏳");
       const start = Date.now();
       try {
-        await fetchJson("https://api.ipify.org?format=json");
+        await fetchJson(endpoints.ip.ipify).catch(() => null);
         const ping = Date.now() - start;
-        const os = require("os");
         const cpus = os.cpus();
         const totalMem = os.totalmem();
         const freeMem = os.freemem();
         const usedMem = totalMem - freeMem;
         const uptime = os.uptime();
-
         let msg = `🚀 *Server Speed Info*\n\n`;
         msg += `📡 Ping: ${ping}ms\n`;
-        msg += `📊 Status: ${ping < 100 ? "Excellent 🟢" : ping < 300 ? "Good 🟡" : "Slow 🔴"}\n\n`;
+        msg += `📊 Status: ${ping < 100 ? "Excellent" : ping < 300 ? "Good" : "Slow"}\n\n`;
         msg += `💻 CPU: ${cpus[0]?.model || "N/A"}\n`;
-        msg += `🧮 Cores: ${cpus.length}\n`;
-        msg += `⚡ Speed: ${cpus[0]?.speed || "N/A"} MHz\n\n`;
-        msg += `💾 Total RAM: ${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
-        msg += `💾 Used RAM: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
-        msg += `💾 Free RAM: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
-        msg += `📊 Usage: ${((usedMem / totalMem) * 100).toFixed(1)}%\n\n`;
-        msg += `🖥️ Platform: ${os.platform()} ${os.arch()}\n`;
-        msg += `📦 Node: ${process.version}\n`;
-        msg += `⏱️ Uptime: ${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s\n`;
-        msg += `🏠 Hostname: ${os.hostname()}\n\n`;
+        msg += `🧮 Cores: ${cpus.length}\n\n`;
+        msg += `💾 RAM: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)} / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
+        msg += `⏱️ Uptime: ${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m\n\n`;
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
@@ -415,24 +347,10 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}zodiac <sign>\nSigns: aries, taurus, gemini, cancer, leo, virgo, libra, scorpio, sagittarius, capricorn, aquarius, pisces`);
       m.react("♈");
       try {
-        const sign = text.toLowerCase();
-        const data = await fetchJson(`https://ohmanda.com/api/horoscope/${sign}/`).catch(() => null);
-        if (data?.horoscope) {
-          const emojis = { aries: "♈", taurus: "♉", gemini: "♊", cancer: "♋", leo: "♌", virgo: "♍", libra: "♎", scorpio: "♏", sagittarius: "♐", capricorn: "♑", aquarius: "♒", pisces: "♓" };
-          const elements = { aries: "Fire 🔥", taurus: "Earth 🌍", gemini: "Air 💨", cancer: "Water 💧", leo: "Fire 🔥", virgo: "Earth 🌍", libra: "Air 💨", scorpio: "Water 💧", sagittarius: "Fire 🔥", capricorn: "Earth 🌍", aquarius: "Air 💨", pisces: "Water 💧" };
-          const emoji = emojis[sign] || "🔮";
-          const element = elements[sign] || "Unknown";
-
-          let msg = `${emoji} *Daily Horoscope*\n\n`;
-          msg += `${emoji} *${sign.charAt(0).toUpperCase() + sign.slice(1)}*\n`;
-          msg += `🌍 Element: ${element}\n`;
-          msg += `📅 ${new Date().toLocaleDateString()}\n\n`;
-          msg += `${data.horoscope}\n\n`;
-          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-          await m.reply(msg);
-        } else {
-          await m.reply("❌ Invalid zodiac sign.");
-        }
+        const sign = String(text).toLowerCase().trim();
+        const data = await fetchJson(`https://ohmanda.com/api/horoscope/${encodeURIComponent(sign)}/`).catch(() => null);
+        if (!data?.horoscope) return m.reply("❌ Invalid zodiac sign.");
+        await m.reply(`🔮 *Daily Horoscope*\n\n♈ Sign: *${sign}*\n📅 ${new Date().toLocaleDateString()}\n\n${data.horoscope}\n\n_${config.BOT_NAME}_`);
         m.react("✅");
       } catch {
         m.react("❌");
@@ -445,37 +363,26 @@ const commands = [
     category: "utility",
     desc: "Fun fact about a number",
     handler: async (sock, m, { text }) => {
-      const num = parseInt(text) || Math.floor(Math.random() * 1000);
+      const num = Number.parseInt(text, 10);
+      const n = Number.isFinite(num) ? num : Math.floor(Math.random() * 1000);
       m.react("🔢");
       try {
         const [triviaData, mathData, yearData] = await Promise.all([
-          fetchJson(`https://numbersapi.com/${num}/trivia?json`).catch(() => null),
-          fetchJson(`https://numbersapi.com/${num}/math?json`).catch(() => null),
-          fetchJson(`https://numbersapi.com/${num}/year?json`).catch(() => null),
+          fetchJson(`https://numbersapi.com/${n}/trivia?json`).catch(() => null),
+          fetchJson(`https://numbersapi.com/${n}/math?json`).catch(() => null),
+          fetchJson(`https://numbersapi.com/${n}/year?json`).catch(() => null),
         ]);
-
-        let msg = `🔢 *Number Facts*\n\n`;
-        msg += `🔢 Number: *${num}*\n\n`;
-
+        let msg = `🔢 *Number Facts*\n\n🔢 Number: *${n}*\n\n`;
         if (triviaData?.text) msg += `📌 *Trivia:* ${triviaData.text}\n\n`;
         if (mathData?.text) msg += `🧮 *Math:* ${mathData.text}\n\n`;
         if (yearData?.text) msg += `📅 *Year:* ${yearData.text}\n\n`;
-
         if (!triviaData?.text && !mathData?.text && !yearData?.text) {
-          msg += `📌 *Trivia:* ${num} is ${num % 2 === 0 ? "an even" : "an odd"} number.\n\n`;
-          msg += `🧮 *Math:* Square = ${num * num}, Cube = ${num * num * num}.\n\n`;
-          msg += `📅 *Year:* ${num} in Roman numerals is ${toRoman(Math.max(1, Math.min(num, 3999)))}.\n\n`;
+          msg += `📌 *Trivia:* ${n} is ${n % 2 === 0 ? "even" : "odd"}.\n\n`;
+          msg += `🧮 *Math:* Square = ${n * n}, Cube = ${n * n * n}.\n\n`;
+          msg += `📅 *Year:* Roman numerals: ${toRoman(Math.max(1, Math.min(n, 3999)))}.\n\n`;
         }
-
-        msg += `*Properties*\n`;
-        msg += `${num % 2 === 0 ? "Even" : "Odd"} number\n`;
-        const isPrime = num > 1 && Array.from({ length: Math.floor(Math.sqrt(num)) }, (_, i) => i + 2).every(d => num % d !== 0);
-        msg += `${isPrime ? "✅ Prime" : "❌ Not Prime"}\n`;
-        msg += `Binary: ${num.toString(2)}\n`;
-        msg += `Hex: 0x${num.toString(16).toUpperCase()}\n`;
-        msg += `Octal: 0${num.toString(8)}\n\n`;
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await m.reply(msg);
+        await m.reply(msg.trim());
         m.react("✅");
       } catch {
         m.react("❌");
@@ -483,44 +390,6 @@ const commands = [
       }
     },
   },
-  {
-    name: ["color2", "randomcolor", "colorgen"],
-    category: "utility",
-    desc: "Generate random color palette",
-    handler: async (sock, m) => {
-      const colors = [];
-      for (let i = 0; i < 5; i++) {
-        const hex = Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0");
-        colors.push(`#${hex}`);
-      }
-      let msg = `🎨 *Random Color Palette*\n\n`;
-      colors.forEach((c, i) => {
-        const r = parseInt(c.slice(1, 3), 16);
-        const g = parseInt(c.slice(3, 5), 16);
-        const b = parseInt(c.slice(5, 7), 16);
-        msg += `${i + 1}. \`${c}\` RGB(${r}, ${g}, ${b}) ${"█".repeat(8)}\n`;
-      });
-      msg += `\n_Use ${config.PREFIX}color <hex> to preview a color!_`;
-      await m.reply(msg);
-    },
-  },
 ];
-
-function toRoman(value) {
-  const map = [
-    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
-    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
-    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
-  ];
-  let n = value;
-  let out = "";
-  for (const [k, s] of map) {
-    while (n >= k) {
-      out += s;
-      n -= k;
-    }
-  }
-  return out;
-}
 
 module.exports = { commands };

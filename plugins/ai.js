@@ -2,6 +2,7 @@ const config = require("../config");
 const { fetchJson, postJson, normalizeAiText } = require("../lib/helpers");
 const axios = require("axios");
 const sharp = require("sharp");
+const { endpoints } = require("../lib/endpoints");
 
 const AI_PERSONAS = {
   openai: null,
@@ -16,8 +17,7 @@ const AI_PERSONAS = {
 };
 
 async function pollinate(prompt, persona = "openai") {
-  const { OpenAI } = require('openai');
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
   const messages = [];
   const systemMsg = AI_PERSONAS[persona];
   if (systemMsg) messages.push({ role: "system", content: systemMsg });
@@ -26,9 +26,25 @@ async function pollinate(prompt, persona = "openai") {
     content: "Reply in clean WhatsApp chat style. Use short paragraphs. Avoid markdown tables and avoid decorative formatting.",
   });
   messages.push({ role: "user", content: prompt });
+
+  // No-key default: use Pollinations (community/free endpoint; may rate-limit).
+  if (!openaiKey) {
+    const payload = { model: "openai", messages };
+    const data = await postJson("https://text.pollinations.ai/openai", payload, {
+      timeout: 30000,
+      headers: { "Content-Type": "application/json" },
+    });
+    const answer = data?.choices?.[0]?.message?.content;
+    if (!answer || answer.length < 2) throw new Error("empty");
+    return normalizeAiText(answer, { keepLightFormatting: true });
+  }
+
+  // If user explicitly configures a paid key, use official OpenAI.
+  const { OpenAI } = require("openai");
+  const openai = new OpenAI({ apiKey: openaiKey });
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages
+    model: endpoints.openai.model,
+    messages,
   });
   const answer = completion.choices?.[0]?.message?.content;
   if (!answer || answer.length < 2) throw new Error("empty");
@@ -36,17 +52,14 @@ async function pollinate(prompt, persona = "openai") {
 }
 
 async function fetchGeneratedImage(prompt) {
-  const Replicate = require('replicate');
-  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-  const output = await replicate.run(
-    "stability-ai/stable-diffusion",
-    { input: { prompt } }
-  );
-  if (output && typeof output === 'string' && output.startsWith('http')) {
-    const axios = require('axios');
-    const res = await axios.get(output, { responseType: 'arraybuffer' });
-    return Buffer.from(res.data);
-  }
+  const seed = hashText(prompt || "image");
+  const safePrompt = encodeURIComponent(String(prompt || "").slice(0, 400));
+  const url = `https://image.pollinations.ai/prompt/${safePrompt}?model=flux&width=1024&height=1024&nologo=true&seed=${seed}`;
+  try {
+    const res = await axios.get(url, { responseType: "arraybuffer", timeout: 45000 });
+    const buf = Buffer.from(res.data);
+    if (buf?.length > 2048) return buf;
+  } catch {}
   return createLocalPromptArt(prompt);
 }
 
@@ -350,35 +363,11 @@ const commands = [
     category: "ai",
     desc: "Remove background from image",
     handler: async (sock, m) => {
-      const media = m.isImage ? m : m.quoted?.isImage ? m.quoted : null;
-      if (!media) return m.reply(`Reply to an image with ${config.PREFIX}removebg`);
-      m.react("⏳");
-      try {
-        const buffer = await media.download();
-        const FormData = require("form-data");
-        const form = new FormData();
-        form.append("image", buffer, { filename: "image.png", contentType: "image/png" });
-        let resultBuffer;
-        try {
-          const RemoveBg = require('remove.bg');
-          const rbgKey = process.env.REMOVE_BG_API_KEY;
-          if (!rbgKey) throw new Error("No REMOVE_BG_API_KEY configured");
-          const tmp = require('os').tmpdir();
-          const fs = require('fs');
-          const path = require('path');
-          const inputPath = path.join(tmp, `removebg_${Date.now()}.png`);
-          fs.writeFileSync(inputPath, buffer);
-          const result = await RemoveBg.fromFile(inputPath, rbgKey);
-          resultBuffer = Buffer.from(result.base64img, 'base64');
-          fs.unlinkSync(inputPath);
-        } catch {}
-        if (!resultBuffer) return m.reply("⏳ Background removal API is currently overloaded. Please try again later!");
-        await sock.sendMessage(m.chat, { image: resultBuffer, caption: "✅ Background removed!" }, { quoted: { key: m.key, message: m.message } });
-        m.react("✅");
-      } catch {
-        m.react("❌");
-        await m.reply("⏳ Background removal API is currently overloaded. Please try again later!");
-      }
+      await m.reply(
+        `❌ *removebg* disabled in no-key mode.\n\n` +
+        `Background removal generally requires paid APIs or heavy local ML.\n` +
+        `If you want it enabled, set REMOVE_BG_API_KEY (paid) or we can add a local rembg workflow.`
+      );
     },
   },
   {

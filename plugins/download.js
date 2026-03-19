@@ -3,12 +3,9 @@ const { fetchJson, fetchBuffer, postJson, isUrl, extractUrls, tempFile, pickNonR
 const fs = require("fs");
 const axios = require("axios");
 const play = require("play-dl");
+const { endpoints } = require("../lib/endpoints");
 
-const INVIDIOUS_INSTANCES = [
-  "https://inv.nadeko.net",
-  "https://vid.puffyan.us",
-  "https://invidious.nerdvpn.de",
-];
+const INVIDIOUS_INSTANCES = endpoints.youtube.invidiousInstances;
 
 async function ytSearch(query) {
   try {
@@ -136,7 +133,7 @@ async function twitterDownload(url) {
   // 1. cobalt.tools
   try {
     const d = await postJson(
-      "https://api.cobalt.tools/api/json",
+      endpoints.download.cobaltApiJson,
       { url },
       { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
     );
@@ -154,7 +151,7 @@ async function twitterDownload(url) {
   try {
     const tweetId = url.match(/status\/(\d+)/)?.[1];
     if (tweetId) {
-      const data = await fetchJson(`https://api.vxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
+      const data = await fetchJson(`${endpoints.download.vxTwitterApiBase}/Twitter/status/${tweetId}`, { timeout: 15000 });
       const mediaUrl = data?.media_extended?.[0]?.url || data?.mediaURLs?.[0];
       if (mediaUrl) {
         const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
@@ -167,7 +164,7 @@ async function twitterDownload(url) {
   try {
     const tweetId = url.match(/status\/(\d+)/)?.[1];
     if (tweetId) {
-      const data = await fetchJson(`https://api.fxtwitter.com/Twitter/status/${tweetId}`, { timeout: 15000 });
+      const data = await fetchJson(`${endpoints.download.fxTwitterApiBase}/Twitter/status/${tweetId}`, { timeout: 15000 });
       const mediaUrl = data?.tweet?.media?.videos?.[0]?.url || data?.tweet?.media?.photos?.[0]?.url;
       if (mediaUrl) {
         const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
@@ -489,7 +486,7 @@ const commands = [
         } catch {}
         if (!imgBuffer || imgBuffer.length < 1000) {
           try {
-            imgBuffer = await fetchBuffer(`https://source.unsplash.com/random/1080x1080/?${encodeURIComponent(text)}`);
+            imgBuffer = await fetchBuffer(`${endpoints.images.randomFallbackBase}/1080x1080/?${encodeURIComponent(text)}`);
             imgSource = "Unsplash";
           } catch {}
         }
@@ -656,7 +653,7 @@ const commands = [
         // 1. cobalt.tools
         try {
           const d = await postJson(
-            "https://api.cobalt.tools/api/json",
+            endpoints.download.cobaltApiJson,
             { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
@@ -687,7 +684,7 @@ const commands = [
         // 1. cobalt.tools
         try {
           const d = await postJson(
-            "https://api.cobalt.tools/api/json",
+            endpoints.download.cobaltApiJson,
             { url: targetUrl },
             { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
           );
