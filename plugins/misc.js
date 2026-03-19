@@ -117,19 +117,32 @@ const commands = [
     name: ["meme"],
     category: "fun",
     desc: "Get a random meme",
-    handler: async (sock, m) => {
+    handler: async (sock, m, { text }) => {
       m.react("😂");
       try {
-        const data = await fetchJson("https://meme-api.com/gimme");
-        if (!data?.url) {
-          m.react("❌");
-          return m.reply("⏳ The Meme API is currently overloaded.");
+        // If user provides text, use it as meme caption, else random meme
+        let memeUrl = "";
+        let caption = "";
+        if (text) {
+          // Use memegen.link API for custom caption
+          // Format: top/bottom, spaces as _
+          const [top, ...bottomArr] = text.split("|");
+          const topText = encodeURIComponent((top || "").replace(/ /g, "_") || "_");
+          const bottomText = encodeURIComponent((bottomArr.join("|") || "").replace(/ /g, "_") || "_");
+          // Pick a random template from memegen.link/templates
+          const templates = [
+            "buzz", "doge", "drake", "gru", "joker", "kermit", "spongebob", "disastergirl", "expandingbrain", "twobuttons", "change", "batman", "distractedbf", "success", "sad-biden", "trump", "trump-sign", "trump-bill", "trump-tweet", "trump-table", "trump-check", "trump-desk", "trump-press", "trump-train", "trump-wrestle", "trump-yell", "trump-yes", "trump-no", "trump-miss", "trump-miss2", "trump-miss3", "trump-miss4", "trump-miss5", "trump-miss6", "trump-miss7", "trump-miss8", "trump-miss9", "trump-miss10", "trump-miss11", "trump-miss12", "trump-miss13", "trump-miss14", "trump-miss15", "trump-miss16", "trump-miss17", "trump-miss18", "trump-miss19", "trump-miss20", "trump-miss21", "trump-miss22", "trump-miss23", "trump-miss24", "trump-miss25", "trump-miss26", "trump-miss27", "trump-miss28", "trump-miss29", "trump-miss30", "trump-miss31", "trump-miss32", "trump-miss33", "trump-miss34", "trump-miss35", "trump-miss36", "trump-miss37", "trump-miss38", "trump-miss39", "trump-miss40", "trump-miss41", "trump-miss42", "trump-miss43", "trump-miss44", "trump-miss45", "trump-miss46", "trump-miss47", "trump-miss48", "trump-miss49", "trump-miss50"
+          ];
+          const template = templates[Math.floor(Math.random() * templates.length)];
+          memeUrl = `https://api.memegen.link/images/${template}/${topText}/${bottomText}.png`;
+          caption = `😂 *Meme Generator*\n\n${top || ""}\n${bottomArr.join("|") || ""}`;
+        } else {
+          // Use random meme from memegen.link
+          memeUrl = "https://api.memegen.link/images/random.png";
+          caption = "😂 *Random Meme*\n\n_Source: memegen.link_";
         }
-        const buffer = await fetchBuffer(data.url);
-        const title = data.title || "Meme";
-        const author = data.author ? `\n✍️ u/${data.author}` : "";
-        const comments = typeof data.num_comments === "number" ? `\n💬 ${data.num_comments} comments` : "";
-        await sock.sendMessage(m.chat, { image: buffer, caption: `😂 *${title}*\n\n👍 ${data.ups || 0} upvotes${comments}${author}\n📍 r/${data.subreddit || "memes"}` }, { quoted: { key: m.key, message: m.message } });
+        const buffer = await fetchBuffer(memeUrl);
+        await sock.sendMessage(m.chat, { image: buffer, caption }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         const mm = pickNonRepeating(fallbackMemes, `${m.chat}:meme`, { maxHistory: 4 });
@@ -145,8 +158,8 @@ const commands = [
     handler: async (sock, m) => {
       m.react("🐱");
       try {
-        const data = await fetchJson("https://api.thecatapi.com/v1/images/search");
-        const buffer = await fetchBuffer(data[0].url);
+        const data = await fetchJson("https://nekos.best/api/v2/cat");
+        const buffer = await fetchBuffer(data.results[0].url);
         const caption = pickNonRepeating(catCaptions, `${m.chat}:cat-caption`, { maxHistory: 3 });
         await sock.sendMessage(m.chat, { image: buffer, caption: `${caption}\n\n_Type ${config.PREFIX}cat for another._` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -163,8 +176,8 @@ const commands = [
     handler: async (sock, m) => {
       m.react("🐶");
       try {
-        const data = await fetchJson("https://dog.ceo/api/breeds/image/random");
-        const buffer = await fetchBuffer(data.message);
+        const data = await fetchJson("https://nekos.best/api/v2/dog");
+        const buffer = await fetchBuffer(data.results[0].url);
         const caption = pickNonRepeating(dogCaptions, `${m.chat}:dog-caption`, { maxHistory: 3 });
         await sock.sendMessage(m.chat, { image: buffer, caption: `${caption}\n\n_Type ${config.PREFIX}dog for another._` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
@@ -181,8 +194,8 @@ const commands = [
     handler: async (sock, m) => {
       m.react("🦊");
       try {
-        const data = await fetchJson("https://randomfox.ca/floof/");
-        const buffer = await fetchBuffer(data.image);
+        const data = await fetchJson("https://nekos.best/api/v2/fox");
+        const buffer = await fetchBuffer(data.results[0].url);
         const caption = pickNonRepeating(foxCaptions, `${m.chat}:fox-caption`, { maxHistory: 3 });
         await sock.sendMessage(m.chat, { image: buffer, caption: `${caption}\n\n_Type ${config.PREFIX}fox for another._` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");

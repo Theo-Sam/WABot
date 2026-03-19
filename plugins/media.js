@@ -26,7 +26,7 @@ const commands = [
         }
 
         if (!imageUrl) {
-          imageUrl = `https://source.unsplash.com/random/800x600/?${encodeURIComponent(text)}`;
+          return m.reply("❌ Unsplash API key is required for image search. Set UNSPLASH_ACCESS_KEY in your environment.");
         }
 
         const buffer = await fetchBuffer(imageUrl);
@@ -56,12 +56,15 @@ const commands = [
         const axios = require("axios");
         const form = new FormData();
         form.append("file", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
-        const res = await axios.post("https://telegra.ph/upload", form, {
-          headers: form.getHeaders(),
+        // Use Imgur API for image upload (anonymous)
+        const IMGUR_CLIENT_ID = process.env.IMGUR_CLIENT_ID || "";
+        if (!IMGUR_CLIENT_ID) return m.reply("❌ Imgur Client ID is required for image upload. Set IMGUR_CLIENT_ID in your environment.");
+        const res = await axios.post("https://api.imgur.com/3/image", form, {
+          headers: { ...form.getHeaders(), Authorization: `Client-ID ${IMGUR_CLIENT_ID}` },
           timeout: 30000,
         });
-        if (res.data && res.data[0]?.src) {
-          await m.reply(`✅ *Image Uploaded*\n\nhttps://telegra.ph${res.data[0].src}`);
+        if (res.data && res.data.data?.link) {
+          await m.reply(`✅ *Image Uploaded*\n\n${res.data.data.link}`);
           m.react("✅");
         } else {
           throw new Error("Upload failed");

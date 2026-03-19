@@ -69,56 +69,24 @@ async function ytDownloadVideo(url) {
   return null;
 }
 
+const { getPost } = require('insta-fetcher');
+
 async function igDownload(url) {
-  const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "");
-
-  // 1. cobalt.tools — open-source, most reliable
   try {
-    const d = await postJson(
-      "https://api.cobalt.tools/api/json",
-      { url: cleanUrl },
-      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
-    );
-    if ((d.status === "redirect" || d.status === "stream") && d.url) {
-      const buf = await fetchBuffer(d.url, { timeout: 60000 });
-      if (buf?.length > 1000) return { buffer: buf, type: "video" };
+    const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "");
+    const data = await getPost(cleanUrl);
+    if (data && data.media && data.media.length > 0) {
+      // Pick the first media item (could be image or video)
+      const mediaItem = data.media[0];
+      const buf = await fetchBuffer(mediaItem.url, { timeout: 60000 });
+      if (buf?.length > 1000) {
+        return { buffer: buf, type: mediaItem.type === 'image' ? 'image' : 'video' };
+      }
     }
-    if (d.status === "picker" && d.picker?.length) {
-      const first = d.picker[0];
-      const buf = await fetchBuffer(first.url, { timeout: 60000 });
-      if (buf?.length > 1000) return { buffer: buf, type: first.type === "photo" ? "image" : "video" };
-    }
-  } catch {}
-
-  // 2. fastdl.app
-  try {
-    const data = await postJson(
-      "https://fastdl.app/api/convert",
-      new URLSearchParams({ url: cleanUrl }),
-      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded" } }
-    );
-    const dlUrl = data?.url || data?.result?.[0]?.url;
-    if (dlUrl) {
-      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
-      if (buf?.length > 1000) return { buffer: buf, type: "video" };
-    }
-  } catch {}
-
-  // 3. sssinstagram (scraper fallback)
-  try {
-    const data = await postJson(
-      "https://sssinstagram.com/api/convert",
-      new URLSearchParams({ q: cleanUrl }),
-      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded" } }
-    );
-    const items = data?.data || data?.medias || [];
-    const item = items[0];
-    if (item?.url) {
-      const buf = await fetchBuffer(item.url, { timeout: 60000 });
-      if (buf?.length > 1000) return { buffer: buf, type: item.type === "image" ? "image" : "video" };
-    }
-  } catch {}
-
+    console.error('[igDownload] insta-fetcher: No valid media found', data);
+  } catch (err) {
+    console.error('[igDownload] insta-fetcher error:', err);
+  }
   return null;
 }
 
@@ -152,30 +120,15 @@ function resolveInputUrl(text, m) {
 async function fbDownload(url) {
   // 1. cobalt.tools
   try {
-    const d = await postJson(
-      "https://api.cobalt.tools/api/json",
-      { url },
-      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
-    );
-    if ((d.status === "redirect" || d.status === "stream") && d.url) {
-      const buf = await fetchBuffer(d.url, { timeout: 60000 });
+    const fbDownloader = require('facebook-video-downloader');
+    const info = await fbDownloader.getInfo(url);
+    if (info && info.links && info.links.length > 0 && info.links[0].url) {
+      const buf = await fetchBuffer(info.links[0].url, { timeout: 60000 });
       if (buf?.length > 1000) return buf;
     }
-  } catch {}
-
-  // 2. fdown.net
-  try {
-    const data = await fetchJson(
-      `https://fdown.net/api/v1?url=${encodeURIComponent(url)}`,
-      { timeout: 15000, headers: { "User-Agent": "Mozilla/5.0" } }
-    );
-    const dlUrl = data?.hd_url || data?.sd_url || data?.url;
-    if (dlUrl) {
-      const buf = await fetchBuffer(dlUrl, { timeout: 60000 });
-      if (buf?.length > 1000) return buf;
-    }
-  } catch {}
-
+  } catch (err) {
+    console.error('[fbDownload] facebook-video-downloader error:', err);
+  }
   return null;
 }
 
@@ -330,32 +283,26 @@ const commands = [
       if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tiktok <TikTok URL>`);
       m.react("⏳");
       try {
+        const TikTokScraper = require('tiktok-scraper');
         let videoBuffer = null;
-        // 1. cobalt.tools
         try {
-          const d = await postJson(
-            "https://api.cobalt.tools/api/json",
-            { url: targetUrl },
-            { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
-          );
-          if ((d.status === "redirect" || d.status === "stream") && d.url) {
-            videoBuffer = await fetchBuffer(d.url, { timeout: 60000 });
+          const videoMeta = await TikTokScraper.video(targetUrl, { download: false });
+          if (videoMeta && videoMeta.collector && videoMeta.collector.length > 0) {
+            const videoUrl = videoMeta.collector[0].videoUrl;
+            if (videoUrl) {
+              videoBuffer = await fetchBuffer(videoUrl, { timeout: 60000 });
+            }
           }
-        } catch {}
-        // 2. tikwm (fallback)
-        if (!videoBuffer || videoBuffer.length < 1000) {
-          try {
-            const data = await postJson("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
-            const playUrl = data?.data?.hdplay || data?.data?.play;
-            if (playUrl) videoBuffer = await fetchBuffer(playUrl);
-          } catch {}
+        } catch (err) {
+          console.error('[TikTok Download] tiktok-scraper error:', err);
         }
-        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download TikTok video. The link may be expired or region-locked.");
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download TikTok video. The link may be expired, region-locked, or TikTok changed their endpoints.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
         m.react("❌");
         await m.reply("❌ Failed to download TikTok video.");
+        console.error('[TikTok Download] General error:', err);
       }
     },
   },
@@ -368,27 +315,42 @@ const commands = [
       if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tta <TikTok URL>`);
       m.react("⏳");
       try {
+        const TikTokScraper = require('tiktok-scraper');
         let audioBuffer = null;
-        // 1. tikwm background music
         try {
-          const data = await postJson("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl }), { timeout: 15000 });
-          const musicUrl = data?.data?.music;
-          if (musicUrl) audioBuffer = await fetchBuffer(musicUrl);
-        } catch {}
-        // 2. tikwm play audio fallback
-        if (!audioBuffer || audioBuffer.length < 1000) {
-          try {
-            const data = await postJson("https://www.tikwm.com/api/", new URLSearchParams({ url: targetUrl, hd: 1 }), { timeout: 15000 });
-            const playUrl = data?.data?.play;
-            if (playUrl) audioBuffer = await fetchBuffer(playUrl);
-          } catch {}
+          const videoMeta = await TikTokScraper.video(targetUrl, { download: false });
+          if (videoMeta && videoMeta.collector && videoMeta.collector.length > 0) {
+            const videoUrl = videoMeta.collector[0].videoUrl;
+            if (videoUrl) {
+              // Download video, then extract audio using ffmpeg (requires ffmpeg installed)
+              const tmp = require('os').tmpdir();
+              const fs = require('fs');
+              const path = require('path');
+              const videoPath = path.join(tmp, `tiktok_${Date.now()}.mp4`);
+              const audioPath = path.join(tmp, `tiktok_${Date.now()}.aac`);
+              const videoData = await fetchBuffer(videoUrl, { timeout: 60000 });
+              fs.writeFileSync(videoPath, videoData);
+              const { execSync } = require('child_process');
+              try {
+                execSync(`ffmpeg -y -i "${videoPath}" -vn -acodec copy "${audioPath}"`);
+                audioBuffer = fs.readFileSync(audioPath);
+              } catch (fferr) {
+                console.error('[TikTok Audio] ffmpeg error:', fferr);
+              }
+              fs.unlinkSync(videoPath);
+              if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+            }
+          }
+        } catch (err) {
+          console.error('[TikTok Audio Download] tiktok-scraper error:', err);
         }
         if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download TikTok audio.");
-        await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/aac" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
         m.react("❌");
         await m.reply("❌ Failed to download TikTok audio.");
+        console.error('[TikTok Audio Download] General error:', err);
       }
     },
   },

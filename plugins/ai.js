@@ -16,6 +16,8 @@ const AI_PERSONAS = {
 };
 
 async function pollinate(prompt, persona = "openai") {
+  const { OpenAI } = require('openai');
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const messages = [];
   const systemMsg = AI_PERSONAS[persona];
   if (systemMsg) messages.push({ role: "system", content: systemMsg });
@@ -24,42 +26,27 @@ async function pollinate(prompt, persona = "openai") {
     content: "Reply in clean WhatsApp chat style. Use short paragraphs. Avoid markdown tables and avoid decorative formatting.",
   });
   messages.push({ role: "user", content: prompt });
-  const data = await postJson("https://text.pollinations.ai/openai", {
-    model: "openai",
-    messages,
-  }, { timeout: 60000, headers: { "Content-Type": "application/json" } });
-  const answer = data?.choices?.[0]?.message?.content;
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages
+  });
+  const answer = completion.choices?.[0]?.message?.content;
   if (!answer || answer.length < 2) throw new Error("empty");
   return normalizeAiText(answer, { keepLightFormatting: true });
 }
 
 async function fetchGeneratedImage(prompt) {
-  const encodedPrompt = encodeURIComponent(prompt);
-  const base = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
-  const endpoints = [
-    `${base}?model=flux&width=1024&height=1024&nologo=true&enhance=true&seed=${Date.now()}`,
-    `${base}?model=turbo&width=1024&height=1024&nologo=true&seed=${Date.now() + 1}`,
-    `${base}?width=1024&height=1024&nologo=true&seed=${Date.now() + 2}`,
-    `${base}?model=flux&width=768&height=768&nologo=true&seed=${Date.now() + 3}`,
-  ];
-
-  for (const url of endpoints) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const res = await axios.get(url, {
-          responseType: "arraybuffer",
-          timeout: 45000,
-          headers: { Accept: "image/*" },
-          validateStatus: (status) => status >= 200 && status < 500,
-        });
-        const contentType = String(res.headers?.["content-type"] || "").toLowerCase();
-        const buffer = Buffer.from(res.data || []);
-        if (contentType.startsWith("image/") && buffer.length >= 2048) return buffer;
-      } catch {}
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-    }
+  const Replicate = require('replicate');
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+  const output = await replicate.run(
+    "stability-ai/stable-diffusion",
+    { input: { prompt } }
+  );
+  if (output && typeof output === 'string' && output.startsWith('http')) {
+    const axios = require('axios');
+    const res = await axios.get(output, { responseType: 'arraybuffer' });
+    return Buffer.from(res.data);
   }
-
   return createLocalPromptArt(prompt);
 }
 
@@ -373,14 +360,17 @@ const commands = [
         form.append("image", buffer, { filename: "image.png", contentType: "image/png" });
         let resultBuffer;
         try {
-          const rbgKey = process.env.REMOVEBG_API_KEY;
-          if (!rbgKey) throw new Error("No REMOVEBG_API_KEY configured");
-          const res = await axios.post("https://api.remove.bg/v1.0/removebg", form, {
-            headers: { ...form.getHeaders(), "X-Api-Key": rbgKey },
-            responseType: "arraybuffer",
-            timeout: 30000,
-          });
-          resultBuffer = Buffer.from(res.data);
+          const RemoveBg = require('remove.bg');
+          const rbgKey = process.env.REMOVE_BG_API_KEY;
+          if (!rbgKey) throw new Error("No REMOVE_BG_API_KEY configured");
+          const tmp = require('os').tmpdir();
+          const fs = require('fs');
+          const path = require('path');
+          const inputPath = path.join(tmp, `removebg_${Date.now()}.png`);
+          fs.writeFileSync(inputPath, buffer);
+          const result = await RemoveBg.fromFile(inputPath, rbgKey);
+          resultBuffer = Buffer.from(result.base64img, 'base64');
+          fs.unlinkSync(inputPath);
         } catch {}
         if (!resultBuffer) return m.reply("⏳ Background removal API is currently overloaded. Please try again later!");
         await sock.sendMessage(m.chat, { image: resultBuffer, caption: "✅ Background removed!" }, { quoted: { key: m.key, message: m.message } });
@@ -425,15 +415,8 @@ const commands = [
       m.react("⏳");
       try {
         const buffer = await media.download();
-        const FormData = require("form-data");
-        const form = new FormData();
-        form.append("file", buffer, { filename: "image.png", contentType: "image/png" });
-        const ocrKey = process.env.OCR_API_KEY;
-        if (!ocrKey) return m.reply("❌ OCR API key not configured. Set OCR_API_KEY in environment.");
-        form.append("apikey", ocrKey);
-        form.append("language", "eng");
-        const res = await axios.post("https://api.ocr.space/parse/image", form, { headers: form.getHeaders(), timeout: 30000 });
-        const text = res.data?.ParsedResults?.[0]?.ParsedText || "";
+        const Tesseract = require('tesseract.js');
+        const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
         if (!text) return m.reply("❌ No text detected in image.");
         await m.reply(`📝 *OCR Result*\n\n${normalizeAiText(text.trim(), { keepLightFormatting: true })}`);
         m.react("✅");

@@ -46,11 +46,12 @@ const commands = [
     handler: async (sock, m) => {
       m.react("⏳");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/waifu");
-        if (!data?.url) return m.reply("❌ Failed to get waifu image.");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/waifu");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get waifu image.");
+        const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.waifu, `${m.chat}:anime:waifu`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: waifu.pics\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -65,11 +66,12 @@ const commands = [
     handler: async (sock, m) => {
       m.react("⏳");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/neko");
-        if (!data?.url) return m.reply("❌ Failed.");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/neko");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed.");
+        const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.neko, `${m.chat}:anime:neko`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: waifu.pics\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -84,10 +86,12 @@ const commands = [
     handler: async (sock, m) => {
       m.react("⏳");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/shinobu");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/shinobu");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get shinobu image.");
+        const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.shinobu, `${m.chat}:anime:shinobu`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: waifu.pics\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -102,10 +106,12 @@ const commands = [
     handler: async (sock, m) => {
       m.react("⏳");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/megumin");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/megumin");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get megumin image.");
+        const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.megumin, `${m.chat}:anime:megumin`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: waifu.pics\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -121,8 +127,12 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("🤗");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/hug");
-        const buffer = await fetchBuffer(data.url);
+        const { NekoClient } = require('nekos.life');
+        const neko = new NekoClient();
+        const data = await neko.sfw.hug();
+        const url = data?.url;
+        if (!url) return m.reply("❌ Failed to get hug image.");
+        const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "hug", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
@@ -288,7 +298,7 @@ const commands = [
     handler: async (sock, m) => {
       m.react("🎌");
       try {
-        const data = await fetchJson("https://animechan.xyz/api/random").catch(() => null);
+        const data = await fetchJson("https://animechan.vercel.app/api/random").catch(() => null);
         if (data?.quote) {
           await m.reply(`🎌 *Anime Quote*\n\n"${data.quote}"\n\n— *${data.character}* from _${data.anime}_\n📡 Source: AnimeChan`);
         } else {
