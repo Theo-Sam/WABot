@@ -52,16 +52,54 @@ async function pollinate(prompt, persona = "openai") {
 }
 
 async function fetchGeneratedImage(prompt) {
-  const seed = hashText(prompt || "image");
+  const { fetchBuffer } = require("../lib/helpers");
+
+  // 1. Pollinations — fast, try multiple models with short timeout
   const safePrompt = encodeURIComponent(String(prompt || "").slice(0, 400));
-  const url = `https://image.pollinations.ai/prompt/${safePrompt}?model=flux&width=1024&height=1024&nologo=true&seed=${seed}`;
-  try {
-    const { fetchBuffer } = require("../lib/helpers");
-    const buf = await fetchBuffer(url, { timeout: 60000 });
-    if (buf && buf.length > 2048) return buf;
-  } catch (err) {
-    console.error('[fetchGeneratedImage] pollinations failed:', err.message);
+  const pollinationsModels = ["sana", "zimage", "turbo", ""];
+  for (const model of pollinationsModels) {
+    const modelParam = model ? `&model=${model}` : "";
+    const url = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true${modelParam}`;
+    try {
+      const buf = await fetchBuffer(url, { timeout: 20000 });
+      if (buf && buf.length > 2048) return buf;
+    } catch {}
   }
+
+  // 2. StableHorde community GPU — reliable free async generation
+  try {
+    const hordeKey = process.env.STABLE_HORDE_KEY || "0000000000";
+    const submitRes = await axios.post(
+      "https://stablehorde.net/api/v2/generate/async",
+      {
+        prompt: String(prompt || "").slice(0, 500),
+        params: { steps: 20, width: 512, height: 512, n: 1, sampler_name: "k_euler" },
+        r2: true,
+        shared: true,
+      },
+      { timeout: 15000, headers: { "Content-Type": "application/json", apikey: hordeKey } }
+    );
+    const jobId = submitRes.data?.id;
+    if (jobId) {
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const check = await axios.get(`https://stablehorde.net/api/v2/generate/check/${jobId}`, { timeout: 10000 });
+        if (check.data?.done) {
+          const result = await axios.get(`https://stablehorde.net/api/v2/generate/status/${jobId}`, { timeout: 10000 });
+          const imgUrl = result.data?.generations?.[0]?.img;
+          if (imgUrl) {
+            const buf = await fetchBuffer(imgUrl, { timeout: 30000 });
+            if (buf && buf.length > 2048) return buf;
+          }
+          break;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[fetchGeneratedImage] StableHorde failed:', err.message);
+  }
+
+  // 3. Local SVG art fallback — always works, no external call needed
   return createLocalPromptArt(prompt);
 }
 
@@ -233,7 +271,8 @@ const commands = [
     desc: "Generate image with AI",
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}dalle <prompt>`);
-      m.react("🎨");
+      m.react("⏳");
+      await m.reply(`🎨 Generating image for: *${text}*\n\n_This may take up to 30 seconds..._`);
       try {
         const imgBuffer = await fetchGeneratedImage(text);
         if (!imgBuffer) return m.reply("⏳ Image generation is currently busy. Try again in a moment.");
@@ -241,7 +280,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Image generation temporarily failed after retries. Please try again.");
+        await m.reply("⏳ Image generation temporarily failed. Please try again.");
       }
     },
   },
