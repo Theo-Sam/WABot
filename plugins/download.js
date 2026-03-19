@@ -71,18 +71,33 @@ const { getPost } = require('insta-fetcher');
 async function igDownload(url) {
   try {
     const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "");
+    try {
+      const d = await postJson(
+        endpoints.download.cobaltApiJson,
+        { url: cleanUrl },
+        { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+      );
+      if ((d.status === "redirect" || d.status === "stream") && d.url) {
+        const buf = await fetchBuffer(d.url, { timeout: 60000 });
+        if (buf?.length > 1000) return { buffer: buf, type: 'video' };
+      }
+      if (d.status === "picker" && d.picker?.length) {
+        const buf = await fetchBuffer(d.picker[0].url, { timeout: 60000 });
+        if (buf?.length > 1000) return { buffer: buf, type: d.picker[0].type === 'photo' ? 'image' : 'video' };
+      }
+    } catch {}
+
+    const { getPost } = require('insta-fetcher');
     const data = await getPost(cleanUrl);
     if (data && data.media && data.media.length > 0) {
-      // Pick the first media item (could be image or video)
       const mediaItem = data.media[0];
       const buf = await fetchBuffer(mediaItem.url, { timeout: 60000 });
       if (buf?.length > 1000) {
         return { buffer: buf, type: mediaItem.type === 'image' ? 'image' : 'video' };
       }
     }
-    console.error('[igDownload] insta-fetcher: No valid media found', data);
   } catch (err) {
-    console.error('[igDownload] insta-fetcher error:', err);
+    console.error('[igDownload] error:', err);
   }
   return null;
 }
@@ -280,18 +295,14 @@ const commands = [
       if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tiktok <TikTok URL>`);
       m.react("⏳");
       try {
-        const TikTokScraper = require('tiktok-scraper');
         let videoBuffer = null;
         try {
-          const videoMeta = await TikTokScraper.video(targetUrl, { download: false });
-          if (videoMeta && videoMeta.collector && videoMeta.collector.length > 0) {
-            const videoUrl = videoMeta.collector[0].videoUrl;
-            if (videoUrl) {
-              videoBuffer = await fetchBuffer(videoUrl, { timeout: 60000 });
-            }
+          const res = await fetchJson(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`);
+          if (res && res.data && res.data.play) {
+            videoBuffer = await fetchBuffer(res.data.play, { timeout: 60000 });
           }
         } catch (err) {
-          console.error('[TikTok Download] tiktok-scraper error:', err);
+          console.error('[TikTok Download] tikwm error:', err);
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download TikTok video. The link may be expired, region-locked, or TikTok changed their endpoints.");
         await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
@@ -312,34 +323,14 @@ const commands = [
       if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tta <TikTok URL>`);
       m.react("⏳");
       try {
-        const TikTokScraper = require('tiktok-scraper');
         let audioBuffer = null;
         try {
-          const videoMeta = await TikTokScraper.video(targetUrl, { download: false });
-          if (videoMeta && videoMeta.collector && videoMeta.collector.length > 0) {
-            const videoUrl = videoMeta.collector[0].videoUrl;
-            if (videoUrl) {
-              // Download video, then extract audio using ffmpeg (requires ffmpeg installed)
-              const tmp = require('os').tmpdir();
-              const fs = require('fs');
-              const path = require('path');
-              const videoPath = path.join(tmp, `tiktok_${Date.now()}.mp4`);
-              const audioPath = path.join(tmp, `tiktok_${Date.now()}.aac`);
-              const videoData = await fetchBuffer(videoUrl, { timeout: 60000 });
-              fs.writeFileSync(videoPath, videoData);
-              const { execSync } = require('child_process');
-              try {
-                execSync(`ffmpeg -y -i "${videoPath}" -vn -acodec copy "${audioPath}"`);
-                audioBuffer = fs.readFileSync(audioPath);
-              } catch (fferr) {
-                console.error('[TikTok Audio] ffmpeg error:', fferr);
-              }
-              fs.unlinkSync(videoPath);
-              if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-            }
+          const res = await fetchJson(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`);
+          if (res && res.data && res.data.music) {
+            audioBuffer = await fetchBuffer(res.data.music, { timeout: 60000 });
           }
         } catch (err) {
-          console.error('[TikTok Audio Download] tiktok-scraper error:', err);
+          console.error('[TikTok Audio Download] tikwm error:', err);
         }
         if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download TikTok audio.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/aac" }, { quoted: { key: m.key, message: m.message } });

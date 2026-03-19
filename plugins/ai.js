@@ -56,10 +56,12 @@ async function fetchGeneratedImage(prompt) {
   const safePrompt = encodeURIComponent(String(prompt || "").slice(0, 400));
   const url = `https://image.pollinations.ai/prompt/${safePrompt}?model=flux&width=1024&height=1024&nologo=true&seed=${seed}`;
   try {
-    const res = await axios.get(url, { responseType: "arraybuffer", timeout: 45000 });
-    const buf = Buffer.from(res.data);
-    if (buf?.length > 2048) return buf;
-  } catch {}
+    const { fetchBuffer } = require("../lib/helpers");
+    const buf = await fetchBuffer(url, { timeout: 60000 });
+    if (buf && buf.length > 2048) return buf;
+  } catch (err) {
+    console.error('[fetchGeneratedImage] pollinations failed:', err.message);
+  }
   return createLocalPromptArt(prompt);
 }
 
