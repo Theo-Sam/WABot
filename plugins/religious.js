@@ -150,7 +150,18 @@ const commands = [
           english = enRes?.data || null;
         }
 
-        if (!arabic && !english) return m.reply("❌ Verse not found.");
+        // Fallback: try a second Quran API if primary failed entirely
+        if (!arabic && !english) {
+          const fb = await fetchJson(`https://quranapi.pages.dev/api/${surah}/${ayah}.json`).catch(() => null);
+          if (fb?.arabic1) {
+            arabic = { text: fb.arabic1, surah: { englishName: fb.surahName || `Surah ${surah}`, name: fb.surahNameArabic || "" }, numberInSurah: ayah };
+          }
+          if (fb?.english) {
+            english = { text: fb.english, surah: { englishName: fb.surahName || `Surah ${surah}`, name: fb.surahNameArabic || "" }, numberInSurah: ayah };
+          }
+        }
+
+        if (!arabic && !english) return m.reply(`❌ Could not fetch verse ${surah}:${ayah}. The Quran API may be temporarily unavailable — please try again shortly.`);
         const refSurahNameEn = arabic?.surah?.englishName || english?.surah?.englishName || `Surah ${surah}`;
         const refSurahNameAr = arabic?.surah?.name || "";
         const refAyah = arabic?.numberInSurah || english?.numberInSurah || ayah;
@@ -173,27 +184,68 @@ const commands = [
     desc: "Get a random hadith",
     handler: async (sock, m, { text }) => {
       m.react("📖");
+
+      // Strip HTML tags from sunnah.com responses
+      const stripHtml = (str) => String(str || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+
+      const gadingBooks = ["bukhari", "muslim", "abudawud", "nasai", "tirmidzi", "ibnmajah"];
+
       try {
         const [bookRaw, numberRaw] = String(text || "").trim().split(/\s+/);
-        const supportedBooks = ["bukhari", "muslim", "abudawud", "nasai", "tirmidzi", "ibnmajah"];
-        const book = supportedBooks.includes((bookRaw || "").toLowerCase()) ? bookRaw.toLowerCase() : "bukhari";
+        const book = gadingBooks.includes((bookRaw || "").toLowerCase()) ? bookRaw.toLowerCase() : "bukhari";
         const requested = Number(numberRaw || bookRaw || 0);
         const num = Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), 7000) : Math.floor(Math.random() * 300) + 1;
+
+        // --- Primary (random only): api.sunnah.com (English + Arabic) ---
+        // sunnah.com public key only supports /hadiths/random, not specific lookups
+        if (!requested || requested <= 0) {
+          const sunnahData = await fetchJson("https://api.sunnah.com/v1/hadiths/random", {
+            headers: { "X-API-Key": "SqD712P3E82xnwOAEOkGd5JZH8s9wRR24TqNFzjk" },
+          }).catch(() => null);
+
+          if (sunnahData?.hadith?.length) {
+            const enH = sunnahData.hadith.find((h) => h.lang === "en");
+            const arH = sunnahData.hadith.find((h) => h.lang === "ar");
+            const enText = stripHtml(enH?.body);
+            const arText = stripHtml(arH?.body);
+            const sunnahBookMap2 = {
+              bukhari: "sahih-bukhari", muslim: "sahih-muslim", abudawud: "abu-dawud",
+              nasai: "an-nasai", tirmidzi: "al-tirmidhi", ibnmajah: "ibn-majah",
+            };
+            const bookName = sunnahData.collection || sunnahBookMap2[book] || "Sahih Bukhari";
+            const hadithNum = sunnahData.hadithNumber || "?";
+
+            let msg = `📖 *Hadith*\n\n`;
+            msg += `📌 *${bookName.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} - #${hadithNum}*\n\n`;
+            if (arText) msg += `${arText}\n\n`;
+            if (enText) msg += `*Translation (English):*\n${enText}\n`;
+            msg += `\n💡 Tip: ${config.PREFIX}hadith bukhari 42`;
+            await m.reply(msg);
+            m.react("✅");
+            return;
+          }
+        }
+
+        // --- Fallback: api.hadith.gading.dev (Arabic + Indonesian) ---
         const data = await fetchJson(`https://api.hadith.gading.dev/books/${book}/${num}`).catch(() => null);
         if (data?.data?.contents) {
           const h = data.data.contents;
           let msg = `📖 *Hadith*\n\n`;
           msg += `📌 *${data.data.name} - #${h.number}*\n\n`;
           msg += `${h.arab}\n\n`;
-          msg += `*Translation:*\n${h.en || h.id || ""}\n`;
+          const gadingTrans = h.en || h.id || "";
+          const gadingLang = h.en ? "English" : "Indonesian";
+          if (gadingTrans) msg += `*Translation (${gadingLang}):*\n${gadingTrans}\n`;
           msg += `\n💡 Tip: ${config.PREFIX}hadith bukhari 42`;
           await m.reply(msg);
           m.react("✅");
-        } else {
-          const h = pickNonRepeating(fallbackHadiths, `${m.chat}:hadith`, { maxHistory: 5 });
-          await m.reply(`📖 *Hadith*\n\n"${h.text}"\n\n_${h.source}_\n📡 Source: Local fallback`);
-          m.react("✅");
+          return;
         }
+
+        // --- Last resort: local fallback ---
+        const hf = pickNonRepeating(fallbackHadiths, `${m.chat}:hadith`, { maxHistory: 5 });
+        await m.reply(`📖 *Hadith*\n\n"${hf.text}"\n\n_${hf.source}_\n📡 Source: Local fallback`);
+        m.react("✅");
       } catch {
         m.react("❌");
         await m.reply("❌ Could not fetch hadith.");
