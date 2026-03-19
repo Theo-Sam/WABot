@@ -37,3 +37,8 @@ externalPort = 80
 [deployment]
 deploymentTarget = "vm"
 run = ["node", "index.js"]
+
+[userenv]
+
+[userenv.shared]
+INSTAGRAM_SESSION = "52733923290%3AKQI2RyIjk9gks1%3A22%3AAYhE5dQ176AclFiKPZDlfnJ3p00unm_nsBttmBGyBg"

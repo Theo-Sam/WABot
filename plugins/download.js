@@ -118,11 +118,13 @@ function igDownloadYtDlp(url) {
 
     // Write Netscape-format cookie file that yt-dlp accepts.
     // Domain MUST start with '.' when the flag column is TRUE (include_subdomains).
+    // Decode the session value in case the user copied it URL-encoded from the browser.
+    const decodedSession = decodeURIComponent(sessionCookie);
     const expires = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
     const cookieContent = [
       '# Netscape HTTP Cookie File',
-      `.instagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${sessionCookie}`,
-      `.cdninstagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${sessionCookie}`,
+      `.instagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${decodedSession}`,
+      `.cdninstagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${decodedSession}`,
     ].join('\n');
 
     try {
