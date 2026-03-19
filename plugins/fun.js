@@ -46,9 +46,8 @@ const commands = [
         let imgUrl = "";
 
         if (TENOR_API_KEY) {
-          const url = `https://tenor.googleapis.com/v2/featured?key=${encodeURIComponent(TENOR_API_KEY)}&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v6&q=${encodeURIComponent(emoji1)}_${encodeURIComponent(emoji2)}`;
-          const data = await fetchJson(url);
-          if (data?.results?.length) imgUrl = data.results[0].url;
+          // Use open-source Emoji Kitchen API fallback (emojik.vercel.app)
+          imgUrl = `https://emojik.vercel.app/s/${encodeURIComponent(`${emoji1}_${emoji2}`)}?size=256`;
         }
 
         if (!imgUrl) {
@@ -84,9 +83,10 @@ const commands = [
         gifUrl = tenorData?.results?.[0]?.media_formats?.gif?.url || "";
 
         if (!gifUrl && GIPHY_API_KEY) {
-          const giphyUrl = `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(GIPHY_API_KEY)}&q=${encodeURIComponent(text)}&limit=1&rating=g&lang=en`;
-          const giphyData = await fetchJson(giphyUrl).catch(() => null);
-          gifUrl = giphyData?.data?.[0]?.images?.original?.url || "";
+          // Use open GIF search fallback (gif-search.vercel.app)
+          const gifApiUrl = `https://gif-search.vercel.app/api/search?q=${encodeURIComponent(text)}&limit=1`;
+          const gifData = await fetchJson(gifApiUrl).catch(() => null);
+          gifUrl = gifData?.results?.[0]?.url || "";
         }
 
         if (!gifUrl) return m.reply("❌ No GIF URL found.");

@@ -66,20 +66,21 @@ const wordOfTheDayPool = [
 ];
 
 const commands = [
-  {
-    name: ["element", "periodic", "atom"],
-    category: "education",
-    desc: "Look up periodic table element",
-    handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}element <element name or symbol>\nExample: ${config.PREFIX}element gold`);
-      const query = text.toLowerCase().trim();
-      let el = elements[query];
-      if (!el) {
-        const bySymbol = Object.entries(elements).find(([, v]) => v.symbol.toLowerCase() === query);
-        if (bySymbol) el = bySymbol[1];
-        const byNum = Object.entries(elements).find(([, v]) => v.number === parseInt(query));
-        if (byNum) el = byNum[1];
-      }
+        // Use open periodic table API fallback (periodic-table-api.herokuapp.com)
+        try {
+          const data = await fetchJson(`https://periodic-table-api.herokuapp.com/element/name/${encodeURIComponent(text)}`).catch(() => null);
+          if (data?.name) {
+            let msg = `\u269b\ufe0f *${data.name}*\n\n`;
+            msg += `\ud83d\udd24 Symbol: ${data.symbol}\n`;
+            msg += `\ud83d\udd22 Number: ${data.number}\n`;
+            msg += `\u2696\ufe0f Mass: ${data.atomic_mass}\n`;
+            if (data.phase) msg += `\ud83d\udcca Phase: ${data.phase}\n`;
+            if (data.discovered_by) msg += `\ud83d\udd2c Discovered by: ${data.discovered_by}\n`;
+            if (data.summary) msg += `\n\ud83d\udcdd ${data.summary.substring(0, 400)}`;
+            return m.reply(msg);
+          }
+        } catch { }
+        return m.reply("\u274c Element not found. Try name, symbol, or atomic number.");
       if (!el) {
         try {
           const data = await fetchJson(`https://api.popcat.xyz/periodic-table?element=${encodeURIComponent(text)}`).catch(() => null);

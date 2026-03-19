@@ -170,48 +170,32 @@ const commands = [
       if (isNaN(weight) || isNaN(heightCm)) return m.reply("Invalid numbers.");
       const heightM = heightCm / 100;
       const bmi = (weight / (heightM * heightM)).toFixed(1);
-      let category = "";
-      let advice = "";
-      if (bmi < 16) { category = "Severely Underweight 🔴"; advice = "Please consult a healthcare provider."; }
-      else if (bmi < 18.5) { category = "Underweight 🔵"; advice = "Consider a balanced diet with more calories."; }
-      else if (bmi < 25) { category = "Normal Weight ✅"; advice = "Great! Maintain your healthy lifestyle."; }
-      else if (bmi < 30) { category = "Overweight 🟡"; advice = "Consider regular exercise and balanced meals."; }
-      else if (bmi < 35) { category = "Obese (Class I) 🟠"; advice = "Consult a healthcare provider for guidance."; }
-      else { category = "Obese (Class II+) 🔴"; advice = "Please seek medical advice."; }
-
-      const idealMin = (18.5 * heightM * heightM).toFixed(1);
-      const idealMax = (24.9 * heightM * heightM).toFixed(1);
-
-      let msg = `⚖️ *BMI Calculator*\n\n`;
-      msg += `📊 Weight: ${weight} kg\n`;
-      msg += `📏 Height: ${heightCm} cm (${heightM.toFixed(2)} m)\n\n`;
-      msg += `🔢 BMI: *${bmi}*\n`;
-      msg += `📌 Category: *${category}*\n`;
-      msg += `💡 ${advice}\n`;
-      msg += `⚖️ Ideal Weight: ${idealMin} - ${idealMax} kg\n\n`;
-      msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-      await m.reply(msg);
-    },
-  },
-  {
-    name: ["age", "agecalc"],
-    category: "utility",
-    desc: "Calculate age from birthdate",
-    handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}age <YYYY-MM-DD>\nExample: ${config.PREFIX}age 2000-01-15`);
       try {
-        const birth = new Date(text);
-        if (isNaN(birth.getTime())) return m.reply("Invalid date format. Use YYYY-MM-DD.");
-        const now = new Date();
-        let years = now.getFullYear() - birth.getFullYear();
-        let months = now.getMonth() - birth.getMonth();
-        let days = now.getDate() - birth.getDate();
-        if (days < 0) { months--; days += 30; }
-        if (months < 0) { years--; months += 12; }
-        const totalDays = Math.floor((now - birth) / 86400000);
-        const totalWeeks = Math.floor(totalDays / 7);
-        const totalHours = totalDays * 24;
-        const totalMinutes = totalHours * 60;
+        let rate = null;
+        // Use exchangerate.host (open, stable)
+        const exchangerateHost = await fetchJson(`https://api.exchangerate.host/convert?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&amount=1`).catch(() => null);
+        if (Number.isFinite(Number(exchangerateHost?.result))) {
+          rate = Number(exchangerateHost.result);
+        }
+        if (!rate || !Number.isFinite(rate)) {
+          return m.reply(`\u274c Invalid currency code or provider unavailable. Example: USD, EUR, GBP, GHS, NGN, KES`);
+        }
+        const result = (amount * rate).toFixed(2);
+        const reverseRate = (1 / rate).toFixed(6);
+        let msg = `\ud83d\udcb1 *Currency Converter*\n\n`;
+        msg += `\ud83d\udcb5 ${amount.toLocaleString()} ${from}\n`;
+        msg += `\u2b07\ufe0f\n`;
+        msg += `\ud83d\udcb0 *${parseFloat(result).toLocaleString()} ${to}*\n\n`;
+        msg += `\ud83d\udcca 1 ${from} = ${rate.toFixed(4)} ${to}\n`;
+        msg += `\ud83d\udcca 1 ${to} = ${reverseRate} ${from}\n`;
+        msg += `\ud83d\udcc5 Updated: ${new Date().toLocaleDateString()}\n\n`;
+        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ \u26a1`;
+        await m.reply(msg);
+        m.react("\u2705");
+      } catch {
+        m.react("\u274c");
+        await m.reply("\u23f3 The Currency API is currently overloaded.");
+      }
 
         const nextBirthday = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
         if (nextBirthday < now) nextBirthday.setFullYear(now.getFullYear() + 1);
@@ -348,39 +332,37 @@ const commands = [
         if (dnsA?.Answer?.length) {
           msg += `*A Records (IPv4)*\n`;
           dnsA.Answer.forEach((r) => { if (r.type === 1) msg += `📌 ${r.data} (TTL: ${r.TTL}s)\n`; });
-          msg += `\n`;
-        }
-        if (dnsAAAA?.Answer?.length) {
-          msg += `*AAAA Records (IPv6)*\n`;
-          dnsAAAA.Answer.forEach((r) => { if (r.type === 28) msg += `📌 ${r.data}\n`; });
-          msg += `\n`;
-        }
-        if (dnsNS?.Answer?.length) {
-          msg += `*Name Servers*\n`;
-          dnsNS.Answer.forEach((r) => { if (r.type === 2) msg += `🖥️ ${r.data}\n`; });
-          msg += `\n`;
-        }
-        if (dnsMX?.Answer?.length) {
-          msg += `*Mail Servers*\n`;
-          dnsMX.Answer.forEach((r) => { if (r.type === 15) msg += `📧 ${r.data}\n`; });
-          msg += `\n`;
-        }
-        if (dnsTXT?.Answer?.length) {
-          msg += `*TXT Records*\n`;
-          dnsTXT.Answer.filter(r => r.type === 16).slice(0, 5).forEach((r) => {
-            msg += `📝 ${r.data?.substring(0, 100)}\n`;
-          });
-          msg += `\n`;
-        }
-
-        if (!dnsA?.Answer?.length && !dnsNS?.Answer?.length && !dnsMX?.Answer?.length) {
-          msg += `No DNS records found for this domain.\n`;
-        }
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await m.reply(msg);
-        m.react("✅");
-      } catch {
-        m.react("❌");
+          try {
+            // Use restcountries.com (open, stable)
+            const data = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`);
+            if (!data?.[0]) return m.reply("\u274c Country not found.");
+            const c = data[0];
+            let msg = `\ud83c\udf0d *Country Info*\n\n`;
+            msg += `${c.flag || ""} *${c.name?.common?.toUpperCase()}*\n\n`;
+            msg += `*Names*\n`;
+            if (c.name?.official) msg += `\ud83d\udcdb Official: ${c.name.official}\n`;
+            if (c.name?.nativeName) {
+              const natives = Object.values(c.name.nativeName);
+              natives.forEach(n => {
+                if (n.official) msg += `\ud83c\udff7\ufe0f Native: ${n.official} (${n.common})\n`;
+              });
+            }
+            if (c.altSpellings?.length) msg += `\u270f\ufe0f Alt Names: ${c.altSpellings.join(", ")}\n`;
+            if (c.cca2) msg += `\ud83d\udd24 ISO Code: ${c.cca2}${c.cca3 ? " / " + c.cca3 : ""}\n`;
+            if (c.cioc) msg += `\ud83c\udfc5 Olympic Code: ${c.cioc}\n`;
+            if (c.fifa) msg += `\u26bd FIFA Code: ${c.fifa}\n`;
+            msg += `\n`;
+            msg += `*Geography*\n`;
+            if (c.capital?.length) msg += `\ud83c\udfdb\ufe0f Capital: ${c.capital.join(", ")}\n`;
+            if (c.continents?.length) msg += `\ud83d\uddfa\ufe0f Continent: ${c.continents.join(", ")}\n`;
+            if (c.region) msg += `\ud83c\udf10 Region: ${c.region}\n`;
+            if (c.subregion) msg += `\ud83d\udccd Subregion: ${c.subregion}\n`;
+            if (c.latlng?.length) msg += `\ud83d\udccc Coordinates: ${c.latlng[0]}\u00b0, ${c.latlng[1]}\u00b0\n`;
+            if (c.area) msg += `\ud83d\udcd0 Area: ${c.area.toLocaleString()} km\u00b2\n`;
+            msg += `\ud83c\udfdd\ufe0f Landlocked: ${c.landlocked ? "Yes" : "No"}\n`;
+            if (c.borders?.length) msg += `\ud83d\udea7 Borders: ${c.borders.join(", ")}\n`;
+            if (c.maps?.googleMaps) msg += `\ud83d\udccd Google Maps: ${c.maps.googleMaps}\n`;
+            msg += `\n`;
         await m.reply("⏳ The WHOIS API is currently overloaded.");
       }
     },

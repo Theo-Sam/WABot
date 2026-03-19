@@ -69,43 +69,29 @@ const commands = [
               });
               msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
               await m.reply(msg);
-              m.react("✅");
-              return;
-            }
-          } catch {}
-          return m.reply("⏳ No search results found. Try a different query.");
-        }
-        let msg = `🔍 *Search Results*\n\n`;
-        msg += `🔎 Query: *${text}*\n`;
-        msg += `📊 Showing top ${Math.min(results.length, 7)} results\n\n`;
-        results.slice(0, 7).forEach((r, i) => {
-          msg += `*${i + 1}. ${r.title || "Untitled"}*\n`;
-          if (r.content) msg += `${r.content.substring(0, 300)}\n`;
-          if (r.url) msg += `🔗 ${r.url}\n`;
-          if (r.engine) msg += `🔧 Source: ${r.engine}\n`;
-          msg += `\n`;
-        });
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
-        await replyLongText(m, msg);
-        m.react("✅");
-      } catch {
-        m.react("❌");
-        await m.reply("⏳ The search API is currently overloaded. Please try again later!");
-      }
-    },
-  },
-  {
-    name: ["wiki", "wikipedia", "w"],
-    category: "search",
-    desc: "Search Wikipedia",
-    handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}wiki <query>`);
-      m.react("📚");
-      try {
-        const [data, catData, fullExtractData] = await Promise.all([
-          fetchJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(text)}`),
-          fetchJson(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(text)}&prop=categories&cllimit=20&format=json`).catch(() => null),
-          fetchJson(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(text)}&prop=extracts&exintro=false&explaintext=true&exlimit=1&format=json`).catch(() => null),
+              try {
+                // Use open search fallback (searxng)
+                const results = await searxSearch(text);
+                if (!results.length) {
+                  return m.reply("\u23f3 No search results found. Try a different query.");
+                }
+                let msg = `\ud83d\udd0d *Search Results*\n\n`;
+                msg += `\ud83d\udd0e Query: *${text}*\n`;
+                msg += `\ud83d\udcca Showing top ${Math.min(results.length, 7)} results\n\n`;
+                results.slice(0, 7).forEach((r, i) => {
+                  msg += `*${i + 1}. ${r.title || "Untitled"}*\n`;
+                  if (r.content) msg += `${r.content.substring(0, 300)}\n`;
+                  if (r.url) msg += `\ud83d\udd17 ${r.url}\n`;
+                  if (r.engine) msg += `\ud83d\udd27 Source: ${r.engine}\n`;
+                  msg += `\n`;
+                });
+                msg += `_${config.BOT_NAME} | Powered by Desam Tech_ \u26a1`;
+                await replyLongText(m, msg);
+                m.react("\u2705");
+              } catch {
+                m.react("\u274c");
+                await m.reply("\u23f3 The search API is currently overloaded. Please try again later!");
+              }
         ]);
         if (!data?.extract) return m.reply("⏳ No Wikipedia article found or the API is busy.");
 

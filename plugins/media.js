@@ -18,8 +18,9 @@ const commands = [
       m.react("⏳");
       try {
         const unsplashKey = process.env.UNSPLASH_ACCESS_KEY || "";
-        let imageUrl = "";
-
+          // Use open image search fallback (duckduckgo images)
+          const ddg = await fetchJson(`https://duckduckgo-image-search.vercel.app/api/search?q=${encodeURIComponent(text)}&count=1`).catch(() => null);
+          imageUrl = ddg?.results?.[0]?.image || "";
         if (unsplashKey) {
           const data = await fetchJson(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(text)}&page=1&per_page=1&orientation=landscape&client_id=${encodeURIComponent(unsplashKey)}`).catch(() => null);
           imageUrl = data?.results?.[0]?.urls?.regular || "";
@@ -51,19 +52,17 @@ const commands = [
       if (!media) return m.reply(`Reply to an image with ${config.PREFIX}url`);
       m.react("⏳");
       try {
-        const buffer = await media.download();
-        const FormData = (await import("form-data")).default;
-        const axios = require("axios");
-        const form = new FormData();
-        form.append("file", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
-        // Use Imgur API for image upload (anonymous)
-        const IMGUR_CLIENT_ID = process.env.IMGUR_CLIENT_ID || "";
-        if (!IMGUR_CLIENT_ID) return m.reply("❌ Imgur Client ID is required for image upload. Set IMGUR_CLIENT_ID in your environment.");
-        const res = await axios.post("https://api.imgur.com/3/image", form, {
-          headers: { ...form.getHeaders(), Authorization: `Client-ID ${IMGUR_CLIENT_ID}` },
+        // Use open image upload fallback (uguu.se)
+        const res = await axios.post("https://uguu.se/upload.php", form, {
+          headers: { ...form.getHeaders() },
           timeout: 30000,
         });
-        if (res.data && res.data.data?.link) {
+        if (res.data && res.data.files?.[0]?.url) {
+          await m.reply(`✅ *Image Uploaded*\n\n${res.data.files[0].url}`);
+          m.react("✅");
+        } else {
+          throw new Error("Upload failed");
+        }
           await m.reply(`✅ *Image Uploaded*\n\n${res.data.data.link}`);
           m.react("✅");
         } else {

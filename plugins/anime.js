@@ -127,10 +127,8 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("🤗");
       try {
-        const { NekoClient } = require('nekos.life');
-        const neko = new NekoClient();
-        const data = await neko.sfw.hug();
-        const url = data?.url;
+        const data = await fetchJson("https://nekos.best/api/v2/hug");
+        const url = data?.results?.[0]?.url;
         if (!url) return m.reply("❌ Failed to get hug image.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "hug", m.sender, target);
@@ -148,8 +146,10 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("👋");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/slap");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/slap");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get slap image.");
+        const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "slap", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
@@ -165,8 +165,10 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("🤚");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/pat");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/pat");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get pat image.");
+        const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "pat", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
@@ -182,8 +184,10 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("💋");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/kiss");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/kiss");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get kiss image.");
+        const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "kiss", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
@@ -199,8 +203,10 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("🥰");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/cuddle");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/cuddle");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get cuddle image.");
+        const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "cuddle", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
@@ -215,10 +221,12 @@ const commands = [
     handler: async (sock, m) => {
       m.react("😢");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/cry");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/cry");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get cry image.");
+        const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.cry, `${m.chat}:anime:cry`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: waifu.pics` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best` }, { quoted: { key: m.key, message: m.message } });
       } catch {
         await m.reply("⏳ The Anime API is currently overloaded.");
       }
@@ -231,10 +239,12 @@ const commands = [
     handler: async (sock, m) => {
       m.react("😊");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/smile");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/smile");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get smile image.");
+        const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.smile, `${m.chat}:anime:smile`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: waifu.pics` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best` }, { quoted: { key: m.key, message: m.message } });
       } catch {
         await m.reply("⏳ The Anime API is currently overloaded.");
       }
@@ -248,8 +258,10 @@ const commands = [
       const target = m.mentions[0] || m.quoted?.sender;
       m.react("👋");
       try {
-        const data = await fetchJson("https://api.waifu.pics/sfw/wave");
-        const buffer = await fetchBuffer(data.url);
+        const data = await fetchJson("https://nekos.best/api/v2/wave");
+        const url = data?.results?.[0]?.url;
+        if (!url) return m.reply("❌ Failed to get wave image.");
+        const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "wave", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {

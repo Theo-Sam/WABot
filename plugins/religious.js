@@ -45,6 +45,7 @@ const commands = [
           if (requested.length) versions = requested.slice(0, 5);
         }
 
+        // Use open Bible API (bible-api.com)
         const responses = await Promise.allSettled(
           versions.map((version) =>
             fetchJson(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${version}`).then((data) => ({ version, data }))
