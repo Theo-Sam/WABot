@@ -7,6 +7,10 @@ function isAutoStatusViewEnabled() {
   return String(config.AUTO_STATUS_VIEW || "off").toLowerCase() === "on";
 }
 
+function isAutoStatusSaveEnabled() {
+  return String(config.AUTO_STATUS_SAVE || "on").toLowerCase() === "on";
+}
+
 function getOwnerJid(sock) {
   const ownerNumber = String(config.OWNER_NUMBER || "").replace(/[^0-9]/g, "");
   if (ownerNumber) return jidNormalizedUser(`${ownerNumber}@s.whatsapp.net`);
@@ -176,9 +180,52 @@ const commands = [
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via statusview command.");
         await m.reply("✅ Auto status view disabled. (persisted)");
       } else if (mode === "status" || mode === "state") {
-        await m.reply(`ℹ️ Auto status view is currently *${config.AUTO_STATUS_VIEW || "off"}*.`);
+        await m.reply(
+          `ℹ️ Status settings:\n` +
+          `▸ Auto-view: *${config.AUTO_STATUS_VIEW || "off"}*\n` +
+          `▸ Auto-save: *${config.AUTO_STATUS_SAVE || "on"}*`
+        );
       } else {
         await m.reply(`Usage: ${config.PREFIX}autoview on/off/toggle\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);
+      }
+    },
+  },
+  {
+    name: ["statusave", "autosave", "autostatussave", "setstatussave"],
+    category: "status",
+    desc: "Toggle auto-saving of statuses to cache",
+    owner: true,
+    handler: async (sock, m, { text }) => {
+      const mode = String(text || "").trim().toLowerCase();
+      const envPath = path.join(__dirname, "..", ".env");
+      let newValue = config.AUTO_STATUS_SAVE;
+      if (!mode || mode === "toggle") {
+        newValue = isAutoStatusSaveEnabled() ? "off" : "on";
+        config.AUTO_STATUS_SAVE = newValue;
+        setEnvValue(envPath, "AUTO_STATUS_SAVE", newValue);
+        console.log(`[DESAM-STATUS] AUTO_STATUS_SAVE toggled ${String(newValue).toUpperCase()} via statusave command.`);
+        return m.reply(`✅ Auto status save is now *${newValue}* (persisted).`);
+      }
+      if (mode === "on") {
+        newValue = "on";
+        config.AUTO_STATUS_SAVE = newValue;
+        setEnvValue(envPath, "AUTO_STATUS_SAVE", newValue);
+        console.log("[DESAM-STATUS] AUTO_STATUS_SAVE toggled ON via statusave command.");
+        await m.reply("✅ Auto status save enabled. New statuses will be cached for .statusdl. (persisted)");
+      } else if (mode === "off") {
+        newValue = "off";
+        config.AUTO_STATUS_SAVE = newValue;
+        setEnvValue(envPath, "AUTO_STATUS_SAVE", newValue);
+        console.log("[DESAM-STATUS] AUTO_STATUS_SAVE toggled OFF via statusave command.");
+        await m.reply("✅ Auto status save disabled. Statuses will NOT be cached. (persisted)");
+      } else if (mode === "status" || mode === "state") {
+        await m.reply(
+          `ℹ️ Status settings:\n` +
+          `▸ Auto-view: *${config.AUTO_STATUS_VIEW || "off"}*\n` +
+          `▸ Auto-save: *${config.AUTO_STATUS_SAVE || "on"}*`
+        );
+      } else {
+        await m.reply(`Usage: ${config.PREFIX}statusave on/off/toggle\nCurrent: ${config.AUTO_STATUS_SAVE || "on"}`);
       }
     },
   },
