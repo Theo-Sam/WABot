@@ -96,33 +96,58 @@ const commands = [
           return m.reply("❌ Could not find a status to save.");
         }
 
-        const type = data.type || getContentType(data.message) || Object.keys(data.message || {})[0];
+        const rawType = data.type || getContentType(data.message) || Object.keys(data.message || {})[0];
+        // Normalize document-wrapped videos — some WA clients send video statuses as documentMessage
+        const docMime = data.message?.documentMessage?.mimetype || "";
+        const isDocVideo = rawType === "documentMessage" && docMime.startsWith("video/");
+        const isDocAudio = rawType === "documentMessage" && docMime.startsWith("audio/");
+        const type = isDocVideo ? "videoMessage" : isDocAudio ? "audioMessage" : rawType;
+
+        console.log(`[DESAM-STATUS] Saving status type=${type} (raw=${rawType}) mime=${docMime || "n/a"} from ${data.pushName || "Unknown"}`);
+
         if (type === "conversation" || type === "extendedTextMessage") {
           const text = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
           await sock.sendMessage(targetChat, { text: `📡 *Status from ${data.pushName || "Unknown"}*\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
-        } else if (type === "imageMessage" || type === "videoMessage" || type === "audioMessage") {
-          const buffer = await downloadMediaMessage(
-            { key: data.key, message: data.message },
-            "buffer",
-            {},
-            { reuploadRequest: sock.updateMediaMessage }
-          );
-          if (!buffer) return m.reply("❌ Failed to download status media.");
+        } else if (type === "imageMessage" || type === "videoMessage" || type === "audioMessage" || type === "documentMessage") {
+          // Build the message object for downloadMediaMessage — it needs the full key + message
+          const dlMsg = { key: data.key, message: data.message };
+          let buffer;
+          try {
+            buffer = await downloadMediaMessage(
+              dlMsg,
+              "buffer",
+              {},
+              { reuploadRequest: sock.updateMediaMessage }
+            );
+          } catch (dlErr) {
+            console.error(`[DESAM-STATUS] downloadMediaMessage failed: ${dlErr.message}`);
+            return m.reply("❌ Failed to download status media. It may have expired.");
+          }
+          if (!buffer || buffer.length < 100) return m.reply("❌ Downloaded media is empty or corrupt.");
           const mediaOpts = {};
           if (type === "imageMessage") {
             mediaOpts.image = buffer;
             mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
-          } else if (type === "videoMessage") {
+          } else if (type === "videoMessage" || isDocVideo) {
             mediaOpts.video = buffer;
             mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
-          } else {
+          } else if (type === "audioMessage" || isDocAudio) {
             mediaOpts.audio = buffer;
             mediaOpts.mimetype = "audio/mp4";
-            mediaOpts.ptt = true;
+            mediaOpts.ptt = false;
+          } else {
+            // documentMessage — send as document preserving filename
+            const docName = data.message?.documentMessage?.fileName || "status-file";
+            const docMimeType = data.message?.documentMessage?.mimetype || "application/octet-stream";
+            mediaOpts.document = buffer;
+            mediaOpts.mimetype = docMimeType;
+            mediaOpts.fileName = docName;
+            mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
           }
           await sock.sendMessage(targetChat, mediaOpts, { quoted: { key: m.key, message: m.message } });
         } else {
-          return m.reply("❌ Unsupported status type.");
+          console.warn(`[DESAM-STATUS] Unhandled status type: ${type} (raw=${rawType})`);
+          return m.reply(`❌ Unsupported status type: \`${type}\`. Please report this so it can be added.`);
         }
         m.react("✅");
       } catch (err) {
