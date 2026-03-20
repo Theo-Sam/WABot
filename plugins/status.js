@@ -30,67 +30,115 @@ const commands = [
     desc: "Download recent WhatsApp statuses",
     owner: true,
     handler: async (sock, m, { args }) => {
-      const quotedStatusData =
-        m.chat === "status@broadcast" && m.quoted
-          ? {
-              key: m.quoted.key,
-              message: m.quoted.message,
-              type: m.quoted.type,
-              sender: m.quoted.sender,
-              pushName: m.quoted.pushName || m.quoted.sender?.split("@")[0] || "Unknown",
-              timestamp: Date.now(),
-            }
-          : null;
-
-      let statusCache;
+      let statusCache, statusMessageIdIndex;
       try {
-        statusCache = require("../lib/connection").statusCache;
+        const conn = require("../lib/connection");
+        statusCache = conn.statusCache;
+        statusMessageIdIndex = conn.statusMessageIdIndex;
       } catch {
         return m.reply("❌ Status cache not available.");
       }
-      console.log(`[DESAM-STATUS] Status retrieval requested by ${m.sender} | cached_records=${statusCache?.size || 0}`);
-      if (!quotedStatusData && (!statusCache || statusCache.size === 0)) {
-        console.log("[DESAM-STATUS] Status retrieval returned empty cache.");
-        const autoViewState = isAutoStatusViewEnabled() ? "on" : "off";
-        const guidance = autoViewState === "on"
-          ? "Auto-view is already ON. Ask a contact to post a new status, wait a few seconds, then run statusdl list again."
-          : `Enable auto-view with ${config.PREFIX}statusview on or set AUTO_STATUS_VIEW=on in .env, then try again after a new status arrives.`;
-        return m.reply(`📭 No recent statuses cached.\n\nAUTO_STATUS_VIEW is currently: *${autoViewState}*\n${guidance}`);
-      }
+
       const targetChat = getStatusSaveTargetChat(sock, m);
       const arg0 = String(args[0] || "").toLowerCase();
       const orderedEntries = [...statusCache.entries()].sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0));
+
+      // ── list subcommand ──────────────────────────────────────────────────────
       if (arg0 === "list") {
-        let list = `📡 *Recent Statuses*\n`;
-        list += `Total cached: ${orderedEntries.length}\n\n`;
+        if (orderedEntries.length === 0) {
+          return m.reply(`📭 No statuses cached yet.\nEnable auto-view: ${config.PREFIX}statusview on`);
+        }
+        let list = `📡 *Recent Statuses* (${orderedEntries.length} cached)\n\n`;
         let i = 1;
         for (const [, data] of orderedEntries) {
           const name = data.pushName || data.sender?.split("@")[0] || "Unknown";
-          const typeLabel = data.type?.replace("Message", "") || "text";
-          const ago = Math.floor((Date.now() - data.timestamp) / 60000);
+          const typeLabel = (data.type || "text").replace("Message", "");
+          const ago = Math.floor((Date.now() - (data.timestamp || 0)) / 60000);
           list += `${i}. *${name}* — ${typeLabel} • ${ago}m ago\n`;
           i++;
         }
-        list += `\nUse ${config.PREFIX}statusdl <number> to fetch one, or ${config.PREFIX}save to fetch latest.`;
+        list += `\nReply to a status with *${config.PREFIX}save* to save it directly.\nOr use *${config.PREFIX}statusdl <number>* to pick one by number.`;
         return m.reply(list);
       }
 
-      let index = orderedEntries.length - 1;
-      if (arg0 && arg0 !== "latest") {
-        index = parseInt(arg0, 10) - 1;
-        if (isNaN(index) || index < 0 || index >= orderedEntries.length) {
-          return m.reply("❌ Invalid number. Use list to pick a valid status or use 'latest'.");
+      // ── Resolve which status to save ─────────────────────────────────────────
+      // Priority 1: user quoted a message — look it up by message ID in cache
+      let data = null;
+      if (m.quoted?.key?.id) {
+        const quotedId = m.quoted.key.id;
+        // Try direct ID lookup first
+        const cacheKey = statusMessageIdIndex?.get(quotedId) || `id:${quotedId}`;
+        data = statusCache.get(cacheKey) || statusCache.get(`id:${quotedId}`);
+        if (!data) {
+          // Search by participant sender in case ID prefix differs
+          for (const [, entry] of statusCache) {
+            if (entry.key?.id === quotedId) { data = entry; break; }
+          }
+        }
+        if (!data) {
+          // Quoted message isn't a cached status — build from quoted fields directly
+          const qMsg = m.quoted.message;
+          const qType = m.quoted.type || getContentType(qMsg) || Object.keys(qMsg || {})[0] || "";
+          const SKIP = ["protocolMessage","senderKeyDistributionMessage","reactionMessage","receiptMessage","pollUpdateMessage"];
+          if (qMsg && qType && !SKIP.includes(qType)) {
+            data = {
+              key: m.quoted.key,
+              message: qMsg,
+              type: qType,
+              sender: m.quoted.sender || m.quoted.key?.participant,
+              pushName: m.quoted.pushName || m.quoted.sender?.split("@")[0] || "Unknown",
+              timestamp: Date.now(),
+            };
+          }
+        }
+        if (!data) {
+          return m.reply("❌ That quoted message is not a saved status. Try quoting the status directly in the status tab.");
         }
       }
+
+      // Priority 2: numeric index from cache
+      if (!data && arg0 && arg0 !== "latest") {
+        const index = parseInt(arg0, 10) - 1;
+        if (isNaN(index) || index < 0 || index >= orderedEntries.length) {
+          return m.reply(`❌ Invalid number. Use *${config.PREFIX}statusdl list* to see available statuses (1–${orderedEntries.length}).`);
+        }
+        data = orderedEntries[index]?.[1];
+      }
+
+      // Priority 3: if sent from within the status@broadcast context with no quote,
+      // pick the latest cached status from that sender (or overall latest as fallback)
+      if (!data && m.chat === "status@broadcast") {
+        const senderJid = m.key?.participant || m.sender || "";
+        if (senderJid) {
+          // Find the most recent status from this sender
+          for (let i = orderedEntries.length - 1; i >= 0; i--) {
+            const [, entry] = orderedEntries[i];
+            if (entry.sender === senderJid) { data = entry; break; }
+          }
+        }
+        if (!data && orderedEntries.length > 0) {
+          data = orderedEntries[orderedEntries.length - 1][1];
+        }
+        if (!data) {
+          return m.reply(`📭 No statuses cached. Enable auto-view first: *${config.PREFIX}statusview on*`);
+        }
+      }
+
+      // Priority 4: plain .save with no context — latest from cache
+      if (!data) {
+        if (orderedEntries.length === 0) {
+          const autoViewState = isAutoStatusViewEnabled() ? "on" : "off";
+          const guidance = autoViewState === "on"
+            ? "Auto-view is ON. Wait for a new status to arrive, then try again."
+            : `Enable auto-view with *${config.PREFIX}statusview on* so statuses are cached as they come in.`;
+          return m.reply(`📭 No statuses cached yet.\n\n${guidance}\n\nOr go to the status tab, open a status, and *reply to it* with *${config.PREFIX}save* to save that specific one.`);
+        }
+        data = orderedEntries[orderedEntries.length - 1][1];
+      }
+
+      console.log(`[DESAM-STATUS] Status retrieval requested by ${m.sender} | cached_records=${statusCache?.size || 0}`);
       m.react("⏳");
       try {
-        let data;
-        if (quotedStatusData && (!arg0 || arg0 === "latest")) {
-          data = quotedStatusData;
-        } else {
-          const [, selectedData] = orderedEntries[index] || [];
-          data = selectedData;
-        }
 
         if (!data) {
           return m.reply("❌ Could not find a status to save.");
