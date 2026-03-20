@@ -97,57 +97,118 @@ const commands = [
         }
 
         const rawType = data.type || getContentType(data.message) || Object.keys(data.message || {})[0];
-        // Normalize document-wrapped videos — some WA clients send video statuses as documentMessage
-        const docMime = data.message?.documentMessage?.mimetype || "";
+        const msg = data.message || {};
+        const credit = `📡 *Status from ${data.pushName || "Unknown"}*`;
+
+        // Normalize document mime — some clients send video/audio as documentMessage
+        const docMime = msg.documentMessage?.mimetype || "";
         const isDocVideo = rawType === "documentMessage" && docMime.startsWith("video/");
         const isDocAudio = rawType === "documentMessage" && docMime.startsWith("audio/");
-        const type = isDocVideo ? "videoMessage" : isDocAudio ? "audioMessage" : rawType;
 
-        console.log(`[DESAM-STATUS] Saving status type=${type} (raw=${rawType}) mime=${docMime || "n/a"} from ${data.pushName || "Unknown"}`);
+        // GIFs arrive as videoMessage with gifPlayback:true
+        const isGif = rawType === "videoMessage" && !!msg.videoMessage?.gifPlayback;
 
-        if (type === "conversation" || type === "extendedTextMessage") {
-          const text = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
-          await sock.sendMessage(targetChat, { text: `📡 *Status from ${data.pushName || "Unknown"}*\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
-        } else if (type === "imageMessage" || type === "videoMessage" || type === "audioMessage" || type === "documentMessage") {
-          // Build the message object for downloadMediaMessage — it needs the full key + message
-          const dlMsg = { key: data.key, message: data.message };
+        console.log(`[DESAM-STATUS] Saving type=${rawType} isDocVideo=${isDocVideo} isDocAudio=${isDocAudio} isGif=${isGif} from ${data.pushName || "Unknown"}`);
+
+        const MEDIA_TYPES = ["imageMessage", "videoMessage", "audioMessage", "documentMessage", "stickerMessage", "ptvMessage"];
+
+        if (rawType === "conversation" || rawType === "extendedTextMessage") {
+          // ── Plain / rich text status ─────────────────────────────────────────
+          const text = msg.conversation || msg.extendedTextMessage?.text || "";
+          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
+
+        } else if (MEDIA_TYPES.includes(rawType) || isDocVideo || isDocAudio) {
+          // ── All media types (image / video / audio / sticker / document) ─────
           let buffer;
           try {
             buffer = await downloadMediaMessage(
-              dlMsg,
+              { key: data.key, message: msg },
               "buffer",
               {},
               { reuploadRequest: sock.updateMediaMessage }
             );
           } catch (dlErr) {
             console.error(`[DESAM-STATUS] downloadMediaMessage failed: ${dlErr.message}`);
-            return m.reply("❌ Failed to download status media. It may have expired.");
+            return m.reply("❌ Failed to download status media. It may have expired — statuses are only available for 24 hours.");
           }
-          if (!buffer || buffer.length < 100) return m.reply("❌ Downloaded media is empty or corrupt.");
-          const mediaOpts = {};
-          if (type === "imageMessage") {
-            mediaOpts.image = buffer;
-            mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
-          } else if (type === "videoMessage" || isDocVideo) {
-            mediaOpts.video = buffer;
-            mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
-          } else if (type === "audioMessage" || isDocAudio) {
-            mediaOpts.audio = buffer;
-            mediaOpts.mimetype = "audio/mp4";
-            mediaOpts.ptt = false;
+          if (!buffer || buffer.length < 100) return m.reply("❌ Downloaded media appears empty or corrupt.");
+
+          let mediaOpts = {};
+          if (rawType === "imageMessage") {
+            mediaOpts = { image: buffer, caption: credit };
+          } else if (rawType === "videoMessage") {
+            if (isGif) {
+              mediaOpts = { video: buffer, caption: credit, gifPlayback: true };
+            } else {
+              mediaOpts = { video: buffer, caption: credit };
+            }
+          } else if (rawType === "audioMessage" || rawType === "ptvMessage") {
+            mediaOpts = { audio: buffer, mimetype: "audio/mp4", ptt: rawType === "ptvMessage" };
+          } else if (rawType === "stickerMessage") {
+            mediaOpts = { sticker: buffer };
+          } else if (isDocVideo) {
+            mediaOpts = { video: buffer, caption: credit };
+          } else if (isDocAudio) {
+            mediaOpts = { audio: buffer, mimetype: docMime || "audio/mp4", ptt: false };
           } else {
-            // documentMessage — send as document preserving filename
-            const docName = data.message?.documentMessage?.fileName || "status-file";
-            const docMimeType = data.message?.documentMessage?.mimetype || "application/octet-stream";
-            mediaOpts.document = buffer;
-            mediaOpts.mimetype = docMimeType;
-            mediaOpts.fileName = docName;
-            mediaOpts.caption = `📡 Status from *${data.pushName || "Unknown"}*`;
+            // Generic documentMessage (PDF, ZIP, etc.)
+            mediaOpts = {
+              document: buffer,
+              mimetype: docMime || "application/octet-stream",
+              fileName: msg.documentMessage?.fileName || "status-file",
+              caption: credit,
+            };
           }
           await sock.sendMessage(targetChat, mediaOpts, { quoted: { key: m.key, message: m.message } });
+
+        } else if (rawType === "contactMessage") {
+          // ── Contact card ──────────────────────────────────────────────────────
+          const vcard = msg.contactMessage?.vcard || "";
+          const name = msg.contactMessage?.displayName || "Contact";
+          await sock.sendMessage(targetChat, {
+            contacts: { displayName: name, contacts: [{ vcard }] },
+          }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { text: `${credit}\n_Contact status_` }, { quoted: { key: m.key, message: m.message } });
+
+        } else if (rawType === "contactsArrayMessage") {
+          // ── Multiple contacts ─────────────────────────────────────────────────
+          const contacts = (msg.contactsArrayMessage?.contacts || []).map(c => ({ vcard: c.vcard }));
+          const names = (msg.contactsArrayMessage?.contacts || []).map(c => c.displayName).join(", ");
+          await sock.sendMessage(targetChat, {
+            contacts: { displayName: names || "Contacts", contacts },
+          }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { text: `${credit}\n_Contacts status_` }, { quoted: { key: m.key, message: m.message } });
+
+        } else if (rawType === "locationMessage" || rawType === "liveLocationMessage") {
+          // ── Location status ───────────────────────────────────────────────────
+          const loc = msg.locationMessage || msg.liveLocationMessage || {};
+          const locName = loc.name || loc.address || "";
+          await sock.sendMessage(targetChat, {
+            location: { degreesLatitude: loc.degreesLatitude, degreesLongitude: loc.degreesLongitude },
+          }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, {
+            text: `${credit}\n_Location status_${locName ? `\n📍 ${locName}` : ""}`,
+          }, { quoted: { key: m.key, message: m.message } });
+
+        } else if (rawType === "templateMessage") {
+          // ── Template / button message — extract text ──────────────────────────
+          const tmpl = msg.templateMessage?.hydratedTemplate || msg.templateMessage || {};
+          const text = tmpl.hydratedContentText || tmpl.hydratedTitleText || JSON.stringify(tmpl);
+          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
+
+        } else if (rawType === "buttonsMessage" || rawType === "interactiveMessage" || rawType === "listMessage") {
+          // ── Interactive / list / buttons — extract text ───────────────────────
+          const b = msg.buttonsMessage || msg.listMessage || msg.interactiveMessage || {};
+          const text = b.contentText || b.title || b.description || b.buttonText?.displayText || JSON.stringify(b).slice(0, 200);
+          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
+
         } else {
-          console.warn(`[DESAM-STATUS] Unhandled status type: ${type} (raw=${rawType})`);
-          return m.reply(`❌ Unsupported status type: \`${type}\`. Please report this so it can be added.`);
+          // ── Unknown type — dump raw so we know what it is ─────────────────────
+          console.warn(`[DESAM-STATUS] Unknown status type: ${rawType} — dumping message keys: ${Object.keys(msg).join(", ")}`);
+          const fallbackText = JSON.stringify(msg).slice(0, 300);
+          await sock.sendMessage(targetChat, {
+            text: `${credit}\n\n_Unknown status type: ${rawType}_\n\`\`\`${fallbackText}\`\`\``,
+          }, { quoted: { key: m.key, message: m.message } });
         }
         m.react("✅");
       } catch (err) {
