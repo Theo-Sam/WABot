@@ -148,6 +148,15 @@ const commands = [
         const msg = data.message || {};
         const credit = `📡 *Status from ${data.pushName || "Unknown"}*`;
 
+        // Skip non-content protocol messages silently
+        const NON_SAVEABLE = ["protocolMessage","senderKeyDistributionMessage","reactionMessage",
+          "receiptMessage","pollUpdateMessage","callLogMesssage","senderKeyDistributionMessage"];
+        if (!rawType || NON_SAVEABLE.includes(rawType)) {
+          console.log(`[DESAM-STATUS] Skipping non-saveable type in save handler: ${rawType}`);
+          m.react("⚠️");
+          return m.reply("⚠️ That status type cannot be saved (it's a system or reaction message, not a real status).");
+        }
+
         // Normalize document mime — some clients send video/audio as documentMessage
         const docMime = msg.documentMessage?.mimetype || "";
         const isDocVideo = rawType === "documentMessage" && docMime.startsWith("video/");
@@ -251,12 +260,9 @@ const commands = [
           await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
 
         } else {
-          // ── Unknown type — dump raw so we know what it is ─────────────────────
-          console.warn(`[DESAM-STATUS] Unknown status type: ${rawType} — dumping message keys: ${Object.keys(msg).join(", ")}`);
-          const fallbackText = JSON.stringify(msg).slice(0, 300);
-          await sock.sendMessage(targetChat, {
-            text: `${credit}\n\n_Unknown status type: ${rawType}_\n\`\`\`${fallbackText}\`\`\``,
-          }, { quoted: { key: m.key, message: m.message } });
+          // ── Truly unknown saveable type — log for debugging, tell user cleanly ─
+          console.warn(`[DESAM-STATUS] Unhandled status type in save: ${rawType} | keys: ${Object.keys(msg).join(", ")}`);
+          return m.reply(`⚠️ This status type (*${rawType}*) is not yet supported for saving. Please let the bot admin know so it can be added.`);
         }
         m.react("✅");
       } catch (err) {
