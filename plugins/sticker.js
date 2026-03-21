@@ -10,7 +10,6 @@ const execFileAsync = promisify(execFile);
 
 function findFfmpeg() {
   const candidates = [
-    "/nix/store/6h39ipxhzp4r5in5g4rhdjz7p7fkicd0-replit-runtime-path/bin/ffmpeg",
     "/run/current-system/sw/bin/ffmpeg",
     "/usr/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
