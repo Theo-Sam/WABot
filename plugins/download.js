@@ -45,7 +45,43 @@ async function ytSearch(query) {
   return [];
 }
 
+/**
+ * Use yt-dlp to get a direct media URL from YouTube, then download it with axios.
+ * Returns the buffer, or null on failure.
+ */
+async function ytDlpGetBuffer(url, formatSelector, maxBytes) {
+  const ytdlpBin = findYtDlpBin();
+  if (!ytdlpBin) return null;
+  try {
+    const directUrl = await new Promise((resolve, reject) => {
+      execFile(ytdlpBin, [
+        '--get-url', '--no-warnings', '--no-playlist',
+        '-f', formatSelector,
+        url,
+      ], { timeout: 30000 }, (err, stdout) => {
+        if (err) return reject(err);
+        const line = stdout.trim().split('\n')[0];
+        resolve(line || null);
+      });
+    });
+    if (!directUrl) return null;
+    const res = await axios.get(directUrl, {
+      responseType: 'arraybuffer',
+      timeout: 90000,
+      maxContentLength: maxBytes || 50 * 1024 * 1024,
+    });
+    if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+  } catch (err) {
+    console.error('[ytDlp] error:', err.message);
+  }
+  return null;
+}
+
 async function ytDownloadAudio(url) {
+  // Primary: yt-dlp (reliable, handles YouTube bot checks)
+  const buf = await ytDlpGetBuffer(url, 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best', 50 * 1024 * 1024);
+  if (buf) return buf;
+  // Fallback: play-dl
   try {
     const info = await play.video_info(url);
     const format = info.format.filter(f => f.mimeType?.startsWith("audio/")).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
@@ -58,6 +94,10 @@ async function ytDownloadAudio(url) {
 }
 
 async function ytDownloadVideo(url) {
+  // Primary: yt-dlp (reliable, handles YouTube bot checks)
+  const buf = await ytDlpGetBuffer(url, 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]', 80 * 1024 * 1024);
+  if (buf) return buf;
+  // Fallback: play-dl
   try {
     const info = await play.video_info(url);
     const format = info.format.filter(f => f.mimeType?.startsWith("video/") && f.hasAudio).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
@@ -674,94 +714,39 @@ const commands = [
   {
     name: ["apk"],
     category: "download",
-    desc: "Search APK from app stores",
+    desc: "Search APK from Google Play Store",
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}apk <app name>`);
       m.react("⏳");
       try {
-        let apps = [];
-        try {
-          const searchUrl = `https://apkpure.com/search?q=${encodeURIComponent(text)}`;
-          const html = await axios.get(searchUrl, { timeout: 10000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
-          const body = html.data || "";
-          const cardPattern = /<div[^>]*class="[^"]*search-dl[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g;
-          const cards = body.match(cardPattern) || [];
-          for (const card of cards.slice(0, 5)) {
-            const nameMatch = card.match(/class="p-name"[^>]*>([^<]+)/);
-            const devMatch = card.match(/class="developer"[^>]*>([^<]+)/);
-            const sizeMatch = card.match(/class="p-size"[^>]*>([^<]+)/);
-            const verMatch = card.match(/class="p-version"[^>]*>([^<]+)/);
-            const linkMatch = card.match(/href="(\/[^"]+\.html)"/);
-            if (nameMatch) {
-              apps.push({
-                name: nameMatch[1]?.trim(),
-                developer: devMatch?.[1]?.trim() || "Unknown",
-                size: sizeMatch?.[1]?.trim() || "N/A",
-                version: verMatch?.[1]?.trim() || "N/A",
-                downloadUrl: linkMatch ? `https://apkpure.com${linkMatch[1]}` : null,
-              });
-            }
-          }
-          if (!apps.length) {
-            const fallbackNames = [...body.matchAll(/class="first-title[^"]*"[^>]*>([^<]+)<\/p>/g)];
-            const fallbackDevs = [...body.matchAll(/class="developer"[^>]*>([^<]*)/g)];
-            const fallbackLinks = [...body.matchAll(/<a[^>]*href="(\/[^"]*-[^"]*\.html)"[^>]*class="[^"]*dd[^"]*"/g)];
-            for (let i = 0; i < Math.min(fallbackNames.length, 5); i++) {
-              apps.push({
-                name: fallbackNames[i]?.[1]?.trim(),
-                developer: fallbackDevs[i]?.[1]?.trim() || "Unknown",
-                size: "N/A",
-                version: "N/A",
-                downloadUrl: fallbackLinks[i] ? `https://apkpure.com${fallbackLinks[i][1]}` : null,
-              });
-            }
-          }
-        } catch {}
-
-        if (!apps.length) {
-          try {
-            const comboUrl = `https://apkcombo.com/search/${encodeURIComponent(text)}`;
-            const comboHtml = await axios.get(comboUrl, { timeout: 10000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
-            const comboBody = comboHtml.data || "";
-            const comboNames = [...comboBody.matchAll(/class="name"[^>]*>([^<]+)/g)];
-            const comboVers = [...comboBody.matchAll(/class="version"[^>]*>([^<]+)/g)];
-            const comboLinks = [...comboBody.matchAll(/href="(\/[^"]+\/download\/[^"]*)"/g)];
-            for (let i = 0; i < Math.min(comboNames.length, 5); i++) {
-              apps.push({
-                name: comboNames[i]?.[1]?.trim(),
-                developer: "N/A",
-                size: "N/A",
-                version: comboVers[i]?.[1]?.trim() || "N/A",
-                downloadUrl: comboLinks[i] ? `https://apkcombo.com${comboLinks[i][1]}` : null,
-              });
-            }
-          } catch {}
+        const { default: gplay } = require("google-play-scraper");
+        const results = await gplay.search({ term: text, num: 5 });
+        if (!results || results.length === 0) {
+          return m.reply(
+            `❌ No apps found for *${text}*.\n\n` +
+            `🔗 Search manually:\n` +
+            `• https://play.google.com/store/search?q=${encodeURIComponent(text)}&c=apps\n` +
+            `• https://apkpure.com/search?q=${encodeURIComponent(text)}`
+          );
         }
-
-        let msg = `📱 *APK SEARCH*\n\n`;
-        msg += `🔎 Query: *${text}*\n\n`;
-        if (apps.length) {
-          apps.forEach((app, i) => {
-            msg += `${i + 1}. *${app.name}*\n`;
-            if (app.developer && app.developer !== "N/A") msg += `   👤 Developer: ${app.developer}\n`;
-            msg += `   📦 Version: ${app.version}\n`;
-            msg += `   💾 Size: ${app.size}\n`;
-            if (app.downloadUrl) msg += `   🔗 Download: ${app.downloadUrl}\n`;
-            msg += `\n`;
-          });
-        } else {
-          msg += `No results found.\n\n`;
-          msg += `🔗 *Search manually:*\n`;
-          msg += `• APKPure: https://apkpure.com/search?q=${encodeURIComponent(text)}\n`;
-          msg += `• APKCombo: https://apkcombo.com/search/${encodeURIComponent(text)}\n`;
-          msg += `• APKMirror: https://www.apkmirror.com/?s=${encodeURIComponent(text)}\n\n`;
-        }
+        let msg = `📱 *APK SEARCH RESULTS*\n\n🔎 Query: *${text}*\n\n`;
+        results.forEach((app, i) => {
+          msg += `${i + 1}. *${app.title}*\n`;
+          msg += `   👤 Developer: ${app.developer}\n`;
+          if (app.scoreText) msg += `   ⭐ Rating: ${app.scoreText}/5\n`;
+          if (app.summary) msg += `   📝 ${app.summary}\n`;
+          msg += `   💰 Price: ${app.free === false && app.price ? app.price : "Free"}\n`;
+          msg += `   🔗 Play Store: ${app.url}\n`;
+          msg += `   📦 APKPure: https://apkpure.com/${app.appId.replace(/\./g, '-')}/${app.appId}\n`;
+          msg += `\n`;
+        });
         msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[apk] error:", err.message);
         m.react("❌");
-        await m.reply("❌ Failed to search APK.");
+        await m.reply("❌ Failed to search APK. Please try again.");
       }
     },
   },
