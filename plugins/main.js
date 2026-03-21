@@ -141,8 +141,9 @@ ${CHANNEL_FOOTER}`;
     desc: "Show bot owner",
     handler: async (sock, m) => {
       m.react("👑");
-      const rawOwner = config.OWNER_NUMBER || sock.user?.id || "";
-      const ownerNum = rawOwner.replace(/[^0-9]/g, "");
+      const rawOwner = config.OWNER_NUMBER?.replace(/[^0-9]/g, "") ||
+        sock.user?.id?.replace(/:.*@/, "@").replace(/[^0-9]/g, "") || "";
+      const ownerNum = rawOwner;
       const text = `👑 *${config.BOT_NAME}*\n\n👑 *Bot Owner / Creator*\n\n📞 Number: +${ownerNum}\n🔗 Contact: wa.me/${ownerNum}\n${CHANNEL_FOOTER}`;
       await sendImageOrText(sock, m.chat, getBotImage(), text, m);
       await sock.sendMessage(m.chat, {

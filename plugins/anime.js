@@ -278,6 +278,7 @@ const commands = [
       m.react("😬");
       try {
         const data = await fetchJson("https://api.waifu.pics/sfw/bite");
+        if (!data?.url) return m.reply("❌ Failed to get bite image.");
         const buffer = await fetchBuffer(data.url);
         const caption = buildActionCaption(m.chat, "bite", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
@@ -295,6 +296,7 @@ const commands = [
       m.react("🦵");
       try {
         const data = await fetchJson("https://api.waifu.pics/sfw/kick");
+        if (!data?.url) return m.reply("❌ Failed to get kick image.");
         const buffer = await fetchBuffer(data.url);
         const caption = buildActionCaption(m.chat, "kick", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });

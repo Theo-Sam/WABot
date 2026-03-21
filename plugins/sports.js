@@ -475,7 +475,7 @@ const commands = [
             msg += `🏠 ${e.strHomeTeam} vs 🛫 ${e.strAwayTeam}\n`;
             msg += `📅 ${e.dateEvent} ⏰ ${e.strTime || "TBD"}\n`;
             if (e.strVenue) msg += `🏟️ ${e.strVenue}\n`;
-            if (e.strThumb) msg += `🎫 Round: ${e.intRound || "N/A"}\n`;
+            if (e.intRound) msg += `🎫 Round: ${e.intRound}\n`;
             msg += `\n`;
           });
           msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;

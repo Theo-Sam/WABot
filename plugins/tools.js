@@ -129,17 +129,21 @@ const commands = [
     },
   },
   {
-    name: ["weather", "wea", "wthr"],
+    name: ["wea", "wthr"],
     category: "tools",
     desc: "Get weather info for a city",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}weather <city>`);
+      if (!text) return m.reply(`Usage: ${config.PREFIX}wea <city>`);
       m.react("⏳");
       try {
         const data = await fetchJson(`${endpoints.weather.wttrBase}/${encodeURIComponent(text)}?format=j1`);
+        if (!data?.current_condition?.[0]) return m.reply("❌ City not found or weather API unavailable.");
         const cur = data.current_condition[0];
-        const loc = data.nearest_area[0];
-        const weather = `🌤️ *Weather for ${loc.areaName[0].value}, ${loc.country[0].value}*
+        const loc = data.nearest_area?.[0];
+        const areaName = loc?.areaName?.[0]?.value || text;
+        const country = loc?.country?.[0]?.value || "";
+        const condition = cur.weatherDesc?.[0]?.value || "N/A";
+        const weather = `🌤️ *Weather for ${areaName}${country ? ", " + country : ""}*
 
 🌡️ Temperature: ${cur.temp_C}°C / ${cur.temp_F}°F
 🤒 Feels Like: ${cur.FeelsLikeC}°C / ${cur.FeelsLikeF}°F
@@ -149,12 +153,12 @@ const commands = [
 👁️ Visibility: ${cur.visibility} km
 📊 Pressure: ${cur.pressure} mb
 🌧️ Precipitation: ${cur.precipMM} mm
-📝 Condition: ${cur.weatherDesc[0].value}`;
+📝 Condition: ${condition}`;
         await m.reply(weather);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Weather API is currently overloaded.");
+        await m.reply("⏳ The Weather API is currently unavailable.");
       }
     },
   },

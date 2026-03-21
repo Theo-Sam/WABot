@@ -1,5 +1,7 @@
 const config = require("../config");
+const path = require("path");
 const { getGroupSettings, updateGroupSetting } = require("../lib/database");
+const { setEnvValue } = require("../lib/env-util");
 
 const commands = [
   {
@@ -110,21 +112,24 @@ const commands = [
     },
   },
   {
-    name: ["setautostatus", "autostatus"],
+    name: ["setautostatus"],
     category: "settings",
     desc: "Toggle auto view status",
     owner: true,
     handler: async (sock, m, { text }) => {
+      const envPath = path.join(__dirname, "..", ".env");
       if (text === "on") {
         config.AUTO_STATUS_VIEW = "on";
-        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via autostatus command.");
-        await m.reply("✅ Auto-status view enabled. New statuses will be marked as seen.");
+        setEnvValue(envPath, "AUTO_STATUS_VIEW", "on");
+        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled ON via setautostatus command.");
+        await m.reply("✅ Auto-status view enabled. New statuses will be marked as seen. (persisted)");
       } else if (text === "off") {
         config.AUTO_STATUS_VIEW = "off";
-        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via autostatus command.");
-        await m.reply("✅ Auto-status view disabled.");
+        setEnvValue(envPath, "AUTO_STATUS_VIEW", "off");
+        console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via setautostatus command.");
+        await m.reply("✅ Auto-status view disabled. (persisted)");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}autostatus on/off\nCurrent: ${config.AUTO_STATUS_VIEW}`);
+        await m.reply(`Usage: ${config.PREFIX}setautostatus on/off\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);
       }
     },
   },
