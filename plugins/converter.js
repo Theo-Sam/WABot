@@ -11,109 +11,164 @@ function cleanupFiles(...files) {
   }
 }
 
+function ffmpegConvert(inputPath, outputPath, buildFn) {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = require("fluent-ffmpeg");
+    const cmd = ffmpeg(inputPath);
+    buildFn(cmd);
+    cmd.on("end", resolve).on("error", reject).save(outputPath);
+  });
+}
+
 const commands = [
   {
     name: ["toaudio", "mp3", "tomp3"],
     category: "media",
-    desc: "Convert video/voice to audio",
+    desc: "Convert video/voice to audio (reply to video or audio)",
     handler: async (sock, m) => {
-      const media = m.isVideo || m.isAudio ? m : m.quoted && (m.quoted.isVideo || m.quoted.type === "audioMessage") ? m.quoted : null;
-      if (!media) return m.reply(`Reply to a video/voice with ${config.PREFIX}toaudio`);
+      const media =
+        (m.isVideo || m.isAudio) ? m
+        : m.quoted && (m.quoted.isVideo || m.quoted.isAudio) ? m.quoted
+        : null;
+      if (!media) return m.reply(`Reply to a video or audio message with ${config.PREFIX}toaudio`);
       m.react("⏳");
+      const input = tempFile("bin");
+      const output = tempFile("mp3");
       try {
         const buffer = await media.download();
-        const input = tempFile("mp4");
-        const output = tempFile("mp3");
+        if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
         fs.writeFileSync(input, buffer);
-        const ffmpeg = require("fluent-ffmpeg");
-        await new Promise((resolve, reject) => {
-          ffmpeg(input).toFormat("mp3").audioBitrate(128).on("end", resolve).on("error", reject).save(output);
-        });
+        await ffmpegConvert(input, output, cmd =>
+          cmd.toFormat("mp3").audioBitrate(128)
+        );
         const audioBuffer = fs.readFileSync(output);
-        await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
-        cleanupFiles(input, output);
+        if (audioBuffer.length < 100) throw new Error("ffmpeg produced empty output");
+        await sock.sendMessage(m.chat, {
+          audio: audioBuffer,
+          mimetype: "audio/mpeg",
+          fileName: "audio.mp3",
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[toaudio] error:", err.message);
         m.react("❌");
-        await m.reply("❌ Failed to convert to audio. Ensure ffmpeg is installed and media is valid.");
+        await m.reply("❌ Failed to convert to audio. Make sure you reply to a video or voice message.");
+      } finally {
+        cleanupFiles(input, output);
       }
     },
   },
   {
     name: ["tovideo", "mp4", "tomp4"],
     category: "media",
-    desc: "Convert audio/gif to video",
+    desc: "Convert audio to video (black screen + audio)",
     handler: async (sock, m) => {
-      const media = m.isAudio ? m : m.quoted?.type === "audioMessage" ? m.quoted : null;
-      if (!media) return m.reply(`Reply to an audio with ${config.PREFIX}tovideo`);
+      const media =
+        m.isAudio ? m
+        : m.quoted?.isAudio ? m.quoted
+        : null;
+      if (!media) return m.reply(`Reply to an audio or voice note with ${config.PREFIX}tovideo`);
       m.react("⏳");
+      const input = tempFile("bin");
+      const output = tempFile("mp4");
       try {
         const buffer = await media.download();
-        const input = tempFile("mp3");
-        const output = tempFile("mp4");
+        if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
         fs.writeFileSync(input, buffer);
-        const ffmpeg = require("fluent-ffmpeg");
         await new Promise((resolve, reject) => {
+          const ffmpeg = require("fluent-ffmpeg");
           ffmpeg(input)
-            .input("color=black:s=1280x720")
+            .input("color=black:s=1280x720:r=1")
             .inputFormat("lavfi")
-            .outputOptions(["-shortest", "-pix_fmt", "yuv420p"])
+            .outputOptions([
+              "-map", "0:a",
+              "-map", "1:v",
+              "-shortest",
+              "-pix_fmt", "yuv420p",
+              "-c:v", "libx264",
+              "-c:a", "aac",
+              "-b:a", "128k",
+            ])
             .toFormat("mp4")
             .on("end", resolve)
             .on("error", reject)
             .save(output);
         });
         const videoBuffer = fs.readFileSync(output);
-        await sock.sendMessage(m.chat, { video: videoBuffer }, { quoted: { key: m.key, message: m.message } });
-        cleanupFiles(input, output);
+        if (videoBuffer.length < 100) throw new Error("ffmpeg produced empty output");
+        await sock.sendMessage(m.chat, {
+          video: videoBuffer,
+          caption: `_${config.BOT_NAME}_`,
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[tovideo] error:", err.message);
         m.react("❌");
-        await m.reply("❌ Failed to convert to video. Ensure ffmpeg is installed and media is valid.");
+        await m.reply("❌ Failed to convert to video. Make sure you reply to an audio or voice note.");
+      } finally {
+        cleanupFiles(input, output);
       }
     },
   },
   {
     name: ["toptt", "ptt", "tovn", "vn"],
     category: "media",
-    desc: "Convert audio to voice note",
+    desc: "Convert audio/video to WhatsApp voice note",
     handler: async (sock, m) => {
-      const media = m.isAudio ? m : m.quoted?.type === "audioMessage" ? m.quoted : null;
-      if (!media) return m.reply(`Reply to an audio with ${config.PREFIX}toptt`);
+      const media =
+        (m.isAudio || m.isVideo) ? m
+        : m.quoted && (m.quoted.isAudio || m.quoted.isVideo) ? m.quoted
+        : null;
+      if (!media) return m.reply(`Reply to an audio or video with ${config.PREFIX}toptt`);
       m.react("⏳");
+      const input = tempFile("bin");
+      const output = tempFile("ogg");
       try {
         const buffer = await media.download();
-        const input = tempFile("mp3");
-        const output = tempFile("ogg");
+        if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
         fs.writeFileSync(input, buffer);
-        const ffmpeg = require("fluent-ffmpeg");
-        await new Promise((resolve, reject) => {
-          ffmpeg(input).toFormat("ogg").audioCodec("libopus").audioBitrate(64).on("end", resolve).on("error", reject).save(output);
-        });
+        await ffmpegConvert(input, output, cmd =>
+          cmd.toFormat("ogg").audioCodec("libopus").audioBitrate(64)
+        );
         const pttBuffer = fs.readFileSync(output);
-        await sock.sendMessage(m.chat, { audio: pttBuffer, mimetype: "audio/ogg; codecs=opus", ptt: true }, { quoted: { key: m.key, message: m.message } });
-        cleanupFiles(input, output);
+        if (pttBuffer.length < 100) throw new Error("ffmpeg produced empty output");
+        await sock.sendMessage(m.chat, {
+          audio: pttBuffer,
+          mimetype: "audio/ogg; codecs=opus",
+          ptt: true,
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[toptt] error:", err.message);
         m.react("❌");
-        await m.reply("❌ Failed to convert to voice note. Ensure ffmpeg is installed and media is valid.");
+        await m.reply("❌ Failed to convert to voice note. Make sure you reply to an audio or video.");
+      } finally {
+        cleanupFiles(input, output);
       }
     },
   },
   {
     name: ["togif"],
     category: "media",
-    desc: "Convert video/sticker to GIF",
+    desc: "Convert video/sticker to GIF playback",
     handler: async (sock, m) => {
-      const media = m.isVideo ? m : m.isSticker ? m : m.quoted?.isVideo ? m.quoted : m.quoted?.isSticker ? m.quoted : null;
-      if (!media) return m.reply(`Reply to a video/sticker with ${config.PREFIX}togif`);
+      const media =
+        (m.isVideo || m.isSticker) ? m
+        : m.quoted && (m.quoted.isVideo || m.quoted.isSticker) ? m.quoted
+        : null;
+      if (!media) return m.reply(`Reply to a video or sticker with ${config.PREFIX}togif`);
       m.react("⏳");
       try {
         const buffer = await media.download();
-        await sock.sendMessage(m.chat, { video: buffer, gifPlayback: true }, { quoted: { key: m.key, message: m.message } });
-        await m.reply("✅ Converted and sent as GIF playback.");
+        if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
+        await sock.sendMessage(m.chat, {
+          video: buffer,
+          gifPlayback: true,
+          caption: `_${config.BOT_NAME}_`,
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[togif] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to convert to GIF.");
       }
@@ -138,7 +193,8 @@ const commands = [
           .toBuffer();
         await sock.sendMessage(m.chat, { image: cropped }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[crop] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to crop image.");
       }
@@ -161,7 +217,8 @@ const commands = [
         const resized = await sharp(buffer).resize(w, h, { fit: "fill" }).jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: resized }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[resize] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to resize image.");
       }
@@ -188,7 +245,8 @@ const commands = [
           .toBuffer();
         await sock.sendMessage(m.chat, { image: result }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[circle] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to make circular image.");
       }
@@ -209,7 +267,8 @@ const commands = [
         const blurred = await sharp(buffer).blur(Math.min(level, 100)).jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: blurred }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[blur] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to blur image.");
       }
@@ -229,7 +288,8 @@ const commands = [
         const grey = await sharp(buffer).grayscale().jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: grey }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[grayscale] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to convert to grayscale.");
       }
@@ -249,7 +309,8 @@ const commands = [
         const inverted = await sharp(buffer).negate().jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: inverted }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[invert] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to invert image.");
       }
@@ -271,7 +332,8 @@ const commands = [
         const rotated = await sharp(buffer).rotate(degrees).jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: rotated }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[rotate] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to rotate image.");
       }
@@ -291,7 +353,8 @@ const commands = [
         const flipped = await sharp(buffer).flip().jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: flipped }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[flipimg] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to flip image.");
       }
@@ -311,7 +374,8 @@ const commands = [
         const mirrored = await sharp(buffer).flop().jpeg({ quality: 90 }).toBuffer();
         await sock.sendMessage(m.chat, { image: mirrored }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[mirror] error:", err.message);
         m.react("❌");
         await m.reply("❌ Failed to mirror image.");
       }
