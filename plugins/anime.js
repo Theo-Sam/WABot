@@ -310,9 +310,13 @@ const commands = [
     handler: async (sock, m) => {
       m.react("🎌");
       try {
-        const data = await fetchJson("https://animechan.vercel.app/api/random").catch(() => null);
-        if (data?.quote) {
-          await m.reply(`🎌 *Anime Quote*\n\n"${data.quote}"\n\n— *${data.character}* from _${data.anime}_\n📡 Source: AnimeChan`);
+        const data = await fetchJson("https://animechan.io/api/v1/quotes/random").catch(() => null);
+        const quoteObj = data?.data || data;
+        if (quoteObj?.content || quoteObj?.quote) {
+          const quote = quoteObj.content || quoteObj.quote;
+          const character = quoteObj.character?.name || quoteObj.character || "Unknown";
+          const anime = quoteObj.anime?.name || quoteObj.anime || "Unknown";
+          await m.reply(`🎌 *Anime Quote*\n\n"${quote}"\n\n— *${character}* from _${anime}_\n📡 Source: AnimeChan`);
         } else {
           const q = pickNonRepeating(fallbackAnimeQuotes, `${m.chat}:animequote`, { maxHistory: 4 });
           await m.reply(`🎌 *Anime Quote*\n\n"${q.quote}"\n\n— *${q.character}* from _${q.anime}_\n📡 Source: Local fallback`);

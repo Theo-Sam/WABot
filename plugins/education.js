@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, normalizeAiText, pickNonRepeating } = require("../lib/helpers");
+const { fetchJson, postJson, normalizeAiText, pickNonRepeating } = require("../lib/helpers");
 // No-key mode: avoid paid AI SDKs (use free endpoints where available)
 
 const planets = {
@@ -26,12 +26,11 @@ async function grammarWithFreeAi(input) {
     "Check the following text for grammar and clarity. " +
     "Return:\n1) Corrected text\n2) Brief bullet list of issues (if any)\n\nText:\n" +
     input;
-  const data = await fetchJson("https://text.pollinations.ai/openai", {
-    timeout: 30000,
-    headers: { "Content-Type": "application/json" },
-    method: "post",
-    data: { model: "openai", messages: [{ role: "user", content: prompt }] },
-  }).catch(() => null);
+  const data = await postJson(
+    "https://text.pollinations.ai/openai",
+    { model: "openai", messages: [{ role: "user", content: prompt }] },
+    { timeout: 30000, headers: { "Content-Type": "application/json" } }
+  ).catch(() => null);
   return data?.choices?.[0]?.message?.content || "";
 }
 

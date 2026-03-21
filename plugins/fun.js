@@ -67,13 +67,32 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}giphy <query>`);
       m.react("⏳");
       try {
-        // No-key: use open GIF search
-        const gifApiUrl = `https://gif-search.vercel.app/api/search?q=${encodeURIComponent(text)}&limit=1`;
-        const gifData = await fetchJson(gifApiUrl).catch(() => null);
-        const gifUrl = gifData?.results?.[0]?.url || "";
+        let gifUrl = "";
 
-        if (!gifUrl) return m.reply("❌ No GIF URL found.");
-        const buffer = await fetchBuffer(gifUrl);
+        // Primary: Tenor v1 with shared demo key (no personal key required)
+        const tenorData = await fetchJson(
+          `https://g.tenor.com/v1/search?q=${encodeURIComponent(text)}&key=LIVDSRZULELA&limit=10&media_filter=minimal&contentfilter=medium`
+        ).catch(() => null);
+        const results = tenorData?.results || [];
+        if (results.length) {
+          const pick = results[Math.floor(Math.random() * results.length)];
+          gifUrl = pick?.media?.[0]?.gif?.url || pick?.media?.[0]?.tinygif?.url || "";
+        }
+
+        // Fallback: Tenor trending GIFs filtered by query keyword
+        if (!gifUrl) {
+          const trending = await fetchJson(
+            `https://g.tenor.com/v1/trending?key=LIVDSRZULELA&limit=10&media_filter=minimal`
+          ).catch(() => null);
+          const tr = trending?.results || [];
+          if (tr.length) {
+            const pick = tr[Math.floor(Math.random() * tr.length)];
+            gifUrl = pick?.media?.[0]?.gif?.url || pick?.media?.[0]?.tinygif?.url || "";
+          }
+        }
+
+        if (!gifUrl) return m.reply("❌ No GIF found for that search.");
+        const buffer = await fetchBuffer(gifUrl, { timeout: 30000 });
         await sock.sendMessage(m.chat, { video: buffer, gifPlayback: true, caption: `🎬 *GIF:* ${text}` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
