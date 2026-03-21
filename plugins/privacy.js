@@ -24,29 +24,52 @@ const commands = [
   {
     name: ["antidelete", "antidel"],
     category: "settings",
-    desc: "Repost deleted messages (works in groups and DMs)",
+    desc: "Repost deleted messages. In your DM: enables globally for all chats. In a group: enables for that group only.",
     handler: async (sock, m, { text, isOwner, isAdmin }) => {
       const inGroup = m.isGroup;
 
-      // In a group: require admin or owner. In DMs: require owner.
-      if (inGroup && !isAdmin && !isOwner) {
-        return m.reply("❌ You need to be a group admin to toggle Anti-Delete in a group.");
-      }
-      if (!inGroup && !isOwner) {
-        return m.reply("❌ Only the bot owner can toggle Anti-Delete in a private chat.");
-      }
-
-      if (text === "on") {
-        updateGroupSetting(m.chat, "antidelete", 1);
-        const where = inGroup ? "this group" : "this chat";
-        await m.reply(`✅ Anti-Delete enabled for ${where}. Deleted content will be forwarded to the owner.`);
-      } else if (text === "off") {
-        updateGroupSetting(m.chat, "antidelete", 0);
-        await m.reply("✅ Anti-Delete disabled.");
+      if (inGroup) {
+        // Group context: require admin or owner
+        if (!isAdmin && !isOwner) {
+          return m.reply("❌ You need to be a group admin to toggle Anti-Delete in a group.");
+        }
+        // Per-group toggle — visible only inside the group
+        if (text === "on") {
+          updateGroupSetting(m.chat, "antidelete", 1);
+          await m.reply(`✅ Anti-Delete enabled for this group. Deleted content will be forwarded to the owner.`);
+        } else if (text === "off") {
+          updateGroupSetting(m.chat, "antidelete", 0);
+          await m.reply("✅ Anti-Delete disabled for this group.");
+        } else {
+          const current = getGroupSettings(m.chat)?.antidelete ? "on" : "off";
+          await m.reply(`Usage: ${config.PREFIX}antidelete on/off\nScope: this group\nCurrent: ${current}`);
+        }
       } else {
-        const current = getGroupSettings(m.chat)?.antidelete ? "on" : "off";
-        const where = inGroup ? "group" : "DM";
-        await m.reply(`Usage: ${config.PREFIX}antidelete on/off\nContext: ${where}\nCurrent: ${current}`);
+        // DM context: owner only — sets a GLOBAL flag silently
+        if (!isOwner) {
+          return m.reply("❌ Only the bot owner can toggle Anti-Delete.");
+        }
+        if (text === "on") {
+          updateGroupSetting("__global__", "antidelete", 1);
+          await m.reply(
+            `✅ *Anti-Delete enabled globally.*\n` +
+            `Every deleted message from *any* chat (groups + DMs) will be forwarded to you privately.\n` +
+            `Nobody else knows this is active.`
+          );
+        } else if (text === "off") {
+          updateGroupSetting("__global__", "antidelete", 0);
+          await m.reply("✅ Global Anti-Delete disabled.");
+        } else {
+          const globalOn = getGroupSettings("__global__")?.antidelete ? "on" : "off";
+          await m.reply(
+            `*Anti-Delete Settings*\n\n` +
+            `🌍 Global (all chats): *${globalOn}*\n\n` +
+            `Usage:\n` +
+            `• ${config.PREFIX}antidelete on — enable globally from this DM\n` +
+            `• ${config.PREFIX}antidelete off — disable global\n` +
+            `• Use inside a group to toggle for that group only`
+          );
+        }
       }
     },
   },
