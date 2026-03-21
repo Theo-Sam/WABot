@@ -123,7 +123,12 @@ const commands = [
           const bottomText = encodeURIComponent((bottomArr.join("|") || "").replace(/ /g, "_") || "_");
           // Pick a random template from memegen.link/templates
           const templates = [
-            "buzz", "doge", "drake", "gru", "joker", "kermit", "spongebob", "disastergirl", "expandingbrain", "twobuttons", "change", "batman", "distractedbf", "success", "sad-biden", "trump", "trump-sign", "trump-bill", "trump-tweet", "trump-table", "trump-check", "trump-desk", "trump-press", "trump-train", "trump-wrestle", "trump-yell", "trump-yes", "trump-no", "trump-miss", "trump-miss2", "trump-miss3", "trump-miss4", "trump-miss5", "trump-miss6", "trump-miss7", "trump-miss8", "trump-miss9", "trump-miss10", "trump-miss11", "trump-miss12", "trump-miss13", "trump-miss14", "trump-miss15", "trump-miss16", "trump-miss17", "trump-miss18", "trump-miss19", "trump-miss20", "trump-miss21", "trump-miss22", "trump-miss23", "trump-miss24", "trump-miss25", "trump-miss26", "trump-miss27", "trump-miss28", "trump-miss29", "trump-miss30", "trump-miss31", "trump-miss32", "trump-miss33", "trump-miss34", "trump-miss35", "trump-miss36", "trump-miss37", "trump-miss38", "trump-miss39", "trump-miss40", "trump-miss41", "trump-miss42", "trump-miss43", "trump-miss44", "trump-miss45", "trump-miss46", "trump-miss47", "trump-miss48", "trump-miss49", "trump-miss50"
+            "buzz", "doge", "drake", "gru", "joker", "kermit", "spongebob", "disastergirl",
+            "expandingbrain", "twobuttons", "change", "batman", "distractedbf", "success",
+            "sad-biden", "fry", "wonka", "fine", "uno", "picard", "aag", "both",
+            "dennis", "hide", "iw", "money", "oag", "oprah", "patrick",
+            "philosoraptor", "rollsafe", "sadfrog", "salt", "sparta", "third",
+            "uno", "winter", "woody", "y-u-no", "yoda"
           ];
           const template = templates[Math.floor(Math.random() * templates.length)];
           memeUrl = `https://api.memegen.link/images/${template}/${topText}/${bottomText}.png`;

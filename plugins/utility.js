@@ -347,10 +347,31 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}zodiac <sign>\nSigns: aries, taurus, gemini, cancer, leo, virgo, libra, scorpio, sagittarius, capricorn, aquarius, pisces`);
       m.react("♈");
       try {
+        const validSigns = ["aries","taurus","gemini","cancer","leo","virgo","libra","scorpio","sagittarius","capricorn","aquarius","pisces"];
         const sign = String(text).toLowerCase().trim();
-        const data = await fetchJson(`https://ohmanda.com/api/horoscope/${encodeURIComponent(sign)}/`).catch(() => null);
-        if (!data?.horoscope) return m.reply("❌ Invalid zodiac sign.");
-        await m.reply(`🔮 *Daily Horoscope*\n\n♈ Sign: *${sign}*\n📅 ${new Date().toLocaleDateString()}\n\n${data.horoscope}\n\n_${config.BOT_NAME}_`);
+        if (!validSigns.includes(sign)) return m.reply(`❌ Invalid zodiac sign. Valid signs:\n${validSigns.join(", ")}`);
+
+        let horoscope = null;
+
+        const primary = await fetchJson(
+          `https://horoscope-app-api.vercel.app/api/v1/get-horoscope/daily?sign=${sign}&day=today`,
+          { timeout: 12000 }
+        ).catch(() => null);
+        if (primary?.data?.horoscope_data) {
+          horoscope = primary.data.horoscope_data;
+        }
+
+        if (!horoscope) {
+          const aztro = await fetchJson(
+            `https://aztro.sameerkumar.website/?sign=${sign}&day=today`,
+            { method: "post", timeout: 12000 }
+          ).catch(() => null);
+          if (aztro?.description) horoscope = aztro.description;
+        }
+
+        if (!horoscope) return m.reply("❌ Could not retrieve horoscope right now. Try again later.");
+
+        await m.reply(`🔮 *Daily Horoscope*\n\n♈ Sign: *${sign[0].toUpperCase() + sign.slice(1)}*\n📅 ${new Date().toLocaleDateString()}\n\n${horoscope}\n\n_${config.BOT_NAME}_`);
         m.react("✅");
       } catch {
         m.react("❌");

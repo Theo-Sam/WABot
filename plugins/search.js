@@ -661,7 +661,7 @@ const commands = [
 
         const decodeXml = (s) =>
           String(s || "")
-            .replace(/<!\\[CDATA\\[|\\]\\]>/g, "")
+            .replace(/<!\[CDATA\[|\]\]>/g, "")
             .replace(/&amp;/g, "&")
             .replace(/&quot;/g, '"')
             .replace(/&#039;/g, "'")
@@ -709,7 +709,12 @@ const commands = [
       if (!text) return m.reply(`Usage: ${config.PREFIX}crypto <coin>\nExample: ${config.PREFIX}crypto bitcoin`);
       m.react("💰");
       try {
-        const data = await fetchJson(`https://api.coingecko.com/api/v3/coins/${text.toLowerCase()}`);
+        const cgKey = (process.env.COINGECKO_API_KEY || "").trim();
+        const cgHeaders = cgKey ? { "x-cg-demo-api-key": cgKey } : {};
+        const data = await fetchJson(
+          `https://api.coingecko.com/api/v3/coins/${text.toLowerCase()}?localization=false&tickers=false&community_data=false&developer_data=false`,
+          { headers: cgHeaders, timeout: 20000 }
+        );
         if (!data?.id) return m.reply("❌ Cryptocurrency not found. Use coin ID (e.g., bitcoin, ethereum, solana).");
         const md = data.market_data;
         const price = md?.current_price;
