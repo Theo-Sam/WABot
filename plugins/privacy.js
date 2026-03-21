@@ -24,19 +24,29 @@ const commands = [
   {
     name: ["antidelete", "antidel"],
     category: "settings",
-    desc: "Repost deleted messages",
-    group: true,
-    admin: true,
-    handler: async (sock, m, { text }) => {
+    desc: "Repost deleted messages (works in groups and DMs)",
+    handler: async (sock, m, { text, isOwner, isAdmin }) => {
+      const inGroup = m.isGroup;
+
+      // In a group: require admin or owner. In DMs: require owner.
+      if (inGroup && !isAdmin && !isOwner) {
+        return m.reply("❌ You need to be a group admin to toggle Anti-Delete in a group.");
+      }
+      if (!inGroup && !isOwner) {
+        return m.reply("❌ Only the bot owner can toggle Anti-Delete in a private chat.");
+      }
+
       if (text === "on") {
         updateGroupSetting(m.chat, "antidelete", 1);
-        await m.reply("✅ Anti-Delete enabled. Deleted content will be saved and sent to owner DM.");
+        const where = inGroup ? "this group" : "this chat";
+        await m.reply(`✅ Anti-Delete enabled for ${where}. Deleted content will be forwarded to the owner.`);
       } else if (text === "off") {
         updateGroupSetting(m.chat, "antidelete", 0);
         await m.reply("✅ Anti-Delete disabled.");
       } else {
         const current = getGroupSettings(m.chat)?.antidelete ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}antidelete on/off\nCurrent: ${current}`);
+        const where = inGroup ? "group" : "DM";
+        await m.reply(`Usage: ${config.PREFIX}antidelete on/off\nContext: ${where}\nCurrent: ${current}`);
       }
     },
   },
