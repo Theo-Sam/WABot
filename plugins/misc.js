@@ -212,11 +212,9 @@ const commands = [
       m.react("⏳");
       try {
         const buffer = await postBuffer("https://carbonara.solopov.dev/api/cook", {
-          code: code,
+          code,
           theme: "one-dark",
           fontFamily: "JetBrains Mono",
-          fontSize: "14px",
-          padding: "32px",
         }, { timeout: 30000 });
         await sock.sendMessage(m.chat, { image: buffer, caption: "💻 *Code Snippet*" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");

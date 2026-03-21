@@ -129,7 +129,7 @@ const commands = [
     },
   },
   {
-    name: ["wea", "wthr"],
+    name: ["weather", "wea", "wthr"],
     category: "tools",
     desc: "Get weather info for a city",
     handler: async (sock, m, { text }) => {

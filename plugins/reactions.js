@@ -1,5 +1,5 @@
 const config = require("../config");
-const { parseMention } = require("../lib/helpers");
+const { fetchJson, parseMention } = require("../lib/helpers");
 
 const commands = [
   {
@@ -10,19 +10,22 @@ const commands = [
       if (!m.quoted) return m.reply(`Reply to a message with ${config.PREFIX}react <emoji>`);
       if (!text) return m.reply("Provide an emoji to react with.");
       await sock.sendMessage(m.chat, { react: { text: text.trim(), key: m.quoted.key } });
-      await m.reply("✅ Reaction sent.");
     },
   },
   {
     name: ["forward", "fwd"],
     category: "misc",
-    desc: "Forward a message",
+    desc: "Forward a message to a contact",
     handler: async (sock, m, { text }) => {
-      if (!m.quoted) return m.reply("Reply to a message to forward it.");
-      const target = m.mentions[0] || (text ? text.replace(/[^0-9]/g, "") + "@s.whatsapp.net" : null);
-      if (!target) return m.reply(`Usage: Reply to a message with ${config.PREFIX}forward @person or number`);
-      await sock.sendMessage(target, { forward: { key: m.quoted.key, message: m.quoted.message } });
-      await m.reply("✅ Message forwarded!");
+      if (!m.quoted) return m.reply(`Reply to a message, then use:\n${config.PREFIX}forward @mention  or  ${config.PREFIX}forward <number>\nExample: ${config.PREFIX}forward 233241234567`);
+      const target = m.mentions[0] || (text ? text.replace(/\D/g, "") + "@s.whatsapp.net" : null);
+      if (!target) return m.reply("Tag someone or provide a phone number with country code.");
+      try {
+        await sock.sendMessage(target, { forward: { key: m.quoted.key, message: m.quoted.message } });
+        await m.reply("✅ Message forwarded!");
+      } catch {
+        await m.reply("❌ Could not forward — make sure the number is correct and includes country code.");
+      }
     },
   },
   {
@@ -39,12 +42,11 @@ const commands = [
   {
     name: ["delete", "del", "d"],
     category: "misc",
-    desc: "Delete bot message",
+    desc: "Delete a bot message",
     handler: async (sock, m) => {
       if (!m.quoted) return m.reply("Reply to a bot message to delete it.");
       if (!m.quoted.key.fromMe) return m.reply("I can only delete my own messages.");
       await sock.sendMessage(m.chat, { delete: m.quoted.key });
-      await m.reply("✅ Message deleted.");
     },
   },
   {
@@ -53,25 +55,33 @@ const commands = [
     desc: "Create a poll",
     group: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}poll Question | Option1 | Option2 | Option3\n\nExample: ${config.PREFIX}poll Best color? | Red | Blue | Green`);
-      const parts = text.split("|").map((p) => p.trim());
+      if (!text) return m.reply(
+        `Usage: ${config.PREFIX}poll Question | Option1 | Option2 | Option3\n\nExample:\n${config.PREFIX}poll Best color? | Red | Blue | Green`
+      );
+      const parts = text.split("|").map((p) => p.trim()).filter(Boolean);
       if (parts.length < 3) return m.reply("Provide a question and at least 2 options separated by |");
       const question = parts[0];
       const options = parts.slice(1);
       await sock.sendMessage(m.chat, {
         poll: { name: question, values: options, selectableCount: 1 },
       });
-      await m.reply(`✅ Poll created with ${options.length} option(s).`);
     },
   },
   {
     name: ["clear", "purge"],
     category: "misc",
-    desc: "Clear chat (bot messages)",
+    desc: "Clear this chat (bot side)",
     owner: true,
     handler: async (sock, m) => {
-      await sock.chatModify({ delete: true, lastMessages: [{ key: m.key, messageTimestamp: m.key.id }] }, m.chat);
-      await m.reply("✅ Chat cleared!");
+      try {
+        await sock.chatModify(
+          { delete: true, lastMessages: [{ key: m.key, messageTimestamp: Math.floor(Date.now() / 1000) }] },
+          m.chat
+        );
+        await m.reply("✅ Chat cleared!");
+      } catch {
+        await m.reply("❌ Could not clear chat.");
+      }
     },
   },
   {
@@ -80,8 +90,15 @@ const commands = [
     desc: "Archive current chat",
     owner: true,
     handler: async (sock, m) => {
-      await sock.chatModify({ archive: true, lastMessages: [{ key: m.key, messageTimestamp: m.key.id }] }, m.chat);
-      await m.reply("✅ Chat archived!");
+      try {
+        await sock.chatModify(
+          { archive: true, lastMessages: [{ key: m.key, messageTimestamp: Math.floor(Date.now() / 1000) }] },
+          m.chat
+        );
+        await m.reply("✅ Chat archived!");
+      } catch {
+        await m.reply("❌ Could not archive chat.");
+      }
     },
   },
   {
@@ -90,8 +107,12 @@ const commands = [
     desc: "Pin current chat",
     owner: true,
     handler: async (sock, m) => {
-      await sock.chatModify({ pin: true }, m.chat);
-      await m.reply("✅ Chat pinned!");
+      try {
+        await sock.chatModify({ pin: true }, m.chat);
+        await m.reply("✅ Chat pinned!");
+      } catch {
+        await m.reply("❌ Could not pin chat.");
+      }
     },
   },
   {
@@ -100,8 +121,12 @@ const commands = [
     desc: "Unpin current chat",
     owner: true,
     handler: async (sock, m) => {
-      await sock.chatModify({ pin: false }, m.chat);
-      await m.reply("✅ Chat unpinned!");
+      try {
+        await sock.chatModify({ pin: false }, m.chat);
+        await m.reply("✅ Chat unpinned!");
+      } catch {
+        await m.reply("❌ Could not unpin chat.");
+      }
     },
   },
   {
@@ -110,14 +135,21 @@ const commands = [
     desc: "Star a message",
     handler: async (sock, m) => {
       if (!m.quoted) return m.reply("Reply to a message to star it.");
-      await sock.chatModify({ star: { messages: [{ id: m.quoted.key.id, fromMe: m.quoted.key.fromMe }], star: true } }, m.chat);
-      await m.reply("⭐ Message starred!");
+      try {
+        await sock.chatModify(
+          { star: { messages: [{ id: m.quoted.key.id, fromMe: m.quoted.key.fromMe }], star: true } },
+          m.chat
+        );
+        await m.reply("⭐ Message starred!");
+      } catch {
+        await m.reply("❌ Could not star message.");
+      }
     },
   },
   {
     name: ["listgroups", "groups", "mygroups"],
     category: "misc",
-    desc: "List all bot groups",
+    desc: "List all groups the bot is in",
     owner: true,
     handler: async (sock, m) => {
       m.react("⏳");
@@ -126,7 +158,7 @@ const commands = [
         const entries = Object.entries(groups);
         if (!entries.length) return m.reply("Not in any groups.");
         let msg = `👥 *Bot Groups (${entries.length})*\n\n`;
-        entries.forEach(([jid, info], i) => {
+        entries.forEach(([, info], i) => {
           msg += `${i + 1}. *${info.subject}*\n   Members: ${info.participants?.length || 0}\n\n`;
         });
         await m.reply(msg);
@@ -143,65 +175,99 @@ const commands = [
     desc: "Send a contact card",
     handler: async (sock, m, { text }) => {
       const target = m.mentions[0] || m.quoted?.sender;
-      if (!target && !text) return m.reply(`Usage: ${config.PREFIX}contact @person or number`);
-      const num = target ? target.replace("@s.whatsapp.net", "") : text.replace(/[^0-9]/g, "");
-      const jid = `${num}@s.whatsapp.net`;
+      if (!target && !text) return m.reply(`Usage: ${config.PREFIX}contact @person or number (with country code)`);
+      const num = target ? target.replace("@s.whatsapp.net", "") : text.replace(/\D/g, "");
+      if (!num) return m.reply("Provide a valid phone number with country code.");
       await sock.sendMessage(m.chat, {
         contacts: {
-          displayName: num,
-          contacts: [{ vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${num}\nTEL;type=CELL;waid=${num}:+${num}\nEND:VCARD` }],
+          displayName: `+${num}`,
+          contacts: [{ vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:+${num}\nTEL;type=CELL;waid=${num}:+${num}\nEND:VCARD` }],
         },
       }, { quoted: { key: m.key, message: m.message } });
       await m.reply("✅ Contact card sent.");
     },
   },
   {
-    name: ["location", "loc"],
+    name: ["location", "loc", "map"],
     category: "misc",
-    desc: "Send a location",
+    desc: "Send a location by city/place name",
     handler: async (sock, m, { text }) => {
-      if (!text || !text.includes(",")) return m.reply(`Usage: ${config.PREFIX}location <lat>,<lon>\nExample: ${config.PREFIX}location 5.6037,-0.1870`);
-      const [lat, lon] = text.split(",").map(Number);
-      if (isNaN(lat) || isNaN(lon)) return m.reply("Invalid coordinates.");
-      await sock.sendMessage(m.chat, {
-        location: { degreesLatitude: lat, degreesLongitude: lon },
-      });
-      await m.reply("✅ Location sent.");
+      if (!text) return m.reply(`Usage: ${config.PREFIX}location <place name>\nExample: ${config.PREFIX}location Accra, Ghana`);
+      m.react("⏳");
+      try {
+        const results = await fetchJson(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=1`,
+          { headers: { "User-Agent": "DesamWABot/3.0 (whatsapp-bot)" }, timeout: 12000 }
+        );
+
+        if (!results || !results.length) {
+          m.react("❌");
+          return m.reply(`❌ Could not find location: *${text}*\nTry being more specific, e.g. "Accra, Ghana"`);
+        }
+
+        const place = results[0];
+        const lat = parseFloat(place.lat);
+        const lon = parseFloat(place.lon);
+        const displayName = place.display_name || text;
+
+        await sock.sendMessage(m.chat, {
+          location: {
+            degreesLatitude: lat,
+            degreesLongitude: lon,
+            name: text,
+            address: displayName,
+          },
+        }, { quoted: { key: m.key, message: m.message } });
+
+        await m.reply(`📍 *${text}*\n\n${displayName}\n\n🌐 Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`);
+        m.react("✅");
+      } catch (err) {
+        m.react("❌");
+        await m.reply("❌ Location lookup failed. Try again or check your spelling.");
+      }
     },
   },
   {
     name: ["presence", "typing", "recording"],
     category: "misc",
-    desc: "Set chat presence",
+    desc: "Set chat presence status",
     owner: true,
     handler: async (sock, m, { text }) => {
       const modes = ["composing", "recording", "paused", "available", "unavailable"];
-      if (!text || !modes.includes(text)) {
+      if (!text || !modes.includes(text.toLowerCase())) {
         return m.reply(`Usage: ${config.PREFIX}presence <mode>\nModes: ${modes.join(", ")}`);
       }
-      await sock.sendPresenceUpdate(text, m.chat);
+      await sock.sendPresenceUpdate(text.toLowerCase(), m.chat);
       await m.reply(`✅ Presence set to: *${text}*`);
     },
   },
   {
     name: ["setbio", "bio"],
     category: "misc",
-    desc: "Set bot bio/about",
+    desc: "Set bot status/about text",
     owner: true,
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}setbio <text>`);
-      await sock.updateProfileStatus(text);
-      await m.reply(`✅ Bio updated to: ${text}`);
+      try {
+        await sock.updateProfileStatus(text);
+        await m.reply(`✅ Bio updated to: ${text}`);
+      } catch {
+        await m.reply("❌ Could not update bio.");
+      }
     },
   },
   {
     name: ["readchat", "markread"],
     category: "misc",
-    desc: "Mark all messages as read",
+    desc: "Mark chat as read",
     owner: true,
     handler: async (sock, m) => {
-      await sock.readMessages([m.key]);
-      await m.reply("✅ Chat marked as read!");
+      try {
+        await sock.readMessages([m.key]);
+        await m.reply("✅ Chat marked as read!");
+      } catch {
+        await m.reply("❌ Could not mark as read.");
+      }
     },
   },
 ];
