@@ -37,6 +37,12 @@ console.log('');
 function verifyStartupRequirements() {
   ensureDatabaseReady();
   console.log(`✅ SQLite ready at ${getDatabasePath()}`);
+  if (!config.OWNER_NUMBER || !config.OWNER_NUMBER.trim()) {
+    console.warn(`⚠️  WARNING: OWNER_NUMBER is not set in .env!`);
+    console.warn(`   Owner-only commands will NOT work for the human owner.`);
+    console.warn(`   Anti-delete alerts will go to the bot's own Saved Messages.`);
+    console.warn(`   Set OWNER_NUMBER=<your full phone number> in .env and restart.`);
+  }
 }
 
 let shuttingDown = false;
