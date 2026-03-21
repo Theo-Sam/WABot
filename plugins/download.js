@@ -46,66 +46,101 @@ async function ytSearch(query) {
 }
 
 /**
- * Use yt-dlp to get a direct media URL from YouTube, then download it with axios.
- * Returns the buffer, or null on failure.
+ * Use yt-dlp to download media directly to a temp file, then read it into a buffer.
+ * This avoids the signed-URL IP-restriction problem from using --get-url + axios.
  */
-async function ytDlpGetBuffer(url, formatSelector, maxBytes) {
+async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
   const ytdlpBin = findYtDlpBin();
   if (!ytdlpBin) return null;
+  const tmpPath = tempFile(tmpExt);
   try {
-    const directUrl = await new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       execFile(ytdlpBin, [
-        '--get-url', '--no-warnings', '--no-playlist',
-        '-f', formatSelector,
+        '--no-warnings', '--no-playlist', '--quiet',
+        ...extraArgs,
+        '-o', tmpPath,
         url,
-      ], { timeout: 30000 }, (err, stdout) => {
-        if (err) return reject(err);
-        const line = stdout.trim().split('\n')[0];
-        resolve(line || null);
+      ], { timeout: 120000 }, (err) => {
+        if (err) reject(err);
+        else resolve();
       });
     });
-    if (!directUrl) return null;
-    const res = await axios.get(directUrl, {
-      responseType: 'arraybuffer',
-      timeout: 90000,
-      maxContentLength: maxBytes || 50 * 1024 * 1024,
-    });
-    if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+    if (fs.existsSync(tmpPath)) {
+      const buf = fs.readFileSync(tmpPath);
+      if (buf.length > 1000) return buf;
+    }
   } catch (err) {
-    console.error('[ytDlp] error:', err.message);
+    console.error('[ytDlp] download error:', err.message);
+  } finally {
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
   }
   return null;
 }
 
 async function ytDownloadAudio(url) {
-  // Primary: yt-dlp (reliable, handles YouTube bot checks)
-  const buf = await ytDlpGetBuffer(url, 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best', 50 * 1024 * 1024);
+  // Primary: yt-dlp direct to temp file (handles signatures, bot checks, everything)
+  const buf = await ytDlpDownloadToBuffer(url, [
+    '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+    '--no-part',
+  ], 'm4a');
   if (buf) return buf;
-  // Fallback: play-dl
-  try {
-    const info = await play.video_info(url);
-    const format = info.format.filter(f => f.mimeType?.startsWith("audio/")).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-    if (format?.url) {
-      const res = await axios.get(format.url, { responseType: "arraybuffer", timeout: 60000 });
-      if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+
+  // Fallback: Invidious API audio stream
+  const videoId = url.match(/[?&]v=([A-Za-z0-9_-]{11})/)?.[1]
+    || url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)?.[1];
+  if (videoId) {
+    for (const inst of INVIDIOUS_INSTANCES) {
+      try {
+        const data = await fetchJson(`${inst}/api/v1/videos/${videoId}`, { timeout: 10000 });
+        const formats = data?.adaptiveFormats || [];
+        const audio = formats
+          .filter(f => f.type?.startsWith('audio/') && f.url)
+          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+        if (audio?.url) {
+          const res = await axios.get(audio.url, {
+            responseType: 'arraybuffer', timeout: 60000,
+            maxContentLength: 50 * 1024 * 1024,
+          });
+          if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+        }
+      } catch {}
     }
-  } catch {}
+  }
+
   return null;
 }
 
 async function ytDownloadVideo(url) {
-  // Primary: yt-dlp (reliable, handles YouTube bot checks)
-  const buf = await ytDlpGetBuffer(url, 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]', 80 * 1024 * 1024);
+  // Primary: yt-dlp direct to temp file
+  const buf = await ytDlpDownloadToBuffer(url, [
+    '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
+    '--merge-output-format', 'mp4',
+    '--no-part',
+  ], 'mp4');
   if (buf) return buf;
-  // Fallback: play-dl
-  try {
-    const info = await play.video_info(url);
-    const format = info.format.filter(f => f.mimeType?.startsWith("video/") && f.hasAudio).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-    if (format?.url) {
-      const res = await axios.get(format.url, { responseType: "arraybuffer", timeout: 60000, maxContentLength: 50 * 1024 * 1024 });
-      if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+
+  // Fallback: Invidious API combined stream (formatStreams = video+audio muxed)
+  const videoId = url.match(/[?&]v=([A-Za-z0-9_-]{11})/)?.[1]
+    || url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)?.[1];
+  if (videoId) {
+    for (const inst of INVIDIOUS_INSTANCES) {
+      try {
+        const data = await fetchJson(`${inst}/api/v1/videos/${videoId}`, { timeout: 10000 });
+        const streams = data?.formatStreams || [];
+        const mp4 = streams
+          .filter(f => f.container === 'mp4' && f.url)
+          .sort((a, b) => (parseInt(b.resolution) || 0) - (parseInt(a.resolution) || 0))[0];
+        if (mp4?.url) {
+          const res = await axios.get(mp4.url, {
+            responseType: 'arraybuffer', timeout: 90000,
+            maxContentLength: 80 * 1024 * 1024,
+          });
+          if (res.data?.byteLength > 1000) return Buffer.from(res.data);
+        }
+      } catch {}
     }
-  } catch {}
+  }
+
   return null;
 }
 
@@ -322,18 +357,16 @@ function resolveInputUrl(text, m) {
 }
 
 async function fbDownload(url) {
-  // 1. yt-dlp (most reliable for public Facebook videos)
-  if (findYtDlpBin()) {
-    try {
-      const buf = await ytDlpGetBuffer(
-        url,
-        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        80 * 1024 * 1024
-      );
-      if (buf) return buf;
-    } catch (err) {
-      console.error('[fbDownload] yt-dlp error:', err.message);
-    }
+  // 1. yt-dlp direct download (most reliable for public Facebook videos)
+  try {
+    const buf = await ytDlpDownloadToBuffer(url, [
+      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      '--merge-output-format', 'mp4',
+      '--no-part',
+    ], 'mp4');
+    if (buf) return buf;
+  } catch (err) {
+    console.error('[fbDownload] yt-dlp error:', err.message);
   }
 
   // 2. cobalt.tools (v10 API)
