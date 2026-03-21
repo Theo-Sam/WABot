@@ -322,29 +322,67 @@ function resolveInputUrl(text, m) {
 }
 
 async function fbDownload(url) {
-  // 1. cobalt.tools
+  // 1. yt-dlp (most reliable for public Facebook videos)
+  if (findYtDlpBin()) {
+    try {
+      const buf = await ytDlpGetBuffer(
+        url,
+        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        80 * 1024 * 1024
+      );
+      if (buf) return buf;
+    } catch (err) {
+      console.error('[fbDownload] yt-dlp error:', err.message);
+    }
+  }
+
+  // 2. cobalt.tools (v10 API)
   try {
-    const fbDownloader = require('facebook-video-downloader');
-    const info = await fbDownloader.getInfo(url);
-    if (info && info.links && info.links.length > 0 && info.links[0].url) {
-      const buf = await fetchBuffer(info.links[0].url, { timeout: 60000 });
+    const d = await postJson(
+      endpoints.download.cobaltApiJson,
+      { url, downloadMode: "auto" },
+      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
+    );
+    if ((d.status === "redirect" || d.status === "tunnel" || d.status === "stream") && d.url) {
+      const buf = await fetchBuffer(d.url, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+    if (d.status === "picker" && d.picker?.length) {
+      const buf = await fetchBuffer(d.picker[0].url, { timeout: 60000 });
       if (buf?.length > 1000) return buf;
     }
   } catch (err) {
-    console.error('[fbDownload] facebook-video-downloader error:', err);
+    console.error('[fbDownload] cobalt error:', err.message);
   }
+
+  // 3. SaveFrom.net free scraper endpoint
+  try {
+    const sfUrl = `https://sfrom.me/api/button?url=${encodeURIComponent(url)}`;
+    const sfRes = await axios.get(sfUrl, {
+      timeout: 15000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' },
+    });
+    const mediaUrl = sfRes.data?.url || sfRes.data?.data?.url;
+    if (mediaUrl && typeof mediaUrl === 'string' && mediaUrl.startsWith('http')) {
+      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+      if (buf?.length > 1000) return buf;
+    }
+  } catch (err) {
+    console.error('[fbDownload] savefrom error:', err.message);
+  }
+
   return null;
 }
 
 async function twitterDownload(url) {
-  // 1. cobalt.tools
+  // 1. cobalt.tools (v10 API)
   try {
     const d = await postJson(
       endpoints.download.cobaltApiJson,
-      { url },
+      { url, downloadMode: "auto" },
       { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
     );
-    if ((d.status === "redirect" || d.status === "stream") && d.url) {
+    if ((d.status === "redirect" || d.status === "tunnel" || d.status === "stream") && d.url) {
       const buf = await fetchBuffer(d.url, { timeout: 60000 });
       if (buf?.length > 1000) return buf;
     }
@@ -674,8 +712,9 @@ const commands = [
         } catch {}
         if (!imgBuffer || imgBuffer.length < 1000) {
           try {
-            imgBuffer = await fetchBuffer(`${endpoints.images.randomFallbackBase}/1080x1080/?${encodeURIComponent(text)}`);
-            imgSource = "Unsplash";
+            const kw = encodeURIComponent(text.replace(/\s+/g, ",").slice(0, 50));
+            imgBuffer = await fetchBuffer(`${endpoints.images.randomFallbackBase}/1080/1080/${kw}`);
+            imgSource = "Loremflickr";
           } catch {}
         }
         if (!imgBuffer || imgBuffer.length < 1000) return m.reply("❌ No images found for that query.");

@@ -4,6 +4,21 @@ const { endpoints } = require("../lib/endpoints");
 const crypto = require("crypto");
 const os = require("os");
 
+const localHoroscopes = {
+  aries: "Today is a day for bold decisions. Trust your instincts and take that first step forward with confidence. Energy and momentum are on your side — don't hesitate.",
+  taurus: "Focus on stability and the foundations you've already built. Your patience will be rewarded in ways you haven't expected. Take time to appreciate the present moment.",
+  gemini: "Communication flows naturally today. Share your ideas openly — people around you are receptive and ready to collaborate. Your curiosity leads somewhere worthwhile.",
+  cancer: "Your emotional intuition is especially sharp right now. Lean into your feelings and nurture the relationships that mean the most. A quiet moment of reflection will bring clarity.",
+  leo: "Your warmth and confidence are your greatest assets today. Lead with heart and authenticity — others will naturally respond to your energy. Recognition may come your way.",
+  virgo: "Details matter today and your sharp eye catches what others miss. Use your analytical strengths wisely. A well-thought-out plan now saves considerable effort later.",
+  libra: "Seek balance in all things today. Your gift for diplomacy helps you navigate any tension with grace. A fair and thoughtful approach brings people to agreement.",
+  scorpio: "Deep truths are surfacing and transformation is in the air. Embrace change rather than resist it — what ends now creates real space for something far greater ahead.",
+  sagittarius: "Adventure and curiosity call to you today. Keep your mind wide open to new perspectives and unexpected opportunities. A spontaneous choice could lead somewhere wonderful.",
+  capricorn: "Steady effort is paying off, even when the results aren't yet visible. Stay focused on your long-term goals — your discipline and persistence are building something lasting.",
+  aquarius: "Your originality and forward-thinking perspective shine today. Don't be afraid to stand apart from the crowd. The ideas others call unconventional may well be ahead of their time.",
+  pisces: "Your creativity and compassion are heightened. Let your imagination guide you and don't dismiss what feels like intuition. Meaningful connections are within easy reach today.",
+};
+
 function toRoman(value) {
   const map = [
     [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
@@ -362,11 +377,7 @@ const commands = [
         }
 
         if (!horoscope) {
-          const aztro = await fetchJson(
-            `https://aztro.sameerkumar.website/?sign=${sign}&day=today`,
-            { method: "post", timeout: 12000 }
-          ).catch(() => null);
-          if (aztro?.description) horoscope = aztro.description;
+          horoscope = localHoroscopes[sign] || null;
         }
 
         if (!horoscope) return m.reply("❌ Could not retrieve horoscope right now. Try again later.");

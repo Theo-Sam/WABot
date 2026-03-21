@@ -1,5 +1,22 @@
 const config = require("../config");
-const { pickNonRepeating } = require("../lib/helpers");
+const { pickNonRepeating, fetchJson } = require("../lib/helpers");
+
+let _opentdbToken = null;
+let _opentdbTokenExpiry = 0;
+
+async function acquireOpentdbToken() {
+  if (_opentdbToken && Date.now() < _opentdbTokenExpiry) return _opentdbToken;
+  try {
+    const res = await fetchJson("https://opentdb.com/api_token.php?command=request", { timeout: 10000 });
+    if (res?.token) {
+      _opentdbToken = res.token;
+      _opentdbTokenExpiry = Date.now() + 6 * 3600 * 1000;
+      return res.token;
+    }
+  } catch {}
+  _opentdbToken = null;
+  return null;
+}
 
 const tttGames = new Map();
 
@@ -228,8 +245,16 @@ const commands = [
     handler: async (sock, m) => {
       m.react("🧠");
       try {
-        const { fetchJson } = require("../lib/helpers");
-        const data = await fetchJson("https://opentdb.com/api.php?amount=1&type=multiple");
+        const token = await acquireOpentdbToken();
+        const apiUrl = token
+          ? `https://opentdb.com/api.php?amount=1&type=multiple&token=${token}`
+          : "https://opentdb.com/api.php?amount=1&type=multiple";
+        let data = await fetchJson(apiUrl);
+        if (data?.response_code === 4) {
+          _opentdbToken = null;
+          _opentdbTokenExpiry = 0;
+          data = await fetchJson("https://opentdb.com/api.php?amount=1&type=multiple");
+        }
         if (!data?.results?.[0]) return m.reply("❌ Failed to get trivia.");
         const q = data.results[0];
         const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");

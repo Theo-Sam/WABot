@@ -20,8 +20,9 @@ async function findImageUrl(query) {
     const url = data?.results?.[0]?.urls?.regular;
     if (url) return url;
   }
-  // Stable no-key fallback (random unsplash image tagged with query)
-  return `${endpoints.images.unsplashRandom}/1080x1080/?${encodeURIComponent(query)}`;
+  // Loremflickr — free topic-based random images, no key needed
+  const kw = encodeURIComponent(query.replace(/\s+/g, ",").slice(0, 50));
+  return `${endpoints.images.unsplashRandom}/1080/1080/${kw}`;
 }
 
 async function uploadImageTo0x0(buffer) {
