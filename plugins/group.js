@@ -375,8 +375,12 @@ const commands = [
     admin: true,
     botAdmin: true,
     handler: async (sock, m) => {
-      await sock.groupSettingUpdate(m.chat, "announcement");
-      await m.reply("🔇 Group muted! Only admins can send messages.");
+      try {
+        await sock.groupSettingUpdate(m.chat, "announcement");
+        await m.reply("🔇 Group muted! Only admins can send messages.");
+      } catch {
+        await m.reply("❌ Failed to mute group. Make sure the bot is an admin.");
+      }
     },
   },
   {
@@ -387,8 +391,12 @@ const commands = [
     admin: true,
     botAdmin: true,
     handler: async (sock, m) => {
-      await sock.groupSettingUpdate(m.chat, "not_announcement");
-      await m.reply("🔊 Group unmuted! Everyone can send messages.");
+      try {
+        await sock.groupSettingUpdate(m.chat, "not_announcement");
+        await m.reply("🔊 Group unmuted! Everyone can send messages.");
+      } catch {
+        await m.reply("❌ Failed to unmute group. Make sure the bot is an admin.");
+      }
     },
   },
   {
@@ -398,6 +406,7 @@ const commands = [
     group: true,
     admin: true,
     handler: async (sock, m, { text, groupMeta }) => {
+      if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const members = groupMeta.participants.map((p) => p.id);
       let msg = text ? `📢 *${text}*\n\n` : "📢 *Tagging all members*\n\n";
       msg += members.map((jid) => `▸ @${jid.split("@")[0]}`).join("\n");
@@ -412,6 +421,7 @@ const commands = [
     group: true,
     admin: true,
     handler: async (sock, m, { text, groupMeta }) => {
+      if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const members = groupMeta.participants.map((p) => p.id);
       await sock.sendMessage(m.chat, { text: text || "📢", mentions: members });
     },
@@ -422,6 +432,7 @@ const commands = [
     desc: "Show group information",
     group: true,
     handler: async (sock, m, { groupMeta }) => {
+      if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const admins = groupMeta.participants.filter((p) => p.admin).length;
       const settings = getGroupSettings(m.chat);
       let text = `👥 *${groupMeta.subject}*\n\n`;
@@ -451,6 +462,7 @@ const commands = [
     desc: "Tag all group admins",
     group: true,
     handler: async (sock, m, { text, groupMeta }) => {
+      if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const admins = groupMeta.participants.filter((p) => p.admin);
       if (!admins.length) return m.reply("No admins found.");
       let msg = text ? `📢 *${text}*\n\n` : `👑 *Group Admins*\n\n`;

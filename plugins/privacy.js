@@ -198,7 +198,7 @@ const commands = [
       if (!text || !durations.hasOwnProperty(text)) {
         return m.reply(`Usage: ${config.PREFIX}disappear off/24h/7d/90d`);
       }
-      await sock.sendMessage(m.chat, { disappearingMessagesInChat: durations[text] || false });
+      await sock.sendMessage(m.chat, { disappearingMessagesInChat: durations[text] });
       await m.reply(`✅ Disappearing messages ${text === "off" ? "disabled" : `set to ${text}`}.`);
     },
   },
@@ -253,8 +253,12 @@ const commands = [
     botAdmin: true,
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}setgroupname <new name>`);
-      await sock.groupUpdateSubject(m.chat, text);
-      await m.reply(`✅ Group name changed to: *${text}*`);
+      try {
+        await sock.groupUpdateSubject(m.chat, text);
+        await m.reply(`✅ Group name changed to: *${text}*`);
+      } catch {
+        await m.reply("❌ Failed to change group name. Make sure the bot is an admin.");
+      }
     },
   },
   {
@@ -266,8 +270,12 @@ const commands = [
     botAdmin: true,
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply(`Usage: ${config.PREFIX}setgroupdesc <description>`);
-      await sock.groupUpdateDescription(m.chat, text);
-      await m.reply("✅ Group description updated!");
+      try {
+        await sock.groupUpdateDescription(m.chat, text);
+        await m.reply("✅ Group description updated!");
+      } catch {
+        await m.reply("❌ Failed to update group description. Make sure the bot is an admin.");
+      }
     },
   },
   {
@@ -296,9 +304,13 @@ const commands = [
     admin: true,
     botAdmin: true,
     handler: async (sock, m) => {
-      await sock.groupRevokeInvite(m.chat);
-      const newCode = await sock.groupInviteCode(m.chat);
-      await m.reply(`✅ Group link reset!\n\nNew link: https://chat.whatsapp.com/${newCode}`);
+      try {
+        await sock.groupRevokeInvite(m.chat);
+        const newCode = await sock.groupInviteCode(m.chat);
+        await m.reply(`✅ Group link reset!\n\nNew link: https://chat.whatsapp.com/${newCode}`);
+      } catch {
+        await m.reply("❌ Failed to reset invite link. Make sure the bot is an admin.");
+      }
     },
   },
   {
@@ -308,8 +320,12 @@ const commands = [
     group: true,
     admin: true,
     handler: async (sock, m) => {
-      const code = await sock.groupInviteCode(m.chat);
-      await m.reply(`🔗 *Group Invite Link*\n\nhttps://chat.whatsapp.com/${code}\n\n_Only share this with trusted members._`);
+      try {
+        const code = await sock.groupInviteCode(m.chat);
+        await m.reply(`🔗 *Group Invite Link*\n\nhttps://chat.whatsapp.com/${code}\n\n_Only share this with trusted members._`);
+      } catch {
+        await m.reply("❌ Failed to get invite link. Make sure the bot has access.");
+      }
     },
   },
   {
