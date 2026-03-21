@@ -70,94 +70,70 @@ async function ytDownloadVideo(url) {
 }
 
 /**
- * Download Instagram post/reel using yt-dlp (primary) and igApi with session (fallback).
- * Set INSTAGRAM_SESSION=<your sessionid cookie value> in .env for private/restricted content.
+ * Resolve the yt-dlp binary — check local ./bin/ first, then common system paths.
  */
-async function igDownload(url) {
-  const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "") + "/";
-
-  // 1. yt-dlp (primary — most reliable, works for public content)
-  try {
-    const result = await igDownloadYtDlp(cleanUrl);
-    if (result) return result;
-  } catch (err) {
-    console.error('[igDownload] yt-dlp error:', err.message);
+function findYtDlpBin() {
+  const candidates = [
+    path.join(__dirname, '..', 'bin', 'yt-dlp'),
+    '/usr/local/bin/yt-dlp',
+    '/usr/bin/yt-dlp',
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
   }
-
-  // 2. igApi with session cookie (fallback — works if INSTAGRAM_SESSION is set)
-  const sessionCookie = process.env.INSTAGRAM_SESSION;
-  if (sessionCookie) {
-    try {
-      const result = await igDownloadWithSession(cleanUrl, sessionCookie);
-      if (result) return result;
-    } catch (err) {
-      console.error('[igDownload] igApi error:', err.message);
-    }
-  }
-
   return null;
 }
 
 /**
- * Use yt-dlp binary to download Instagram media.
- * Requires INSTAGRAM_SESSION env variable (your Instagram sessionid cookie).
- * Writes to a temp file, reads the buffer, then cleans up.
+ * Extract the Instagram shortcode from a URL (works for /p/, /reel/, /tv/).
  */
-function igDownloadYtDlp(url) {
-  return new Promise((resolve) => {
-    const sessionCookie = process.env.INSTAGRAM_SESSION;
-    if (!sessionCookie) {
-      resolve(null);
-      return;
-    }
+function extractIgShortcode(url) {
+  const m = String(url).match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
 
+/**
+ * Download using yt-dlp. Tries with session cookie if INSTAGRAM_SESSION is set,
+ * and also tries without auth for public content.
+ */
+function igDownloadYtDlp(url, withCookie) {
+  return new Promise((resolve) => {
+    const ytdlpBin = findYtDlpBin();
+    if (!ytdlpBin) { resolve(null); return; }
+
+    const sessionCookie = withCookie ? (process.env.INSTAGRAM_SESSION || null) : null;
     const tmpDir = os.tmpdir();
     const uniqueId = `ig_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const outTemplate = path.join(tmpDir, `${uniqueId}.%(ext)s`);
-    const cookieFile = path.join(tmpDir, `${uniqueId}_cookies.txt`);
-
-    // Write Netscape-format cookie file that yt-dlp accepts.
-    // Domain MUST start with '.' when the flag column is TRUE (include_subdomains).
-    // Decode the session value in case the user copied it URL-encoded from the browser.
-    const decodedSession = decodeURIComponent(sessionCookie);
-    const expires = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
-    const cookieContent = [
-      '# Netscape HTTP Cookie File',
-      `.instagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${decodedSession}`,
-      `.cdninstagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${decodedSession}`,
-    ].join('\n');
-
-    try {
-      fs.writeFileSync(cookieFile, cookieContent);
-    } catch (e) {
-      console.error('[igDownload] Could not write cookie file:', e.message);
-      resolve(null);
-      return;
-    }
 
     const args = [
-      '--quiet',
-      '--no-warnings',
-      '--no-playlist',
-      '--cookies', cookieFile,
+      '--quiet', '--no-warnings', '--no-playlist',
       '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
       '--merge-output-format', 'mp4',
       '-o', outTemplate,
-      url,
     ];
 
-    execFile('yt-dlp', args, { timeout: 90000 }, (err) => {
-      try { fs.unlinkSync(cookieFile); } catch {}
+    let cookieFile = null;
+    if (sessionCookie) {
+      cookieFile = path.join(tmpDir, `${uniqueId}_cookies.txt`);
+      const decodedSession = decodeURIComponent(sessionCookie);
+      const expires = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+      const cookieContent = [
+        '# Netscape HTTP Cookie File',
+        `.instagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${decodedSession}`,
+        `.cdninstagram.com\tTRUE\t/\tTRUE\t${expires}\tsessionid\t${decodedSession}`,
+      ].join('\n');
+      try { fs.writeFileSync(cookieFile, cookieContent); args.push('--cookies', cookieFile); } catch {}
+    }
+    args.push(url);
 
-      if (err && err.killed) {
-        console.error('[igDownload] yt-dlp timed out');
-        resolve(null);
-        return;
-      }
+    execFile(ytdlpBin, args, { timeout: 90000 }, (err) => {
+      if (cookieFile) try { fs.unlinkSync(cookieFile); } catch {}
+      if (err && err.killed) { console.error('[igDownload] yt-dlp timed out'); resolve(null); return; }
 
       let found = null;
       try {
-        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(uniqueId));
+        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(uniqueId) && !f.endsWith('_cookies.txt'));
         if (files.length > 0) {
           const filePath = path.join(tmpDir, files[0]);
           const buffer = fs.readFileSync(filePath);
@@ -169,28 +145,112 @@ function igDownloadYtDlp(url) {
       } catch (readErr) {
         console.error('[igDownload] yt-dlp file read error:', readErr.message);
       }
-
       resolve(found);
     });
   });
 }
 
 /**
- * Use insta-fetcher igApi with a session cookie to download Instagram media.
- * Requires INSTAGRAM_SESSION env variable to be set.
+ * Free third-party scraper APIs — no auth needed, work for public posts/reels.
+ * Tries multiple services in parallel and returns the first successful result.
  */
-async function igDownloadWithSession(url, sessionCookie) {
-  const { igApi } = require('insta-fetcher');
-  const ig = new igApi(sessionCookie);
-  const data = await ig.fetchPost(url);
-  if (!data || !data.media || data.media.length === 0) return null;
-  const mediaItem = data.media[0];
-  const mediaUrl = mediaItem.url || mediaItem.src;
-  if (!mediaUrl) return null;
-  const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-  if (buf?.length > 1000) {
-    return { buffer: buf, type: mediaItem.type === 'image' ? 'image' : 'video' };
+async function igDownloadFreeApi(url) {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+  };
+
+  const tryApis = [
+    // SaveIG
+    async () => {
+      const res = await axios.post(
+        'https://saveig.app/api/ajaxSearch',
+        `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://saveig.app', 'Referer': 'https://saveig.app/' }, timeout: 15000 }
+      );
+      const links = res.data?.data?.url || [];
+      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
+      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
+      const pick = video || image;
+      if (!pick?.url) return null;
+      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
+      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
+    },
+    // SnapInsta
+    async () => {
+      const res = await axios.post(
+        'https://snapinsta.app/api/ajaxSearch',
+        `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapinsta.app', 'Referer': 'https://snapinsta.app/' }, timeout: 15000 }
+      );
+      const links = res.data?.data?.url || [];
+      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
+      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
+      const pick = video || image;
+      if (!pick?.url) return null;
+      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
+      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
+    },
+    // Insta-Downloader API (JSON endpoint)
+    async () => {
+      const res = await axios.get(
+        `https://api.instadownloader.org/v1/?url=${encodeURIComponent(url)}`,
+        { headers, timeout: 15000 }
+      );
+      const media = res.data?.media || res.data?.url;
+      const mediaUrl = Array.isArray(media) ? media[0]?.url : (typeof media === 'string' ? media : null);
+      if (!mediaUrl) return null;
+      const isVideo = mediaUrl.includes('.mp4') || res.data?.type === 'video';
+      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
+    },
+  ];
+
+  for (const tryApi of tryApis) {
+    try {
+      const result = await tryApi();
+      if (result) return result;
+    } catch {}
   }
+  return null;
+}
+
+/**
+ * Main Instagram download orchestrator.
+ * Order: yt-dlp with session → free APIs → yt-dlp without session.
+ */
+async function igDownload(url) {
+  const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "") + "/";
+  const sessionCookie = process.env.INSTAGRAM_SESSION;
+
+  // 1. yt-dlp with session cookie (most reliable when auth is available)
+  if (sessionCookie && findYtDlpBin()) {
+    try {
+      const result = await igDownloadYtDlp(cleanUrl, true);
+      if (result) return result;
+    } catch (err) {
+      console.error('[igDownload] yt-dlp+cookie error:', err.message);
+    }
+  }
+
+  // 2. Free third-party scraper APIs (no auth, works for most public posts/reels)
+  try {
+    const result = await igDownloadFreeApi(cleanUrl);
+    if (result) return result;
+  } catch (err) {
+    console.error('[igDownload] free API error:', err.message);
+  }
+
+  // 3. yt-dlp without session (last resort for public content)
+  if (!sessionCookie && findYtDlpBin()) {
+    try {
+      const result = await igDownloadYtDlp(cleanUrl, false);
+      if (result) return result;
+    } catch (err) {
+      console.error('[igDownload] yt-dlp no-cookie error:', err.message);
+    }
+  }
+
   return null;
 }
 
