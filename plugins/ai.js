@@ -208,7 +208,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The AI server is currently busy. Please try again in a moment!");
+        return m.apiErrorReply("AI");
       }
     },
   },
@@ -319,12 +319,12 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
         if (!translated) {
           translated = await pollinate(`Translate the following text to ${lang}. Only output the translation, nothing else:\n\n${query}`, "openai").catch(() => "");
         }
-        if (!translated) return m.reply("⏳ Translation API is overloaded. Try again later.");
+        if (!translated) return m.apiErrorReply("Translation");
         await m.reply(`🌐 *Translation* (→ ${lang})\n\n${normalizeAiText(translated, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Translation API is overloaded. Try again later.");
+        return m.apiErrorReply("Translation");
       }
     },
   },

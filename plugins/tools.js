@@ -158,7 +158,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Weather API is currently unavailable.");
+        return m.apiErrorReply("Weather");
       }
     },
   },

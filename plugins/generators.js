@@ -325,16 +325,32 @@ _${config.BOT_NAME} · Desam Tech_ ⚡`;
     desc: "Look up the meaning of an emoji",
     handler: async (sock, m, { text }) => {
       if (!text) return m.usageReply("emojiinfo <emoji>", "emojiinfo 🔥");
-      m.react("⏳");
       try {
-        const codepoint = [...text][0]?.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0");
-        if (!codepoint) return m.reply("❌ Please send a valid emoji.");
-        const data = await fetchJson(`https://emojihub.yurace.pro/api/all/category/smileys-and-emotion`, { timeout: 10000 }).catch(() => null);
-        const emoji = [...text][0];
-        const name = emoji;
-        return m.reply(`${emoji} *Emoji Info*\n\nEmoji: ${emoji}\nUnicode: U+${codepoint}\n
-────────────────────────────────
-_${config.BOT_NAME} · Desam Tech_ ⚡`);
+        const chars = [...text];
+        const emoji = chars[0];
+        if (!emoji) return m.reply("❌ Please send a valid emoji.");
+        const codepoint = emoji.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0");
+        const decimal = emoji.codePointAt(0);
+        const htmlCode = `&#${decimal};`;
+
+        let emojiName = null;
+        try {
+          const data = await fetchJson(`https://emojihub.yurace.pro/api/all`, { timeout: 10000 });
+          if (Array.isArray(data)) {
+            const found = data.find(e => e.unicode?.some(u => u.replace("U+", "").toUpperCase() === codepoint));
+            if (found?.name) emojiName = found.name;
+          }
+        } catch {}
+
+        let msg = `${emoji} *Emoji Info*\n\n`;
+        if (emojiName) msg += `📛 Name: ${emojiName}\n`;
+        msg += `🔣 Emoji: ${emoji}\n`;
+        msg += `🔑 Unicode: U+${codepoint}\n`;
+        msg += `💻 HTML: ${htmlCode}\n`;
+        if (chars.length > 1) msg += `🔗 Sequence: ${chars.length} characters\n`;
+        msg += `\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
+        await m.reply(msg);
+        m.react("✅");
       } catch {
         m.react("❌");
         await m.reply("❌ Could not get emoji info.");

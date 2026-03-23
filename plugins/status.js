@@ -287,10 +287,9 @@ const commands = [
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled OFF via command.");
         await m.reply("✅ Auto status react disabled.");
       } else {
-        await m.reply(`⚙️ *statusreact*  —  currently *${current}*
+        await m.reply(`⚙️ *statusreact*  —  currently *${config.AUTO_STATUS_REACT || "off"}*
 
 📖 Usage:  \`.statusreact on/off\`
-📌 config.AUTO_STATUS_REACT || "off"
 ────────────────────────────────
 _${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
