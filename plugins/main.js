@@ -156,59 +156,97 @@ ${CHANNEL_FOOTER}`;
   },
 ];
 
-function getCategoryMenu(cat, cmds) {
-  const catEmojis = {
-    main: "🏠", group: "👥", sticker: "🎨", media: "🎵", tools: "🔧",
-    fun: "🎮", owner: "👑", settings: "⚙️", misc: "📦", download: "📥",
-    search: "🔍", ai: "🤖", religious: "🙏", sports: "⚽", education: "📚",
-    utility: "🔨", status: "📡", notes: "📝", reactions: "💫", privacy: "🔒",
-    anime: "🎌", converter: "🔄",
-  };
+const CAT_EMOJIS = {
+  main: "🏠", ai: "🤖", download: "📥", media: "🎵", sticker: "🎨",
+  fun: "🎮", tools: "🔧", lifestyle: "🌿", education: "📚", sports: "⚽",
+  search: "🔍", group: "👥", settings: "⚙️", notes: "📝", religious: "🙏",
+  utility: "🔨", status: "📡", reactions: "💫", privacy: "🔒",
+  converter: "🔄", anime: "🎌", games: "🕹️", misc: "📦", owner: "👑",
+};
 
+const CAT_LABELS = {
+  main: "General", ai: "AI & Chat", download: "Downloads",
+  media: "Media & Audio", sticker: "Stickers", fun: "Fun & Games",
+  tools: "Tools & Calculators", lifestyle: "Lifestyle", education: "Education",
+  sports: "Sports", search: "Search & Info", group: "Group Admin",
+  settings: "Settings", notes: "Notes & Reminders", religious: "Religious",
+  utility: "Utility", status: "Status", reactions: "Reactions",
+  privacy: "Privacy", converter: "Converter", anime: "Anime",
+  games: "Games", misc: "Miscellaneous", owner: "Owner Only",
+};
+
+const CAT_ORDER = [
+  "main", "ai", "download", "media", "sticker", "fun",
+  "tools", "lifestyle", "education", "sports", "search",
+  "group", "settings", "notes", "religious", "utility",
+  "status", "reactions", "privacy", "converter", "anime",
+  "games", "misc", "owner",
+];
+
+function getCategoryMenu(cat, cmds) {
   const seen = new Set();
   const catCmds = [];
   if (cmds) {
-    for (const [name, cmd] of cmds) {
+    for (const [, cmd] of cmds) {
       const cmdCat = (cmd.category || "misc").toLowerCase();
       if (cmdCat !== cat) continue;
       const primaryName = Array.isArray(cmd.name) ? cmd.name[0] : cmd.name;
       if (seen.has(primaryName)) continue;
       seen.add(primaryName);
       const aliases = Array.isArray(cmd.name) ? cmd.name.slice(1) : [];
-      catCmds.push({ primary: primaryName, aliases, desc: cmd.desc || "", owner: cmd.owner, admin: cmd.admin, group: cmd.group });
+      catCmds.push({
+        primary: primaryName,
+        aliases,
+        desc: cmd.desc || "",
+        usage: cmd.usage || "",
+        owner: cmd.owner,
+        admin: cmd.admin,
+        group: cmd.group,
+      });
     }
   }
 
   if (catCmds.length === 0) return null;
 
-  const emoji = catEmojis[cat] || "📌";
-  let msg = `${emoji} *${cat.toUpperCase()} COMMANDS* (${catCmds.length})\n\n`;
+  catCmds.sort((a, b) => a.primary.localeCompare(b.primary));
+
+  const emoji = CAT_EMOJIS[cat] || "📌";
+  const label = CAT_LABELS[cat] || cat.charAt(0).toUpperCase() + cat.slice(1);
+
+  let msg = `╔══════════════════════════════╗\n`;
+  msg += `║  ${emoji}  *${label.toUpperCase()}*\n`;
+  msg += `║  ${catCmds.length} command${catCmds.length !== 1 ? "s" : ""} available\n`;
+  msg += `╚══════════════════════════════╝\n\n`;
+
   catCmds.forEach((cmd, i) => {
     const tags = [];
     if (cmd.owner) tags.push("👑");
     if (cmd.admin) tags.push("⭐");
     if (cmd.group) tags.push("👥");
-    const tagStr = tags.length ? " " + tags.join("") : "";
-    msg += `${i + 1}. ${config.PREFIX}${cmd.primary}${tagStr}\n`;
-    if (cmd.desc) msg += `   _${cmd.desc}_\n`;
+    const tagStr = tags.length ? `  ${tags.join("")}` : "";
+
+    msg += `▸ *${config.PREFIX}${cmd.primary}*${tagStr}\n`;
+    if (cmd.desc) msg += `  _${cmd.desc}_\n`;
+    if (cmd.usage) msg += `  Usage: \`${cmd.usage}\`\n`;
     if (cmd.aliases.length > 0) {
-      msg += `   Aliases: ${cmd.aliases.map(a => config.PREFIX + a).join(", ")}\n`;
+      msg += `  ↪ ${cmd.aliases.map(a => config.PREFIX + a).join("  ")}\n`;
     }
-    msg += `\n`;
+    if (i < catCmds.length - 1) msg += "\n";
   });
-  msg += `👑 Owner  ⭐ Admin  👥 Group`;
-  msg += CHANNEL_FOOTER;
+
+  msg += `\n────────────────────────────────\n`;
+  msg += `👑 Owner only  ⭐ Admin only  👥 Group only\n`;
+  msg += `💡 *${config.PREFIX}menu* — back to all categories\n`;
   return msg;
 }
 
 function getFullList(cmds, page) {
-  const CMDS_PER_PAGE = 100;
+  const CMDS_PER_PAGE = 60;
   const seen = new Set();
   const allCmds = [];
-  const catOrder = ["main", "ai", "download", "media", "sticker", "fun", "group", "settings", "tools", "utility", "search", "education", "sports", "religious", "notes", "status", "misc", "owner", "reactions", "privacy", "anime", "converter"];
 
   if (cmds) {
-    for (const [name, cmd] of cmds) {
+    for (const [, cmd] of cmds) {
       const primaryName = Array.isArray(cmd.name) ? cmd.name[0] : cmd.name;
       if (seen.has(primaryName)) continue;
       seen.add(primaryName);
@@ -218,66 +256,69 @@ function getFullList(cmds, page) {
         aliases,
         desc: cmd.desc || "",
         category: (cmd.category || "misc").toLowerCase(),
+        owner: cmd.owner,
+        admin: cmd.admin,
       });
     }
   }
 
   allCmds.sort((a, b) => {
-    const ai = catOrder.indexOf(a.category);
-    const bi = catOrder.indexOf(b.category);
+    const ai = CAT_ORDER.indexOf(a.category);
+    const bi = CAT_ORDER.indexOf(b.category);
     const ao = ai === -1 ? 99 : ai;
     const bo = bi === -1 ? 99 : bi;
     if (ao !== bo) return ao - bo;
     return a.primary.localeCompare(b.primary);
   });
 
-  if (allCmds.length === 0) return `📋 No commands loaded yet. Try again after bot restart.`;
+  if (allCmds.length === 0) return `📋 No commands loaded yet. Restart the bot.`;
+
   const totalPages = Math.ceil(allCmds.length / CMDS_PER_PAGE);
   const safePage = Math.max(1, Math.min(page, totalPages));
   const start = (safePage - 1) * CMDS_PER_PAGE;
   const end = Math.min(start + CMDS_PER_PAGE, allCmds.length);
   const pageCmds = allCmds.slice(start, end);
+  const totalWithAliases = allCmds.reduce((sum, c) => sum + 1 + c.aliases.length, 0);
 
-  const totalAliases = allCmds.reduce((sum, c) => sum + 1 + c.aliases.length, 0);
-
-  let msg = `📋 *${config.BOT_NAME} — Full Command List*\n\n`;
-  msg += `📊 *${allCmds.length} commands* (${totalAliases} with aliases)\n`;
-  msg += `📄 Page *${safePage}/${totalPages}*\n`;
-  msg += `\n`;
+  let msg = `╔══════════════════════════════╗\n`;
+  msg += `║  📋  *FULL COMMAND LIST*\n`;
+  msg += `║  ${allCmds.length} cmds · ${totalWithAliases} including aliases\n`;
+  msg += `╚══════════════════════════════╝\n`;
+  msg += `📄 Page *${safePage} / ${totalPages}*\n\n`;
 
   let currentCat = "";
-  const catEmojis = {
-    main: "🏠", group: "👥", sticker: "🎨", media: "🎵", tools: "🔧",
-    fun: "🎮", owner: "👑", settings: "⚙️", misc: "📦", download: "📥",
-    search: "🔍", ai: "🤖", religious: "🙏", sports: "⚽", education: "📚",
-    utility: "🔨", status: "📡", notes: "📝", reactions: "💫", privacy: "🔒",
-    anime: "🎌", converter: "🔄",
-  };
-
   pageCmds.forEach((cmd, i) => {
     if (cmd.category !== currentCat) {
       currentCat = cmd.category;
-      const emoji = catEmojis[currentCat] || "📌";
-      msg += `\n${emoji} *${currentCat.toUpperCase()}*\n`;
+      const catEmoji = CAT_EMOJIS[currentCat] || "📌";
+      const catLabel = CAT_LABELS[currentCat] || currentCat.toUpperCase();
+      msg += `\n${catEmoji} *${catLabel.toUpperCase()}*\n`;
+      msg += `${"─".repeat(28)}\n`;
     }
-    const num = start + i + 1;
-    msg += `${num}. ${config.PREFIX}${cmd.primary}`;
-    if (cmd.aliases.length > 0) {
-      msg += ` _(${cmd.aliases.join(", ")})_`;
-    }
+
+    const num = String(start + i + 1).padStart(3, " ");
+    const tags = [];
+    if (cmd.owner) tags.push("👑");
+    if (cmd.admin) tags.push("⭐");
+    const tagStr = tags.length ? tags.join("") : "";
+
+    msg += `${num}. *${config.PREFIX}${cmd.primary}*${tagStr}`;
     if (cmd.desc) msg += ` — ${cmd.desc}`;
     msg += "\n";
+
+    if (cmd.aliases.length > 0) {
+      msg += `      ↪ ${cmd.aliases.map(a => config.PREFIX + a).join("  ")}\n`;
+    }
   });
 
-  msg += `\n`;
-  msg += `\n`;
+  msg += `\n────────────────────────────────\n`;
   if (totalPages > 1) {
     msg += `📄 Page ${safePage}/${totalPages}`;
-    if (safePage < totalPages) msg += ` | Next: ${config.PREFIX}list ${safePage + 1}`;
+    if (safePage < totalPages) msg += `  |  ▶ *${config.PREFIX}list ${safePage + 1}*`;
+    if (safePage > 1) msg += `  |  ◀ *${config.PREFIX}list ${safePage - 1}*`;
     msg += "\n";
   }
-  msg += `💡 ${config.PREFIX}menu <category> for details`;
-  msg += CHANNEL_FOOTER;
+  msg += `💡 *${config.PREFIX}menu <category>* — category details\n`;
   return msg;
 }
 
