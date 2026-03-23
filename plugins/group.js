@@ -413,7 +413,6 @@ _${config.BOT_NAME} · Desam Tech_ ⚡`);
     category: "group",
     desc: "Tag all group members",
     group: true,
-    admin: true,
     handler: async (sock, m, { text, groupMeta }) => {
       if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const members = groupMeta.participants.map((p) => p.id);
@@ -428,7 +427,6 @@ _${config.BOT_NAME} · Desam Tech_ ⚡`);
     category: "group",
     desc: "Send hidden tag to all members",
     group: true,
-    admin: true,
     handler: async (sock, m, { text, groupMeta }) => {
       if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const members = groupMeta.participants.map((p) => p.id);
@@ -486,6 +484,7 @@ _${config.BOT_NAME} · Desam Tech_ ⚡`);
     desc: "Warn a group member",
     group: true,
     admin: true,
+    botAdmin: true,
     handler: async (sock, m, { text }) => {
       const target = m.mentions[0] || m.quoted?.sender;
       if (!target) return m.reply("Tag or reply to someone to warn.");
