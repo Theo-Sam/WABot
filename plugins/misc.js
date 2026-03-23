@@ -19,7 +19,7 @@ const commands = [
     category: "tools",
     desc: "Generate QR code",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}qr <text or URL>`);
+      if (!text) return m.usageReply("qr <text or URL>");
       m.react("⏳");
       try {
         const buffer = await fetchBuffer(`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(text)}`);
@@ -27,7 +27,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The QR Generator API is currently overloaded.");
+        return m.apiErrorReply("QR Generator");
       }
     },
   },
@@ -51,7 +51,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The QR Reader API is currently overloaded.");
+        return m.apiErrorReply("QR Reader");
       }
     },
   },
@@ -60,7 +60,7 @@ const commands = [
     category: "tools",
     desc: "Shorten a URL",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}shorturl <URL>`);
+      if (!text || !isUrl(text)) return m.usageReply("shorturl <URL>");
       m.react("⏳");
       try {
         const shortUrl = await Promise.any([
@@ -76,12 +76,12 @@ const commands = [
           })()
         ]).catch(() => null);
 
-        if (!shortUrl) return m.reply("⏳ The URL Shortener API is currently overloaded.");
+        if (!shortUrl) return m.apiErrorReply("URL Shortener");
         await m.reply(`🔗 *Short URL*\n\n${shortUrl}`);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The URL Shortener API is currently overloaded.");
+        return m.apiErrorReply("URL Shortener");
       }
     },
   },
@@ -90,7 +90,7 @@ const commands = [
     category: "tools",
     desc: "Take website screenshot",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}screenshot <URL>`);
+      if (!text || !isUrl(text)) return m.usageReply("screenshot <URL>");
       m.react("⏳");
       try {
         const thumIoUrl = `https://image.thum.io/get/width/1920/noanimate/${text}`;
@@ -101,7 +101,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Screenshot API is currently overloaded.");
+        return m.apiErrorReply("Screenshot");
       }
     },
   },
@@ -162,7 +162,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Cat API is currently overloaded.");
+        return m.apiErrorReply("Cat");
       }
     },
   },
@@ -180,7 +180,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Dog API is currently overloaded.");
+        return m.apiErrorReply("Dog");
       }
     },
   },
@@ -198,7 +198,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Fox API is currently overloaded.");
+        return m.apiErrorReply("Fox");
       }
     },
   },
@@ -208,7 +208,7 @@ const commands = [
     desc: "Create code snippet image",
     handler: async (sock, m, { text }) => {
       const code = text || m.quoted?.body || "";
-      if (!code) return m.reply(`Usage: ${config.PREFIX}carbon <code> or reply to a message`);
+      if (!code) return m.usageReply("carbon <code> or reply to a message");
       m.react("⏳");
       try {
         const buffer = await postBuffer("https://carbonara.solopov.dev/api/cook", {
@@ -230,7 +230,7 @@ const commands = [
     category: "tools",
     desc: "Generate color preview",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}color <hex>\nExample: ${config.PREFIX}color ff5733`);
+      if (!text) return m.usageReply("color <hex>", "color ff5733");
       const hex = text.replace("#", "");
       m.react("⏳");
       try {
@@ -249,7 +249,7 @@ const commands = [
     category: "tools",
     desc: "Encode text (ROT13)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}encode <text>`);
+      if (!text) return m.usageReply("encode <text>");
       const encoded = text.replace(/[a-zA-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + (c.toLowerCase() < "n" ? 13 : -13)));
       await m.reply(`🔐 *Encoded (ROT13)*\n\n${encoded}`);
     },
@@ -259,7 +259,7 @@ const commands = [
     category: "tools",
     desc: "Decode ROT13 text",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}decode <text>`);
+      if (!text) return m.usageReply("decode <text>");
       const decoded = text.replace(/[a-zA-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + (c.toLowerCase() < "n" ? 13 : -13)));
       await m.reply(`🔓 *Decoded (ROT13)*\n\n${decoded}`);
     },
@@ -270,7 +270,7 @@ const commands = [
     desc: "Reverse text",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
-      if (!input) return m.reply(`Usage: ${config.PREFIX}reverse <text>`);
+      if (!input) return m.usageReply("reverse <text>");
       await m.reply(`🔄 ${input.split("").reverse().join("")}`);
     },
   },
@@ -281,7 +281,7 @@ const commands = [
     handler: async (sock, m, { args }) => {
       const count = parseInt(args[0]) || 1;
       const msg = args.slice(1).join(" ");
-      if (!msg) return m.reply(`Usage: ${config.PREFIX}repeat <count> <message>`);
+      if (!msg) return m.usageReply("repeat <count> <message>");
       const limited = Math.min(count, 10);
       let result = "";
       for (let i = 0; i < limited; i++) result += msg + "\n";
@@ -294,7 +294,7 @@ const commands = [
     desc: "Count characters/words in text",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
-      if (!input) return m.reply(`Usage: ${config.PREFIX}count <text> or reply to a message`);
+      if (!input) return m.usageReply("count <text> or reply to a message");
       const chars = input.length;
       const words = input.split(/\s+/).filter(Boolean).length;
       const lines = input.split("\n").length;
@@ -358,7 +358,7 @@ const commands = [
     category: "fun",
     desc: "Convert text to fancy styles",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}fancy <text>`);
+      if (!text) return m.usageReply("fancy <text>");
       const styles = {
         bold: text.replace(/[a-zA-Z]/g, (c) => String.fromCodePoint(c.charCodeAt(0) + (c >= "a" ? 0x1D5EE - 0x61 : 0x1D5D4 - 0x41))),
         italic: text.replace(/[a-zA-Z]/g, (c) => String.fromCodePoint(c.charCodeAt(0) + (c >= "a" ? 0x1D622 - 0x61 : 0x1D608 - 0x41))),
@@ -395,7 +395,7 @@ const commands = [
     handler: async (sock, m, { args }) => {
       const minutes = parseInt(args[0]);
       const message = args.slice(1).join(" ");
-      if (!minutes || !message) return m.reply(`Usage: ${config.PREFIX}remind <minutes> <message>\nExample: ${config.PREFIX}remind 5 Time to eat!`);
+      if (!minutes || !message) return m.usageReply("remind <minutes> <message>", "remind 5 Time to eat!");
       if (minutes > 1440) return m.reply("Maximum reminder time is 24 hours (1440 minutes).");
       await m.reply(`⏰ Reminder set for ${minutes} minutes from now!`);
       setTimeout(async () => {

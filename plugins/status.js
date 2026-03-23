@@ -287,7 +287,12 @@ const commands = [
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled OFF via command.");
         await m.reply("✅ Auto status react disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}statusreact on/off\nCurrent: ${config.AUTO_STATUS_REACT || "off"}`);
+        await m.reply(`⚙️ *statusreact*  —  currently *${current}*
+
+📖 Usage:  \`.statusreact on/off\`
+📌 config.AUTO_STATUS_REACT || "off"
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -326,7 +331,11 @@ const commands = [
           `▸ Auto-save: *${config.AUTO_STATUS_SAVE || "on"}*`
         );
       } else {
-        await m.reply(`Usage: ${config.PREFIX}autoview on/off/toggle\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);
+        await m.reply(`⚙️ *autoview*  —  currently *${config.AUTO_STATUS_VIEW || "off"}*
+
+📖 Usage:  \`.autoview on/off/toggle\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -365,7 +374,11 @@ const commands = [
           `▸ Auto-save: *${config.AUTO_STATUS_SAVE || "on"}*`
         );
       } else {
-        await m.reply(`Usage: ${config.PREFIX}statusave on/off/toggle\nCurrent: ${config.AUTO_STATUS_SAVE || "on"}`);
+        await m.reply(`⚙️ *statusave*  —  currently *${config.AUTO_STATUS_SAVE || "on"}*
+
+📖 Usage:  \`.statusave on/off/toggle\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },

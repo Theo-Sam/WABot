@@ -177,7 +177,7 @@ const commands = [
     desc: "Send a contact card",
     handler: async (sock, m, { text }) => {
       const target = m.mentions[0] || m.quoted?.sender;
-      if (!target && !text) return m.reply(`Usage: ${config.PREFIX}contact @person or number (with country code)`);
+      if (!target && !text) return m.usageReply("contact @person or number (with country code)");
       const num = target ? target.replace("@s.whatsapp.net", "") : text.replace(/\D/g, "");
       if (!num) return m.reply("Provide a valid phone number with country code.");
       await sock.sendMessage(m.chat, {
@@ -194,7 +194,7 @@ const commands = [
     category: "misc",
     desc: "Send a location by city/place name",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}location <place name>\nExample: ${config.PREFIX}location Accra, Ghana`);
+      if (!text) return m.usageReply("location <place name>", "location Accra, Ghana");
       m.react("⏳");
       try {
         const results = await fetchJson(
@@ -237,7 +237,7 @@ const commands = [
     handler: async (sock, m, { text }) => {
       const modes = ["composing", "recording", "paused", "available", "unavailable"];
       if (!text || !modes.includes(text.toLowerCase())) {
-        return m.reply(`Usage: ${config.PREFIX}presence <mode>\nModes: ${modes.join(", ")}`);
+        return m.usageReply("presence <mode>\nModes: ${modes.join(", ")}");
       }
       await sock.sendPresenceUpdate(text.toLowerCase(), m.chat);
       await m.reply(`✅ Presence set to: *${text}*`);
@@ -249,7 +249,7 @@ const commands = [
     desc: "Set bot status/about text",
     owner: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}setbio <text>`);
+      if (!text) return m.usageReply("setbio <text>");
       try {
         await sock.updateProfileStatus(text);
         await m.reply(`✅ Bio updated to: ${text}`);

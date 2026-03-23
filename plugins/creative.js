@@ -187,7 +187,7 @@ const commands = [
     category: "fun",
     desc: "Generate a poem on any topic",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}poem <topic>\nExample: ${config.PREFIX}poem the ocean at night`);
+      if (!text) return m.usageReply("poem <topic>", "poem the ocean at night");
       m.react("⏳");
       const answer = await pollinate(`Write a short, beautiful poem (4-8 lines) about: "${text}". Only output the poem itself with no title, no explanation.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate a poem right now. Try again later."); }
@@ -200,7 +200,7 @@ const commands = [
     category: "fun",
     desc: "Generate a short story",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}story <prompt>\nExample: ${config.PREFIX}story a detective cat in a rainy city`);
+      if (!text) return m.usageReply("story <prompt>", "story a detective cat in a rainy city");
       m.react("⏳");
       const answer = await pollinate(`Write a short, engaging story (150-200 words) based on this prompt: "${text}". Make it interesting with a beginning, middle, and satisfying ending.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate a story right now. Try again later."); }
@@ -214,7 +214,7 @@ const commands = [
     desc: "Rewrite text in a different way",
     handler: async (sock, m, { text }) => {
       const input = text || m?.quoted?.body;
-      if (!input) return m.reply(`Usage: ${config.PREFIX}paraphrase <text> or reply to a message`);
+      if (!input) return m.usageReply("paraphrase <text> or reply to a message");
       m.react("⏳");
       const answer = await pollinate(`Paraphrase the following text. Keep the same meaning but use different words and sentence structure. Only output the paraphrased version:\n\n"${input}"`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not paraphrase right now. Try again later."); }
@@ -227,7 +227,7 @@ const commands = [
     category: "tools",
     desc: "Explain any concept in simple terms",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}explain <concept>\nExample: ${config.PREFIX}explain quantum entanglement`);
+      if (!text) return m.usageReply("explain <concept>", "explain quantum entanglement");
       m.react("⏳");
       const answer = await pollinate(`Explain "${text}" in simple, easy-to-understand terms as if explaining to a curious 12-year-old. Be clear and use relatable examples. Keep it concise (under 150 words).`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate explanation. Try again later."); }
@@ -240,7 +240,7 @@ const commands = [
     category: "tools",
     desc: "Generate a social media caption",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}caption <topic or vibe>\nExample: ${config.PREFIX}caption beach sunset selfie`);
+      if (!text) return m.usageReply("caption <topic or vibe>", "caption beach sunset selfie");
       m.react("⏳");
       const answer = await pollinate(`Generate 3 different social media captions for a post about: "${text}". Include relevant emojis and make them engaging. Number them 1, 2, 3.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate captions. Try again later."); }
@@ -253,7 +253,7 @@ const commands = [
     category: "tools",
     desc: "Generate hashtags for a topic",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}hashtag <topic>\nExample: ${config.PREFIX}hashtag travel photography`);
+      if (!text) return m.usageReply("hashtag <topic>", "hashtag travel photography");
       m.react("⏳");
       const answer = await pollinate(`Generate 20 relevant, trending hashtags for: "${text}". Mix popular and niche hashtags. Format them all starting with #, separated by spaces. Only output the hashtags.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate hashtags. Try again later."); }
@@ -266,7 +266,7 @@ const commands = [
     category: "tools",
     desc: "Generate a social media bio",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}bio <describe yourself or your page>\nExample: ${config.PREFIX}bio fitness coach who loves food`);
+      if (!text) return m.usageReply("bio <describe yourself or your page>", "bio fitness coach who loves food");
       m.react("⏳");
       const answer = await pollinate(`Generate 3 short, creative social media bios for: "${text}". Each bio should be under 150 characters, catchy and memorable. Number them 1, 2, 3.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate bio. Try again later."); }
@@ -279,7 +279,7 @@ const commands = [
     category: "tools",
     desc: "Generate username ideas",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}username <keyword or description>\nExample: ${config.PREFIX}username dark aesthetic gamer`);
+      if (!text) return m.usageReply("username <keyword or description>", "username dark aesthetic gamer");
       m.react("⏳");
       const answer = await pollinate(`Generate 10 unique, creative username ideas based on: "${text}". Mix different styles (minimal, edgy, cute, aesthetic, professional). One per line.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate usernames. Try again later."); }
@@ -292,7 +292,7 @@ const commands = [
     category: "tools",
     desc: "Generate an essay outline on any topic",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}essay <topic>\nExample: ${config.PREFIX}essay the impact of social media on mental health`);
+      if (!text) return m.usageReply("essay <topic>", "essay the impact of social media on mental health");
       m.react("⏳");
       const answer = await pollinate(`Create a clear, structured essay outline on: "${text}". Include: Introduction (with thesis), 3 main body paragraph topics with 2-3 supporting points each, and Conclusion. Format it clearly.`);
       if (!answer) { m.react("❌"); return m.reply("❌ Could not generate essay outline. Try again later."); }

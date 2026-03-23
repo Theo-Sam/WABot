@@ -10,7 +10,7 @@ const commands = [
     admin: true,
     handler: async (sock, m, { args, text }) => {
       if (args.length < 2) {
-        return m.reply(`Usage: ${config.PREFIX}addnote <name> <content>`);
+        return m.usageReply("addnote <name> <content>");
       }
       const name = args[0].toLowerCase();
       const content = args.slice(1).join(" ");
@@ -27,7 +27,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to save note.");
+        return m.errorReply("Failed to save note. Please try again.");
       }
     },
   },
@@ -38,7 +38,7 @@ const commands = [
     group: true,
     handler: async (sock, m, { args }) => {
       if (!args[0]) {
-        return m.reply(`Usage: ${config.PREFIX}note <name>`);
+        return m.usageReply("note <name>");
       }
       const name = args[0].toLowerCase();
       m.react("⏳");
@@ -69,7 +69,7 @@ const commands = [
     admin: true,
     handler: async (sock, m, { args }) => {
       if (!args[0]) {
-        return m.reply(`Usage: ${config.PREFIX}delnote <name>`);
+        return m.usageReply("delnote <name>");
       }
       const name = args[0].toLowerCase();
       m.react("⏳");
@@ -84,7 +84,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to delete note.");
+        return m.errorReply("Failed to delete note. Please try again.");
       }
     },
   },

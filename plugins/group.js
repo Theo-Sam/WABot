@@ -184,7 +184,11 @@ const commands = [
         await m.reply("✅ Welcome messages disabled.");
       } else {
         const current = getGroupSettings(m.chat)?.welcome ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}welcome on/off\nCurrent: ${current}`);
+        await m.reply(`⚙️ *welcome*  —  currently *${current}*
+
+📖 Usage:  \`.welcome on/off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -217,7 +221,11 @@ const commands = [
         await m.reply("✅ Goodbye messages disabled.");
       } else {
         const current = getGroupSettings(m.chat)?.goodbye ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}goodbye on/off\nCurrent: ${current}`);
+        await m.reply(`⚙️ *goodbye*  —  currently *${current}*
+
+📖 Usage:  \`.goodbye on/off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -257,7 +265,7 @@ const commands = [
         const settings = getGroupSettings(m.chat);
         const enabled = settings?.antilink ? "on" : "off";
         const action = settings?.antilink_action || "warn";
-        await m.reply(`Usage: ${config.PREFIX}antilink on [warn/delete/kick]\n${config.PREFIX}antilink off\nCurrent: ${enabled} (${action})`);
+        await m.reply(`⚙️ *antilink*  —  currently *${enabled}* (action: ${action})\n\n📖 Usage:\n  .antilink on [warn/delete/kick]\n  .antilink off\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -302,7 +310,7 @@ const commands = [
         if (words.length === 0) return m.reply("No bad words configured.");
         await m.reply(`📝 *Bad Words List:*\n\n${words.map((w, i) => `${i + 1}. ${w}`).join("\n")}`);
       } else {
-        await m.reply(`Usage:\n${config.PREFIX}antibad on/off\n${config.PREFIX}antibad add <word>\n${config.PREFIX}antibad remove <word>\n${config.PREFIX}antibad list`);
+        await m.reply(`⚙️ *antibad*  —  content filter settings\n\n📖 Usage:\n  .antibad on / .antibad off\n  .antibad add <word>\n  .antibad remove <word>\n  .antibad list\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -560,7 +568,11 @@ const commands = [
       } else {
         const settings = getGroupSettings(m.chat);
         const current = settings?.chatbot ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}chatbot on/off\nCurrent: ${current}`);
+        await m.reply(`⚙️ *chatbot*  —  currently *${current}*
+
+📖 Usage:  \`.chatbot on/off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -580,7 +592,11 @@ const commands = [
       } else {
         const settings = getGroupSettings(m.chat);
         const current = settings?.autosticker ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}autosticker on/off\nCurrent: ${current}`);
+        await m.reply(`⚙️ *autosticker*  —  currently *${current}*
+
+📖 Usage:  \`.autosticker on/off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },

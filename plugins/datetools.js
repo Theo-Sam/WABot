@@ -65,7 +65,7 @@ const commands = [
     category: "tools",
     desc: "Count down the days until any date or event",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}daysuntil <date> [event name]\nFormats: YYYY-MM-DD or DD/MM/YYYY\nExample: ${config.PREFIX}daysuntil 2025-12-25 Christmas`);
+      if (!text) return m.usageReply("daysuntil <date> [event name]\nFormats: YYYY-MM-DD or DD/MM/YYYY", "daysuntil 2025-12-25 Christmas");
       const parts = text.trim().split(/\s+/);
       const dateStr = parts[0];
       const event = parts.slice(1).join(" ") || "the date";
@@ -89,7 +89,9 @@ const commands = [
         msg += `⏳ *${days} day${days !== 1 ? "s" : ""} to go*\n`;
         msg += `≈ ${weeks} week${weeks !== 1 ? "s" : ""} | ${months} month${months !== 1 ? "s" : ""}\n`;
       }
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -98,7 +100,7 @@ const commands = [
     category: "fun",
     desc: "Calculate how many days, hours, minutes you've been alive",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}dayslived <birthdate>\nFormats: YYYY-MM-DD or DD/MM/YYYY\nExample: ${config.PREFIX}dayslived 1998-06-15`);
+      if (!text) return m.usageReply("dayslived <birthdate>\nFormats: YYYY-MM-DD or DD/MM/YYYY", "dayslived 1998-06-15");
       const birth = parseDate(text.trim());
       if (!birth) return m.reply("❌ Invalid date. Use YYYY-MM-DD or DD/MM/YYYY format.");
       if (birth > new Date()) return m.reply("❌ Birthdate can't be in the future!");
@@ -123,7 +125,9 @@ const commands = [
       msg += `⏰ ${hours.toLocaleString()} hours\n`;
       msg += `⏱️ ${minutes.toLocaleString()} minutes\n\n`;
       msg += `🎉 Next birthday in: *${daysToNext} day${daysToNext !== 1 ? "s" : ""}*\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -132,7 +136,7 @@ const commands = [
     category: "tools",
     desc: "Find out what day of the week any date was/is",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}dayofweek <date>\nFormats: YYYY-MM-DD or DD/MM/YYYY\nExample: ${config.PREFIX}dayofweek 1969-07-20`);
+      if (!text) return m.usageReply("dayofweek <date>\nFormats: YYYY-MM-DD or DD/MM/YYYY", "dayofweek 1969-07-20");
       const d = parseDate(text.trim());
       if (!d) return m.reply("❌ Invalid date. Use YYYY-MM-DD or DD/MM/YYYY format.");
       const now = new Date();
@@ -150,7 +154,9 @@ const commands = [
       if (diff === 0) msg += `\n📍 This is *today*!`;
       else if (diff > 0) msg += `\n⏳ That's in *${fmtDuration(d - now)}*`;
       else msg += `\n⏮️ That was *${fmtDuration(now - d)} ago*`;
-      msg += `\n\n_${config.BOT_NAME}_`;
+      msg += `\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -159,7 +165,7 @@ const commands = [
     category: "tools",
     desc: "Calculate time elapsed since any date",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}timesince <date> [event]\nExample: ${config.PREFIX}timesince 2020-03-11 COVID declared pandemic`);
+      if (!text) return m.usageReply("timesince <date> [event]", "timesince 2020-03-11 COVID declared pandemic");
       const parts = text.trim().split(/\s+/);
       const d = parseDate(parts[0]);
       const event = parts.slice(1).join(" ") || "that date";
@@ -175,7 +181,9 @@ const commands = [
       msg += `🗓️ ${weeks} week${weeks !== 1 ? "s" : ""}\n`;
       msg += `⏳ ${days.toLocaleString()} days\n`;
       msg += `⏰ ${hours.toLocaleString()} hours\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -184,7 +192,7 @@ const commands = [
     category: "fun",
     desc: "Get zodiac sign from a birth date",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}zodiacdate <birthdate>\nExample: ${config.PREFIX}zodiacdate 15/06/1998`);
+      if (!text) return m.usageReply("zodiacdate <birthdate>", "zodiacdate 15/06/1998");
       const d = parseDate(text.trim());
       if (!d) return m.reply("❌ Invalid date. Use YYYY-MM-DD or DD/MM/YYYY.");
       const month = d.getMonth() + 1;
@@ -217,7 +225,9 @@ const commands = [
       msg += `🗓️ Dates: ${z.dates}\n\n`;
       msg += `✨ *Traits:* ${traits[z.sign]}\n`;
       msg += `💕 *Best match:* ${compat[z.sign]}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -226,7 +236,7 @@ const commands = [
     category: "tools",
     desc: "Get your exact age in years, months and days",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}age2 <birthdate>\nExample: ${config.PREFIX}age2 1995-08-20`);
+      if (!text) return m.usageReply("age2 <birthdate>", "age2 1995-08-20");
       const birth = parseDate(text.trim());
       if (!birth) return m.reply("❌ Invalid date. Use YYYY-MM-DD or DD/MM/YYYY.");
       if (birth > new Date()) return m.reply("❌ Birthdate can't be in the future!");
@@ -248,7 +258,9 @@ const commands = [
       msg += `*${years} years, ${months} months, ${days} days*\n\n`;
       msg += `📊 Total days lived: ${totalDays.toLocaleString()}\n`;
       msg += `🎉 Next birthday in: ${daysToNext} days\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -257,9 +269,9 @@ const commands = [
     category: "tools",
     desc: "Add or subtract days/months/years from a date",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}datecalc <date> +/-<number> <days/weeks/months/years>\nExample: ${config.PREFIX}datecalc 2024-01-15 +90 days`);
+      if (!text) return m.usageReply("datecalc <date> +/-<number> <days/weeks/months/years>", "datecalc 2024-01-15 +90 days");
       const match = text.trim().match(/^(.+?)\s+([+-]?\d+)\s+(days?|weeks?|months?|years?)/i);
-      if (!match) return m.reply(`Usage: ${config.PREFIX}datecalc <date> +/-<number> <days/weeks/months/years>`);
+      if (!match) return m.usageReply("datecalc <date> +/-<number> <days/weeks/months/years>");
       const d = parseDate(match[1].trim());
       const num = parseInt(match[2]);
       const unit = match[3].toLowerCase();
@@ -276,7 +288,9 @@ const commands = [
       msg += `Start: ${from}\n`;
       msg += `Change: ${num >= 0 ? "+" : ""}${num} ${unit}\n`;
       msg += `Result: *${dayName}, ${to}*\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -285,7 +299,7 @@ const commands = [
     category: "tools",
     desc: "Count working days between two dates",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}workdays <start date> <end date>\nExample: ${config.PREFIX}workdays 2024-01-01 2024-03-31`);
+      if (!text) return m.usageReply("workdays <start date> <end date>", "workdays 2024-01-01 2024-03-31");
       const parts = text.trim().split(/\s+/);
       if (parts.length < 2) return m.reply("❌ Please provide two dates.");
       const start = parseDate(parts[0]);
@@ -308,7 +322,9 @@ const commands = [
       msg += `📅 Total days:    ${diffDays + 1}\n`;
       msg += `💼 Working days:  *${workdays}*\n`;
       msg += `🏖️ Weekend days:  ${weekends}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },

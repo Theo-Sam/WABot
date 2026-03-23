@@ -57,7 +57,7 @@ const commands = [
     category: "lifestyle",
     desc: "Search for a recipe by name or ingredient",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}recipe <food name or ingredient>\nExample: ${config.PREFIX}recipe chicken pasta`);
+      if (!text) return m.usageReply("recipe <food name or ingredient>", "recipe chicken pasta");
       m.react("⏳");
       try {
         let data = null;
@@ -88,12 +88,14 @@ const commands = [
         msg += `*Instructions:*\n${(meal.strInstructions || "").slice(0, 800)}${meal.strInstructions?.length > 800 ? "...\n_(see full recipe below)_" : ""}`;
         if (meal.strYoutube) msg += `\n\n▶️ Video: ${meal.strYoutube}`;
         if (meal.strSource) msg += `\n🔗 Full recipe: ${meal.strSource}`;
-        msg += `\n\n_${config.BOT_NAME}_`;
+        msg += `\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to fetch recipe.");
+        return m.apiErrorReply("recipe");
       }
     },
   },
@@ -118,12 +120,14 @@ const commands = [
         msg += `*Ingredients:*\n${ingredients.slice(0, 12).join("\n")}\n\n`;
         msg += `*Instructions:*\n${(meal.strInstructions || "").slice(0, 600)}...`;
         if (meal.strYoutube) msg += `\n\n▶️ ${meal.strYoutube}`;
-        msg += `\n\n_${config.BOT_NAME}_`;
+        msg += `\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to fetch recipe.");
+        return m.apiErrorReply("recipe");
       }
     },
   },
@@ -132,7 +136,7 @@ const commands = [
     category: "lifestyle",
     desc: "Get nutrition info for any food",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}nutrition <food name>\nExample: ${config.PREFIX}nutrition banana`);
+      if (!text) return m.usageReply("nutrition <food name>", "nutrition banana");
       m.react("⏳");
       try {
         const res = await axios.get(
@@ -155,7 +159,9 @@ const commands = [
           if (n.fat_100g != null) msg += `🧈 Fat: ${n.fat_100g}g\n`;
           if (n.fiber_100g != null) msg += `🌱 Fiber: ${n.fiber_100g}g\n`;
           if (n.sodium_100g != null) msg += `🧂 Sodium: ${(n.sodium_100g * 1000).toFixed(0)}mg\n`;
-          msg += `\n_${config.BOT_NAME}_`;
+          msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
           await m.reply(msg);
           return m.react("✅");
         }
@@ -168,12 +174,14 @@ const commands = [
         if (n.CHOCDF != null) msg += `🍞 Carbs: ${n.CHOCDF?.toFixed(1)}g\n`;
         if (n.FAT != null) msg += `🧈 Fat: ${n.FAT?.toFixed(1)}g\n`;
         if (n.FIBTG != null) msg += `🌱 Fiber: ${n.FIBTG?.toFixed(1)}g\n`;
-        msg += `\n_${config.BOT_NAME}_`;
+        msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to fetch nutrition info.");
+        return m.apiErrorReply("nutrition info");
       }
     },
   },
@@ -182,7 +190,7 @@ const commands = [
     category: "lifestyle",
     desc: "Calculate ideal wake-up times based on bedtime",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}sleeptime <bedtime>\nExample: ${config.PREFIX}sleeptime 22:30\n\n_Based on 90-minute sleep cycles + 15 min to fall asleep_`);
+      if (!text) return m.usageReply("sleeptime <bedtime>", "sleeptime 22:30\n\n_Based on 90-minute sleep cycles + 15 min to fall asleep_");
       const times = calcSleep(text.trim());
       if (!times) return m.reply("❌ Invalid time format. Use HH:MM, e.g. 22:30 or 10:30");
       let msg = `😴 *Sleep Calculator*\n\nBedtime: *${text}*\n_Takes ~15 min to fall asleep_\n\n`;
@@ -191,7 +199,9 @@ const commands = [
         const stars = t.cycles <= 5 ? "⭐".repeat(t.cycles === 6 ? 3 : t.cycles === 5 ? 2 : 1) : "🌟🌟🌟";
         msg += `${t.cycles === 6 ? "✅" : "•"} *${t.time}* — ${t.cycles} cycles (${t.cycles * 1.5}h) ${t.cycles >= 6 ? stars : ""}\n`;
       });
-      msg += `\n_6 cycles (9h) is ideal. 5 cycles (7.5h) is the sweet spot._\n\n_${config.BOT_NAME}_`;
+      msg += `\n_6 cycles (9h) is ideal. 5 cycles (7.5h) is the sweet spot._\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -200,7 +210,7 @@ const commands = [
     category: "lifestyle",
     desc: "Calculate daily water intake needed",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}water <weight in kg> [low/moderate/high activity]\nExample: ${config.PREFIX}water 70 high`);
+      if (!text) return m.usageReply("water <weight in kg> [low/moderate/high activity]", "water 70 high");
       const parts = text.trim().split(/\s+/);
       const weight = parseFloat(parts[0]);
       const activity = parts[1]?.toLowerCase() || "moderate";
@@ -218,7 +228,7 @@ const commands = [
       msg += `• Drink a glass when you wake up\n`;
       msg += `• Set reminders every 2 hours\n`;
       msg += `• Drink more if it's hot or you're exercising\n\n`;
-      msg += `_${config.BOT_NAME}_`;
+      msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -230,7 +240,7 @@ const commands = [
       const group = (text || "full").toLowerCase().trim();
       const validGroups = Object.keys(WORKOUTS);
       if (!validGroups.includes(group)) {
-        return m.reply(`Usage: ${config.PREFIX}workout <muscle group>\n\nAvailable: ${validGroups.join(", ")}\n\nExample: ${config.PREFIX}workout legs`);
+        return m.usageReply("workout <muscle group>\n\nAvailable: ${validGroups.join(", ")}\n", "workout legs");
       }
       const exercises = WORKOUTS[group];
       const shuffled = [...exercises].sort(() => Math.random() - 0.5);
@@ -240,7 +250,7 @@ const commands = [
       msg += `\n🔥 Rest 60-90 seconds between sets\n`;
       msg += `💧 Stay hydrated throughout\n`;
       msg += `🧘 Stretch after your workout\n\n`;
-      msg += `_${config.BOT_NAME}_`;
+      msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -250,7 +260,9 @@ const commands = [
     desc: "Get a mental health tip",
     handler: async (sock, m, { text }) => {
       const tip = MENTAL_TIPS[Math.floor(Math.random() * MENTAL_TIPS.length)];
-      return m.reply(`🧠 *Mental Health Tip*\n\n${tip}\n\n_Take care of yourself. You matter._ 💙\n\n_${config.BOT_NAME}_`);
+      return m.reply(`🧠 *Mental Health Tip*\n\n${tip}\n\n_Take care of yourself. You matter._ 💙\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
     },
   },
   {
@@ -262,7 +274,9 @@ const commands = [
       try {
         const data = await fetchJson("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY", { timeout: 15000 });
         if (!data?.url) { m.react("❌"); return m.reply("❌ Could not fetch NASA APOD."); }
-        let msg = `🌌 *NASA Astronomy Picture of the Day*\n\n📅 Date: ${data.date}\n🔭 *${data.title}*\n\n${data.explanation?.slice(0, 500)}${data.explanation?.length > 500 ? "..." : ""}\n\n🔗 ${data.url}\n\n_${config.BOT_NAME}_`;
+        let msg = `🌌 *NASA Astronomy Picture of the Day*\n\n📅 Date: ${data.date}\n🔭 *${data.title}*\n\n${data.explanation?.slice(0, 500)}${data.explanation?.length > 500 ? "..." : ""}\n\n🔗 ${data.url}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         if (data.media_type === "image") {
           const { fetchBuffer } = require("../lib/helpers");
           const imgBuf = await fetchBuffer(data.hdurl || data.url, { timeout: 30000 }).catch(() => null);
@@ -275,7 +289,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to fetch NASA APOD.");
+        return m.apiErrorReply("NASA APOD");
       }
     },
   },
@@ -305,7 +319,9 @@ const commands = [
           msg += `${z.flag} ${z.city}: *${time}*\n`;
         } catch {}
       });
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -314,7 +330,7 @@ const commands = [
     category: "lifestyle",
     desc: "Look up a book by ISBN or title",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}book <title or ISBN>\nExample: ${config.PREFIX}book The Alchemist`);
+      if (!text) return m.usageReply("book <title or ISBN>", "book The Alchemist");
       m.react("⏳");
       try {
         const isIsbn = /^[\d-]{10,17}$/.test(text.replace(/\s/g, ""));
@@ -332,12 +348,14 @@ const commands = [
         if (book.averageRating) msg += `\n⭐ Rating: ${book.averageRating}/5 (${book.ratingsCount || 0} ratings)`;
         if (book.description) msg += `\n\n📝 *Description:*\n${book.description.slice(0, 400)}${book.description.length > 400 ? "..." : ""}`;
         if (book.previewLink) msg += `\n\n🔗 Preview: ${book.previewLink}`;
-        msg += `\n\n_${config.BOT_NAME}_`;
+        msg += `\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to look up book.");
+        return m.errorReply("Failed to look up book. Please try again.");
       }
     },
   },
@@ -363,12 +381,14 @@ const commands = [
           if (depth) msg += `   📏 Depth: ${depth.toFixed(1)} km\n`;
           msg += "\n";
         });
-        msg += `_Source: USGS Earthquake Hazards Program_\n_${config.BOT_NAME}_`;
+        msg += `_Source: USGS Earthquake Hazards Program_
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to fetch earthquake data.");
+        return m.apiErrorReply("earthquake data");
       }
     },
   },
@@ -377,7 +397,7 @@ const commands = [
     category: "lifestyle",
     desc: "Get live forex currency exchange rates",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}forex <base currency>\nExample: ${config.PREFIX}forex USD\n\nShows rates against major currencies.`);
+      if (!text) return m.usageReply("forex <base currency>", "forex USD\n\nShows rates against major currencies.");
       const base = text.trim().toUpperCase().slice(0, 3);
       m.react("⏳");
       try {
@@ -390,12 +410,14 @@ const commands = [
           const rate = rates[c];
           msg += `${c}: *${rate < 1 ? rate.toFixed(4) : rate < 100 ? rate.toFixed(2) : Math.round(rate).toLocaleString()}*\n`;
         });
-        msg += `\n_${config.BOT_NAME}_`;
+        msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to fetch exchange rates.");
+        return m.apiErrorReply("exchange rates");
       }
     },
   },

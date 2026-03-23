@@ -40,7 +40,7 @@ const commands = [
     desc: "Broadcast message to all chats",
     owner: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}broadcast <message>`);
+      if (!text) return m.usageReply("broadcast <message>");
       m.react("⏳");
       try {
         const chats = await sock.groupFetchAllParticipating();
@@ -102,7 +102,7 @@ const commands = [
     handler: async (sock, m, { text }) => {
       const mode = text?.toLowerCase();
       if (!["public", "private"].includes(mode)) {
-        return m.reply(`Usage: ${config.PREFIX}setmode public/private`);
+        return m.usageReply("setmode public/private");
       }
       config.MODE = mode;
       await m.reply(`✅ Bot mode changed to: *${mode}*`);
@@ -157,7 +157,7 @@ const commands = [
     desc: "Execute JavaScript code",
     owner: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}eval <code>`);
+      if (!text) return m.usageReply("eval <code>");
       try {
         let result = eval(text);
         if (result instanceof Promise) result = await result;
@@ -174,7 +174,7 @@ const commands = [
     desc: "Execute shell command",
     owner: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}shell <command>`);
+      if (!text) return m.usageReply("shell <command>");
       try {
         const { exec } = require("child_process");
         const result = await new Promise((resolve, reject) => {

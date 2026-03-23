@@ -98,7 +98,7 @@ const commands = [
         if (videoBuffer.length < 100) throw new Error("ffmpeg produced empty output");
         await sock.sendMessage(m.chat, {
           video: videoBuffer,
-          caption: `_${config.BOT_NAME}_`,
+          caption: `_${config.BOT_NAME} · Desam Tech_ ⚡`,
         }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch (err) {
@@ -164,7 +164,7 @@ const commands = [
         await sock.sendMessage(m.chat, {
           video: buffer,
           gifPlayback: true,
-          caption: `_${config.BOT_NAME}_`,
+          caption: `_${config.BOT_NAME} · Desam Tech_ ⚡`,
         }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch (err) {
@@ -207,7 +207,7 @@ const commands = [
     handler: async (sock, m, { text }) => {
       const media = m.isImage ? m : m.quoted?.isImage ? m.quoted : null;
       if (!media) return m.reply(`Reply to an image with ${config.PREFIX}resize 500x500`);
-      if (!text || !text.includes("x")) return m.reply(`Usage: ${config.PREFIX}resize <width>x<height>\nExample: ${config.PREFIX}resize 500x500`);
+      if (!text || !text.includes("x")) return m.usageReply("resize <width>x<height>", "resize 500x500");
       m.react("⏳");
       try {
         const [w, h] = text.toLowerCase().split("x").map(Number);

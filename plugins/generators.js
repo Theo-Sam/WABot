@@ -93,7 +93,9 @@ const commands = [
       }
       const last = LAST_NAMES[randomInt(0, LAST_NAMES.length - 1)];
       const initials = `${first[0]}.${last[0]}.`;
-      return m.reply(`👤 *Random Name*\n\n*Full name:* ${first} ${last}\n*Initials:* ${initials}\n\n_Try: ${config.PREFIX}randomname male/female_\n_${config.BOT_NAME}_`);
+      return m.reply(`👤 *Random Name*\n\n*Full name:* ${first} ${last}\n*Initials:* ${initials}\n\n_Try: ${config.PREFIX}randomname male/female_
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
     },
   },
   {
@@ -117,7 +119,9 @@ const commands = [
       } catch {}
       let msg = `📖 *Random Word*\n\n*Word:* ${word}\n`;
       if (definition) msg += `*Meaning:* ${definition}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -133,7 +137,9 @@ const commands = [
       msg += `🌎 Continent: ${c.continent}\n`;
       msg += `💰 Currency: ${c.currency}\n`;
       msg += `👥 Population: ~${c.pop}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -152,7 +158,9 @@ const commands = [
       msg += `🔴 RGB:  rgb(${r}, ${g}, ${b})\n`;
       msg += `🌈 HSL:  hsl(${h}°, ${s}%, ${l}%)\n`;
       msg += `💡 Tone: ${isDark ? "Dark" : "Light"}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -171,7 +179,9 @@ const commands = [
       msg += `*Alphanumeric (${len}):*\n\`${token}\`\n\n`;
       msg += `*Hex (${len}):*\n\`${hexToken}\`\n\n`;
       msg += `*Base64:*\n\`${b64}\`\n\n`;
-      msg += `_Try: ${config.PREFIX}token 64 for a longer key_\n_${config.BOT_NAME}_`;
+      msg += `_Try: ${config.PREFIX}token 64 for a longer key_
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -197,7 +207,9 @@ const commands = [
       msg += `🎰 Main numbers: *${lotto}*\n`;
       msg += `🔴 Power number: *${powerball}*\n\n`;
       msg += `🌟 Today's lucky number: *${sorted[0]}*\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -206,9 +218,11 @@ const commands = [
     category: "fun",
     desc: "Convert text to l33t speak",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}leet <text>`);
+      if (!text) return m.usageReply("leet <text>");
       const result = text.split("").map(c => LEET[c] || c).join("");
-      return m.reply(`😎 *L33t Speak*\n\nOriginal: ${text}\nL33t:     ${result}\n\n_${config.BOT_NAME}_`);
+      return m.reply(`😎 *L33t Speak*\n\nOriginal: ${text}\nL33t:     ${result}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
     },
   },
   {
@@ -216,12 +230,14 @@ const commands = [
     category: "tools",
     desc: "Convert text to NATO phonetic alphabet",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}nato <text>\nExample: ${config.PREFIX}nato hello`);
+      if (!text) return m.usageReply("nato <text>", "nato hello");
       const result = text.toLowerCase().split("").map(c => {
         if (c === " ") return "[space]";
         return NATO[c] ? `*${NATO[c]}*` : c.toUpperCase();
       }).join(" - ");
-      return m.reply(`📻 *NATO Phonetic*\n\n${text.toUpperCase()}\n\n${result}\n\n_${config.BOT_NAME}_`);
+      return m.reply(`📻 *NATO Phonetic*\n\n${text.toUpperCase()}\n\n${result}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
     },
   },
   {
@@ -229,7 +245,7 @@ const commands = [
     category: "tools",
     desc: "Look up internet slang or slang words",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}slang <word>\nExample: ${config.PREFIX}slang bussin`);
+      if (!text) return m.usageReply("slang <word>", "slang bussin");
       m.react("⏳");
       try {
         const data = await fetchJson(`https://api.urbandictionary.com/v0/define?term=${encodeURIComponent(text)}`, { timeout: 10000 });
@@ -241,7 +257,7 @@ const commands = [
         msg += `📖 *Definition:*\n${def}${entry.definition?.length > 400 ? "..." : ""}\n`;
         if (ex) msg += `\n💬 *Example:*\n_${ex}_\n`;
         msg += `\n👍 ${entry.thumbs_up} | 👎 ${entry.thumbs_down}\n`;
-        msg += `_${config.BOT_NAME}_`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -268,11 +284,13 @@ const commands = [
       };
       const code = parseInt(text);
       const cat = { 1:"ℹ️ Informational", 2:"✅ Success", 3:"↪️ Redirection", 4:"❌ Client Error", 5:"💥 Server Error" };
-      if (isNaN(code) || code < 100 || code > 599) return m.reply(`Usage: ${config.PREFIX}httpcode <status code>\nExample: ${config.PREFIX}httpcode 404`);
+      if (isNaN(code) || code < 100 || code > 599) return m.usageReply("httpcode <status code>", "httpcode 404");
       const name = codes[code] || "Unknown";
       const detail = desc[code] || "";
       const category = cat[Math.floor(code / 100)] || "";
-      return m.reply(`🌐 *HTTP ${code} — ${name}*\n\n${category}\n${detail ? `\n📝 ${detail}\n` : ""}\n_${config.BOT_NAME}_`);
+      return m.reply(`🌐 *HTTP ${code} — ${name}*\n\n${category}\n${detail ? `\n📝 ${detail}\n` : ""}
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
     },
   },
   {
@@ -280,7 +298,7 @@ const commands = [
     category: "tools",
     desc: "Get meaning and origin of a name",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}nameinfo <name>\nExample: ${config.PREFIX}nameinfo Sophia`);
+      if (!text) return m.usageReply("nameinfo <name>", "nameinfo Sophia");
       m.react("⏳");
       try {
         const data = await fetchJson(`https://api.genderize.io/?name=${encodeURIComponent(text)}`, { timeout: 8000 });
@@ -290,7 +308,9 @@ const commands = [
         let msg = `👤 *Name: ${text}*\n\n`;
         msg += `⚧ Gender: ${gender}\n`;
         if (topNation) msg += `🌍 Most common in: ${topNation.country_id} (${Math.round((topNation.probability || 0) * 100)}%)\n`;
-        msg += `\n_${config.BOT_NAME}_`;
+        msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -304,7 +324,7 @@ const commands = [
     category: "fun",
     desc: "Look up the meaning of an emoji",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}emojiinfo <emoji>\nExample: ${config.PREFIX}emojiinfo 🔥`);
+      if (!text) return m.usageReply("emojiinfo <emoji>", "emojiinfo 🔥");
       m.react("⏳");
       try {
         const codepoint = [...text][0]?.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0");
@@ -312,7 +332,9 @@ const commands = [
         const data = await fetchJson(`https://emojihub.yurace.pro/api/all/category/smileys-and-emotion`, { timeout: 10000 }).catch(() => null);
         const emoji = [...text][0];
         const name = emoji;
-        return m.reply(`${emoji} *Emoji Info*\n\nEmoji: ${emoji}\nUnicode: U+${codepoint}\n\n_${config.BOT_NAME}_`);
+        return m.reply(`${emoji} *Emoji Info*\n\nEmoji: ${emoji}\nUnicode: U+${codepoint}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       } catch {
         m.react("❌");
         await m.reply("❌ Could not get emoji info.");
@@ -324,7 +346,7 @@ const commands = [
     category: "tools",
     desc: "Get the capital city of a country",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}capital <country name>\nExample: ${config.PREFIX}capital France`);
+      if (!text) return m.usageReply("capital <country name>", "capital France");
       m.react("⏳");
       try {
         const data = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}?fields=name,capital,flags,currencies,population,region`, { timeout: 10000 });
@@ -338,7 +360,9 @@ const commands = [
         msg += `🌍 Region: ${country.region || "N/A"}\n`;
         msg += `👥 Population: ${pop}\n`;
         msg += `💰 Currency: ${currencies}\n`;
-        msg += `\n_${config.BOT_NAME}_`;
+        msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {

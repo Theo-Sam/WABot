@@ -200,7 +200,7 @@ const commands = [
     category: "ai",
     desc: "Chat with AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}ai <question>`);
+      if (!text) return m.usageReply("ai <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "openai");
@@ -217,7 +217,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Google Gemini AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}gemini <question>`);
+      if (!text) return m.usageReply("gemini <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "gemini");
@@ -225,7 +225,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Gemini AI server is busy. Please try again later!");
+        return m.apiErrorReply("Gemini AI");
       }
     },
   },
@@ -234,7 +234,7 @@ const commands = [
     category: "ai",
     desc: "Chat with DeepSeek AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}deepseek <question>`);
+      if (!text) return m.usageReply("deepseek <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "deepseek");
@@ -242,7 +242,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The DeepSeek AI server is busy. Please try again later!");
+        return m.apiErrorReply("DeepSeek AI");
       }
     },
   },
@@ -251,7 +251,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Llama AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}llama <question>`);
+      if (!text) return m.usageReply("llama <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "llama");
@@ -259,7 +259,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Llama AI server is busy. Please try again later!");
+        return m.apiErrorReply("Llama AI");
       }
     },
   },
@@ -268,7 +268,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Mistral AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}mistral <question>`);
+      if (!text) return m.usageReply("mistral <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "mistral");
@@ -276,7 +276,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Mistral AI server is busy. Please try again later!");
+        return m.apiErrorReply("Mistral AI");
       }
     },
   },
@@ -285,13 +285,15 @@ const commands = [
     category: "ai",
     desc: "Generate image with AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}dalle <prompt>`);
+      if (!text) return m.usageReply("dalle <prompt>");
       m.react("⏳");
       await m.reply(`🎨 Generating image for: *${text}*\n\n_This may take up to 30 seconds..._`);
       try {
         const imgBuffer = await fetchGeneratedImage(text);
         if (!imgBuffer) return m.reply("⏳ Image generation is currently busy. Try again in a moment.");
-        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `🎨 *AI Generated Image*\n\nPrompt: ${text}\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `🎨 *AI Generated Image*\n\nPrompt: ${text}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -306,7 +308,7 @@ const commands = [
     handler: async (sock, m, { args, text }) => {
       const lang = args[0] || "en";
       const query = args.slice(1).join(" ") || (m.quoted?.body) || "";
-      if (!query) return m.reply(`Usage: ${config.PREFIX}translate <lang> <text>\nExample: ${config.PREFIX}translate es Hello world\n\nLanguage codes: en, es, fr, de, ja, ko, zh, ar, hi, pt, ru, it, tr, etc.`);
+      if (!query) return m.usageReply("translate <lang> <text>", "translate es Hello world\n\nLanguage codes: en, es, fr, de, ja, ko, zh, ar, hi, pt, ru, it, tr, etc.");
       m.react("🌐");
       try {
         let translated = "";
@@ -331,7 +333,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Claude AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}claude <question>`);
+      if (!text) return m.usageReply("claude <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "claude");
@@ -339,7 +341,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Claude AI server is busy. Please try again later!");
+        return m.apiErrorReply("Claude AI");
       }
     },
   },
@@ -348,7 +350,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Copilot AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}copilot <question>`);
+      if (!text) return m.usageReply("copilot <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "copilot");
@@ -356,7 +358,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Copilot AI server is busy. Please try again later!");
+        return m.apiErrorReply("Copilot AI");
       }
     },
   },
@@ -365,7 +367,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Bard AI",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}bard <question>`);
+      if (!text) return m.usageReply("bard <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(text, "gemini");
@@ -373,7 +375,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Bard AI server is busy. Please try again later!");
+        return m.apiErrorReply("Bard AI");
       }
     },
   },
@@ -382,7 +384,7 @@ const commands = [
     category: "ai",
     desc: "Chat with Blackbox AI (code expert)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}blackbox <question>`);
+      if (!text) return m.usageReply("blackbox <question>");
       m.react("🤖");
       try {
         const answer = await pollinate(`You are a coding expert assistant. Answer this coding/technical question:\n\n${text}`, "openai");
@@ -390,7 +392,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Blackbox AI server is busy. Please try again later!");
+        return m.apiErrorReply("Blackbox AI");
       }
     },
   },
@@ -400,17 +402,17 @@ const commands = [
     desc: "Summarize text with AI",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
-      if (!input) return m.reply(`Usage: ${config.PREFIX}summarize <text> or reply to a message`);
+      if (!input) return m.usageReply("summarize <text> or reply to a message");
       m.react("📝");
       try {
         const prompt = `Summarize the following text concisely:\n\n${input}`;
         const answer = await pollinate(prompt, "openai");
-        if (!answer) return m.reply("⏳ Summarization server is busy. Try again soon!");
+        if (!answer) return m.apiErrorReply("Summarization server");
         await m.reply(`📝 *Summary*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Summarization server is busy. Try again soon!");
+        return m.apiErrorReply("Summarization server");
       }
     },
   },

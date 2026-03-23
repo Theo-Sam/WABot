@@ -153,10 +153,10 @@ const commands = [
     category: "tools",
     desc: "Convert text to/from Morse code",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage:\n${config.PREFIX}morse encode <text>\n${config.PREFIX}morse decode <morse code>`);
+      if (!text) return m.usageReply("morse encode/decode <text>", "morse encode hello world", ["morsecode"], "Use *encode* or *decode* as first word");
       const [mode, ...rest] = text.split(" ");
       const input = rest.join(" ");
-      if (!input) return m.reply(`Usage:\n${config.PREFIX}morse encode <text>\n${config.PREFIX}morse decode <morse code>`);
+      if (!input) return m.usageReply("morse encode/decode <text>", "morse encode hello world", ["morsecode"], "Use *encode* or *decode* as first word");
       if (mode.toLowerCase() === "decode") {
         const result = morseToText(input);
         return m.reply(`📡 *Morse → Text*\n\n*Input:* ${input}\n*Output:* ${result}`);
@@ -170,10 +170,10 @@ const commands = [
     category: "tools",
     desc: "Convert text to/from binary",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage:\n${config.PREFIX}binary encode <text>\n${config.PREFIX}binary decode <binary>`);
+      if (!text) return m.usageReply("binary encode/decode <text>", "binary encode hello", ["bin"], "Use *encode* or *decode* as first word");
       const [mode, ...rest] = text.split(" ");
       const input = rest.join(" ");
-      if (!input) return m.reply(`Usage:\n${config.PREFIX}binary encode <text>\n${config.PREFIX}binary decode <binary>`);
+      if (!input) return m.usageReply("binary encode/decode <text>", "binary encode hello", ["bin"], "Use *encode* or *decode* as first word");
       if (mode.toLowerCase() === "decode") {
         try {
           const result = binaryToText(input);
@@ -191,10 +191,10 @@ const commands = [
     category: "tools",
     desc: "Convert text to/from hexadecimal",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage:\n${config.PREFIX}hex encode <text>\n${config.PREFIX}hex decode <hex>`);
+      if (!text) return m.usageReply("hex encode/decode <text>", "hex encode hello", ["hexcode"], "Use *encode* or *decode* as first word");
       const [mode, ...rest] = text.split(" ");
       const input = rest.join(" ");
-      if (!input) return m.reply(`Usage:\n${config.PREFIX}hex encode <text>\n${config.PREFIX}hex decode <hex>`);
+      if (!input) return m.usageReply("hex encode/decode <text>", "hex encode hello", ["hexcode"], "Use *encode* or *decode* as first word");
       if (mode.toLowerCase() === "decode") {
         try {
           const result = hexToText(input);
@@ -212,7 +212,7 @@ const commands = [
     category: "tools",
     desc: "Convert numbers to/from Roman numerals",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}roman <number or Roman numeral>`);
+      if (!text) return m.usageReply("roman <number or Roman numeral>");
       const input = text.trim();
       if (/^\d+$/.test(input)) {
         const num = parseInt(input);
@@ -231,11 +231,11 @@ const commands = [
     category: "tools",
     desc: "Encode/decode text with Caesar cipher",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}caesar <shift> <text>\nExample: ${config.PREFIX}caesar 3 hello`);
+      if (!text) return m.usageReply("caesar <shift> <text>", "caesar 3 hello");
       const parts = text.split(" ");
       const shift = parseInt(parts[0]);
       const message = parts.slice(1).join(" ");
-      if (isNaN(shift) || !message) return m.reply(`Usage: ${config.PREFIX}caesar <shift> <text>\nExample: ${config.PREFIX}caesar 3 hello`);
+      if (isNaN(shift) || !message) return m.usageReply("caesar <shift> <text>", "caesar 3 hello");
       const encoded = caesar(message, shift);
       const decoded = caesar(message, -shift);
       return m.reply(`🔐 *Caesar Cipher (shift ${shift})*\n\n*Original:* ${message}\n*Encoded (+${shift}):* ${encoded}\n*Decoded (-${shift}):* ${decoded}`);
@@ -256,7 +256,7 @@ const commands = [
     category: "tools",
     desc: "Flip text upside down",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}fliptext <text>`);
+      if (!text) return m.usageReply("fliptext <text>");
       const result = flipText(text);
       return m.reply(`🙃 *Flipped Text*\n\n${result}`);
     },
@@ -266,10 +266,10 @@ const commands = [
     category: "tools",
     desc: "Make text glitchy/creepy (Zalgo effect)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}zalgo <text>`);
+      if (!text) return m.usageReply("zalgo <text>");
       const intensity = Math.min(5, Math.max(1, parseInt(text.split(" ")[0]) || 2));
       const msg = isNaN(parseInt(text.split(" ")[0])) ? text : text.split(" ").slice(1).join(" ");
-      if (!msg) return m.reply(`Usage: ${config.PREFIX}zalgo <text> or ${config.PREFIX}zalgo <intensity 1-5> <text>`);
+      if (!msg) return m.usageReply("zalgo <text> or ${config.PREFIX}zalgo <intensity 1-5> <text>");
       const result = zalgo(msg, intensity);
       return m.reply(`👁️ *Zalgo Text*\n\n${result}`);
     },
@@ -279,7 +279,7 @@ const commands = [
     category: "tools",
     desc: "Convert text to small caps",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}smallcaps <text>`);
+      if (!text) return m.usageReply("smallcaps <text>");
       return m.reply(`🔠 *Small Caps*\n\n${smallCaps(text)}`);
     },
   },
@@ -288,7 +288,7 @@ const commands = [
     category: "tools",
     desc: "Add strikethrough to text",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}strike <text>`);
+      if (!text) return m.usageReply("strike <text>");
       return m.reply(`~~Text~~\n\n${strikethrough(text)}`);
     },
   },
@@ -297,7 +297,7 @@ const commands = [
     category: "tools",
     desc: "Scramble letters to make an anagram",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}anagram <word or phrase>`);
+      if (!text) return m.usageReply("anagram <word or phrase>");
       const result = getAnagram(text);
       return m.reply(`🔀 *Anagram*\n\n*Original:* ${text}\n*Scrambled:* ${result}`);
     },
@@ -307,7 +307,7 @@ const commands = [
     category: "tools",
     desc: "Check if text is a palindrome",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}palindrome <text>`);
+      if (!text) return m.usageReply("palindrome <text>");
       const result = isPalindrome(text);
       const clean = text.toLowerCase().replace(/[^a-z0-9]/g, "");
       return m.reply(`🔁 *Palindrome Check*\n\n*Text:* ${text}\n*Cleaned:* ${clean}\n*Result:* ${result ? "✅ Yes, it's a palindrome!" : "❌ Not a palindrome."}`);
@@ -318,7 +318,7 @@ const commands = [
     category: "tools",
     desc: "Convert a number to words",
     handler: async (sock, m, { text }) => {
-      if (!text || isNaN(text.trim())) return m.reply(`Usage: ${config.PREFIX}n2w <number>\nExample: ${config.PREFIX}n2w 1234`);
+      if (!text || isNaN(text.trim())) return m.usageReply("n2w <number>", "n2w 1234");
       const num = parseInt(text.trim());
       if (num < 0 || num > 999999999) return m.reply("❌ Number must be between 0 and 999,999,999.");
       const ones = ["","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];

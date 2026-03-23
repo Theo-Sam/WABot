@@ -33,7 +33,7 @@ const commands = [
     category: "fun",
     desc: "Mix two emojis into a sticker",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}emojimix 😀🤣`);
+      if (!text) return m.usageReply("emojimix 😀🤣");
       const emojis = [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(text.trim())].map((s) => s.segment).filter((s) => /\p{Emoji}/u.test(s));
       if (emojis.length < 2) return m.reply(`❌ Please provide two emojis.\nUsage: ${config.PREFIX}emojimix 😀🤣`);
       m.react("⏳");
@@ -55,7 +55,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The EmojiMix API is currently overloaded.");
+        return m.apiErrorReply("EmojiMix");
       }
     },
   },
@@ -64,7 +64,7 @@ const commands = [
     category: "fun",
     desc: "Search for GIFs",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}giphy <query>`);
+      if (!text) return m.usageReply("giphy <query>");
       m.react("⏳");
       try {
         let gifUrl = "";
@@ -97,7 +97,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The GIF API is currently overloaded.");
+        return m.apiErrorReply("GIF");
       }
     },
   },
@@ -144,7 +144,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("❌ Failed to calculate match.");
+        return m.errorReply("Failed to calculate match. Please try again.");
       }
     },
   },

@@ -47,7 +47,7 @@ const commands = [
     category: "search",
     desc: "Search Google",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}google <query>`);
+      if (!text) return m.usageReply("google <query>");
       m.react("🔍");
       try {
         const results = await searxSearch(text);
@@ -62,7 +62,7 @@ const commands = [
             if (r.engine) msg += `🔧 Source: ${r.engine}\n`;
             msg += `\n`;
           });
-          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
           await replyLongText(m, msg);
           m.react("✅");
           return;
@@ -89,14 +89,14 @@ const commands = [
         flat.slice(0, 7).forEach((r, i) => {
           msg += `${i + 1}. ${r.text}\n🔗 ${r.url}\n\n`;
         });
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await replyLongText(m, msg);
         m.react("✅");
         return;
 
       } catch {
         m.react("❌");
-        await m.reply("⏳ The search API is currently overloaded. Please try again later!");
+        return m.apiErrorReply("search");
       }
     },
   },
@@ -105,7 +105,7 @@ const commands = [
     category: "search",
     desc: "Search song lyrics",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}lyrics <song name>`);
+      if (!text) return m.usageReply("lyrics <song name>");
       m.react("🎵");
       try {
         let title = text, artist = "", lyrics = "";
@@ -137,12 +137,12 @@ const commands = [
         msg += `\n`;
         msg += lyrics.substring(0, 4000);
         if (lyrics.length > 4000) msg += "\n\n_(lyrics truncated)_";
-        msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `\n\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The lyrics API is currently overloaded.");
+        return m.apiErrorReply("lyrics");
       }
     },
   },
@@ -151,7 +151,7 @@ const commands = [
     category: "search",
     desc: "Look up word definition",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}define <word>`);
+      if (!text) return m.usageReply("define <word>");
       m.react("📖");
       try {
         const data = await fetchJson(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(text)}`);
@@ -186,12 +186,12 @@ const commands = [
         if (allAnt.length > 0) msg += `📕 *All Antonyms:* ${[...new Set(allAnt)].join(", ")}\n`;
 
         if (entry.sourceUrls?.length) msg += `\n🔗 Source: ${entry.sourceUrls[0]}`;
-        msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `\n\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The dictionary API is currently overloaded.");
+        return m.apiErrorReply("dictionary");
       }
     },
   },
@@ -200,7 +200,7 @@ const commands = [
     category: "search",
     desc: "Search GitHub user/repo",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}github <username or user/repo>`);
+      if (!text) return m.usageReply("github <username or user/repo>");
       m.react("🐙");
       try {
         if (text.includes("/")) {
@@ -228,7 +228,7 @@ const commands = [
           if (data.topics?.length) msg += `🏷️ Topics: ${data.topics.join(", ")}\n`;
           msg += `\n`;
           msg += `🔗 ${data.html_url}\n`;
-          msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
           if (data.owner?.avatar_url) {
             const avatar = await fetchBuffer(data.owner.avatar_url).catch(() => null);
@@ -278,7 +278,7 @@ const commands = [
           }
 
           msg += `\n🔗 ${data.html_url}\n`;
-          msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
           if (data.avatar_url) {
             const avatar = await fetchBuffer(data.avatar_url).catch(() => null);
@@ -293,7 +293,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The GitHub API is currently overloaded.");
+        return m.apiErrorReply("GitHub");
       }
     },
   },
@@ -302,7 +302,7 @@ const commands = [
     category: "search",
     desc: "Search YouTube videos",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}ytsearch <query>`);
+      if (!text) return m.usageReply("ytsearch <query>");
       m.react("🔍");
       try {
         let results = [];
@@ -330,12 +330,12 @@ const commands = [
           if (r.author) msg += `👤 Channel: ${r.author}\n`;
           msg += `🔗 https://youtube.com/watch?v=${r.videoId}\n\n`;
         });
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await replyLongText(m, msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The YouTube search API is currently overloaded.");
+        return m.apiErrorReply("YouTube search");
       }
     },
   },
@@ -344,7 +344,7 @@ const commands = [
     category: "search",
     desc: "Search movie info",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}movie <movie name>`);
+      if (!text) return m.usageReply("movie <movie name>");
       m.react("🎬");
       try {
         let posterUrl = "";
@@ -373,7 +373,7 @@ const commands = [
           msg += `\n`;
           if (summary) msg += `📝 *Summary:*\n${summary.substring(0, 2200)}\n\n`;
           if (show.url) msg += `🔗 ${show.url}\n`;
-          msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
         } else {
           const itunes = await fetchJson(`https://itunes.apple.com/search?term=${encodeURIComponent(text)}&media=movie&limit=1`).catch(() => null);
           const item = itunes?.results?.[0];
@@ -395,7 +395,7 @@ const commands = [
               msg += `\n📝 ${(item.longDescription || item.shortDescription).substring(0, 2200)}\n`;
             }
             if (item.trackViewUrl) msg += `\n🔗 ${item.trackViewUrl}`;
-            msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+            msg += `\n\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
           }
         }
 
@@ -412,7 +412,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Movie search API is currently overloaded.");
+        return m.apiErrorReply("Movie search");
       }
     },
   },
@@ -421,7 +421,7 @@ const commands = [
     category: "search",
     desc: "Search anime info",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}anime <anime name>`);
+      if (!text) return m.usageReply("anime <anime name>");
       m.react("🎌");
       try {
         const query = `query ($search: String) { Media (search: $search, type: ANIME) { id title { romaji english native } episodes duration status season seasonYear averageScore meanScore popularity favourites genres tags { name rank } description(asHtml: false) coverImage { large } bannerImage startDate { year month day } endDate { year month day } studios { nodes { name isAnimationStudio } } source format countryOfOrigin isAdult siteUrl nextAiringEpisode { episode airingAt } rankings { rank type context } } }`;
@@ -487,7 +487,7 @@ const commands = [
         }
 
         if (anime.siteUrl) msg += `\n\n🔗 ${anime.siteUrl}`;
-        msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `\n\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
         if (anime.coverImage?.large) {
           const cover = await fetchBuffer(anime.coverImage.large).catch(() => null);
@@ -501,7 +501,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Anime search API is currently overloaded.");
+        return m.apiErrorReply("Anime search");
       }
     },
   },
@@ -510,7 +510,7 @@ const commands = [
     category: "search",
     desc: "Search manga info",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}manga <manga name>`);
+      if (!text) return m.usageReply("manga <manga name>");
       m.react("📖");
       try {
         const query = `query ($search: String) { Media (search: $search, type: MANGA) { id title { romaji english native } chapters volumes status averageScore meanScore popularity favourites genres tags { name rank } description(asHtml: false) coverImage { large } startDate { year month day } endDate { year month day } staff { nodes { name { full } } } source format countryOfOrigin isAdult siteUrl rankings { rank type context } } }`;
@@ -568,7 +568,7 @@ const commands = [
         }
 
         if (manga.siteUrl) msg += `\n\n🔗 ${manga.siteUrl}`;
-        msg += `\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `\n\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
         if (manga.coverImage?.large) {
           const cover = await fetchBuffer(manga.coverImage.large).catch(() => null);
@@ -582,7 +582,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Manga search API is currently overloaded.");
+        return m.apiErrorReply("Manga search");
       }
     },
   },
@@ -591,16 +591,16 @@ const commands = [
     category: "search",
     desc: "Search wallpapers",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}wallpaper <query>`);
+      if (!text) return m.usageReply("wallpaper <query>");
       m.react("🖼️");
       try {
         const buffer = await fetchWallpaperBuffer(text);
         if (!buffer) return m.reply("❌ Could not find wallpapers.");
-        await sock.sendMessage(m.chat, { image: buffer, caption: `🖼️ *Wallpaper: ${text}*\n\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `🖼️ *Wallpaper: ${text}*\n\n_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Wallpaper search API is currently overloaded.");
+        return m.apiErrorReply("Wallpaper search");
       }
     },
   },
@@ -609,7 +609,7 @@ const commands = [
     category: "search",
     desc: "Get weather info for a city",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}weather <city>`);
+      if (!text) return m.usageReply("weather <city>");
       m.react("🌤️");
       try {
         const data = await fetchJson(`${endpointsConfig.weather.wttrBase}/${encodeURIComponent(text)}?format=j1`);
@@ -638,12 +638,12 @@ const commands = [
           });
           msg += `\n`;
         }
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Weather API is currently overloaded.");
+        return m.apiErrorReply("Weather");
       }
     },
   },
@@ -692,12 +692,12 @@ const commands = [
           msg += `\n`;
         });
 
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await replyLongText(m, msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The News API is currently overloaded.");
+        return m.apiErrorReply("News");
       }
     },
   },
@@ -706,7 +706,7 @@ const commands = [
     category: "search",
     desc: "Get cryptocurrency price",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}crypto <coin>\nExample: ${config.PREFIX}crypto bitcoin`);
+      if (!text) return m.usageReply("crypto <coin>", "crypto bitcoin");
       m.react("💰");
       try {
         const cgKey = (process.env.COINGECKO_API_KEY || "").trim();
@@ -779,7 +779,7 @@ const commands = [
         if (data.links?.homepage?.[0]) msg += `🌐 Website: ${data.links.homepage[0]}\n`;
         if (data.links?.blockchain_site?.[0]) msg += `🔗 Explorer: ${data.links.blockchain_site[0]}\n`;
 
-        msg += `\n_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
         if (data.image?.large) {
           const coinImg = await fetchBuffer(data.image.large).catch(() => null);
@@ -793,7 +793,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Crypto API is currently overloaded. Use coin ID (e.g., bitcoin, ethereum).");
+        return m.apiErrorReply("Crypto");
       }
     },
   },
@@ -802,7 +802,7 @@ const commands = [
     category: "search",
     desc: "Look up IP address info",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}ip <IP address>`);
+      if (!text) return m.usageReply("ip <IP address>");
       m.react("🌐");
       try {
         const data = await fetchJson(`${endpointsConfig.ip.ipWhoisBase}/${encodeURIComponent(text)}`);
@@ -850,12 +850,12 @@ const commands = [
         if (data.connection_type) msg += `📶 Connection: ${data.connection_type}\n`;
         if (flags.length) msg += `⚠️ *Flags:* ${flags.join(", ")}\n\n`;
 
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The IP lookup API is currently overloaded.");
+        return m.apiErrorReply("IP lookup");
       }
     },
   },

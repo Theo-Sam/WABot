@@ -48,14 +48,16 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/waifu");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get waifu image.");
+        if (!url) return m.errorReply("Failed to get waifu image. Please try again.");
         const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.waifu, `${m.chat}:anime:waifu`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Waifu API is currently overloaded.");
+        return m.apiErrorReply("Waifu");
       }
     },
   },
@@ -71,11 +73,13 @@ const commands = [
         if (!url) return m.reply("❌ Failed.");
         const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.neko, `${m.chat}:anime:neko`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Neko API is currently overloaded.");
+        return m.apiErrorReply("Neko");
       }
     },
   },
@@ -88,14 +92,16 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/shinobu");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get shinobu image.");
+        if (!url) return m.errorReply("Failed to get shinobu image. Please try again.");
         const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.shinobu, `${m.chat}:anime:shinobu`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -108,14 +114,16 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/megumin");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get megumin image.");
+        if (!url) return m.errorReply("Failed to get megumin image. Please try again.");
         const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.megumin, `${m.chat}:anime:megumin`, { maxHistory: 2 });
-        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -129,12 +137,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/hug");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get hug image.");
+        if (!url) return m.errorReply("Failed to get hug image. Please try again.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "hug", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -148,12 +156,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/slap");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get slap image.");
+        if (!url) return m.errorReply("Failed to get slap image. Please try again.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "slap", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -167,12 +175,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/pat");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get pat image.");
+        if (!url) return m.errorReply("Failed to get pat image. Please try again.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "pat", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -186,12 +194,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/kiss");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get kiss image.");
+        if (!url) return m.errorReply("Failed to get kiss image. Please try again.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "kiss", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -205,12 +213,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/cuddle");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get cuddle image.");
+        if (!url) return m.errorReply("Failed to get cuddle image. Please try again.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "cuddle", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -223,12 +231,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/cry");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get cry image.");
+        if (!url) return m.errorReply("Failed to get cry image. Please try again.");
         const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.cry, `${m.chat}:anime:cry`, { maxHistory: 2 });
         await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best` }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -241,12 +249,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/smile");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get smile image.");
+        if (!url) return m.errorReply("Failed to get smile image. Please try again.");
         const buffer = await fetchBuffer(url);
         const title = pickNonRepeating(styleCaptions.smile, `${m.chat}:anime:smile`, { maxHistory: 2 });
         await sock.sendMessage(m.chat, { image: buffer, caption: `${title}\n\n📡 Source: nekos.best` }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -260,12 +268,12 @@ const commands = [
       try {
         const data = await fetchJson("https://nekos.best/api/v2/wave");
         const url = data?.results?.[0]?.url;
-        if (!url) return m.reply("❌ Failed to get wave image.");
+        if (!url) return m.errorReply("Failed to get wave image. Please try again.");
         const buffer = await fetchBuffer(url);
         const caption = buildActionCaption(m.chat, "wave", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -278,12 +286,12 @@ const commands = [
       m.react("😬");
       try {
         const data = await fetchJson("https://api.waifu.pics/sfw/bite");
-        if (!data?.url) return m.reply("❌ Failed to get bite image.");
+        if (!data?.url) return m.errorReply("Failed to get bite image. Please try again.");
         const buffer = await fetchBuffer(data.url);
         const caption = buildActionCaption(m.chat, "bite", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -296,12 +304,12 @@ const commands = [
       m.react("🦵");
       try {
         const data = await fetchJson("https://api.waifu.pics/sfw/kick");
-        if (!data?.url) return m.reply("❌ Failed to get kick image.");
+        if (!data?.url) return m.errorReply("Failed to get kick image. Please try again.");
         const buffer = await fetchBuffer(data.url);
         const caption = buildActionCaption(m.chat, "kick", m.sender, target);
         await sock.sendMessage(m.chat, { image: buffer, caption, mentions: target ? [m.sender, target] : [] }, { quoted: { key: m.key, message: m.message } });
       } catch {
-        await m.reply("⏳ The Anime API is currently overloaded.");
+        return m.apiErrorReply("Anime");
       }
     },
   },
@@ -326,7 +334,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Anime Quote API is currently overloaded.");
+        return m.apiErrorReply("Anime Quote");
       }
     },
   },

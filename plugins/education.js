@@ -40,7 +40,7 @@ const commands = [
     category: "education",
     desc: "Periodic table lookup (name/symbol/number)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}element <name|symbol|number>\nExample: ${config.PREFIX}element oxygen`);
+      if (!text) return m.usageReply("element <name|symbol|number>", "element oxygen");
       m.react("⚛️");
       try {
         const q = String(text).trim();
@@ -56,7 +56,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The element API is currently overloaded.");
+        return m.apiErrorReply("element");
       }
     },
   },
@@ -91,7 +91,7 @@ const commands = [
     category: "education",
     desc: "Check spelling of a word",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}spell <word>`);
+      if (!text) return m.usageReply("spell <word>");
       m.react("📝");
       try {
         const data = await fetchJson(`https://api.datamuse.com/sug?s=${encodeURIComponent(text)}`).catch(() => []);
@@ -104,7 +104,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Spell Check API is currently overloaded.");
+        return m.apiErrorReply("Spell Check");
       }
     },
   },
@@ -113,7 +113,7 @@ const commands = [
     category: "education",
     desc: "Find synonyms of a word",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}synonym <word>`);
+      if (!text) return m.usageReply("synonym <word>");
       m.react("📖");
       try {
         const data = await fetchJson(`https://api.datamuse.com/words?rel_syn=${encodeURIComponent(text)}&max=15`).catch(() => []);
@@ -124,7 +124,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Synonym API is currently overloaded.");
+        return m.apiErrorReply("Synonym");
       }
     },
   },
@@ -133,7 +133,7 @@ const commands = [
     category: "education",
     desc: "Find antonyms of a word",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}antonym <word>`);
+      if (!text) return m.usageReply("antonym <word>");
       m.react("📖");
       try {
         const data = await fetchJson(`https://api.datamuse.com/words?rel_ant=${encodeURIComponent(text)}&max=15`).catch(() => []);
@@ -144,7 +144,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Antonym API is currently overloaded.");
+        return m.apiErrorReply("Antonym");
       }
     },
   },
@@ -153,7 +153,7 @@ const commands = [
     category: "education",
     desc: "Find words that rhyme",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}rhyme <word>`);
+      if (!text) return m.usageReply("rhyme <word>");
       m.react("🎵");
       try {
         const data = await fetchJson(`https://api.datamuse.com/words?rel_rhy=${encodeURIComponent(text)}&max=20`).catch(() => []);
@@ -164,7 +164,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Rhyme API is currently overloaded.");
+        return m.apiErrorReply("Rhyme");
       }
     },
   },
@@ -174,16 +174,16 @@ const commands = [
     desc: "Check grammar with AI (no key)",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
-      if (!input) return m.reply(`Usage: ${config.PREFIX}grammar <text> or reply to a message`);
+      if (!input) return m.usageReply("grammar <text> or reply to a message");
       m.react("📝");
       try {
         const answer = await grammarWithFreeAi(input);
-        if (!answer) return m.reply("⏳ Grammar check is busy. Try again later.");
+        if (!answer) return m.apiErrorReply("Grammar Check");
         await m.reply(`📝 *Grammar Check*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Grammar API is currently overloaded.");
+        return m.apiErrorReply("Grammar");
       }
     },
   },

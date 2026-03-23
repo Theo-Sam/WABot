@@ -19,7 +19,11 @@ const commands = [
         await m.reply("✅ Anti-ViewOnce disabled.");
       } else {
         const current = getGroupSettings(m.chat)?.antiviewonce ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}antiviewonce on/off\nCurrent: ${current}`);
+        await m.reply(`⚙️ *antiviewonce*  —  currently *${current}*
+
+📖 Usage:  \`.antiviewonce on\`  /  \`.antiviewonce off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -44,7 +48,12 @@ const commands = [
           await m.reply("✅ Anti-Delete disabled for this group.");
         } else {
           const current = getGroupSettings(m.chat)?.antidelete ? "on" : "off";
-          await m.reply(`Usage: ${config.PREFIX}antidelete on/off\nScope: this group\nCurrent: ${current}`);
+          await m.reply(`⚙️ *antidelete*  —  currently *${current}*
+
+📖 Usage:  \`.antidelete on\`  /  \`.antidelete off\`
+📌 In a group: applies to that group only
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
         }
       } else {
         // DM context: owner only — sets a GLOBAL flag silently
@@ -90,7 +99,11 @@ const commands = [
         await m.reply("✅ Anti-spam disabled.");
       } else {
         const current = getGroupSettings(m.chat)?.antispam ? "on" : "off";
-        await m.reply(`Usage: ${config.PREFIX}antispam on/off\nCurrent: ${current}`);
+        await m.reply(`⚙️ *antispam*  —  currently *${current}*
+
+📖 Usage:  \`.antispam on\`  /  \`.antispam off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -107,7 +120,11 @@ const commands = [
         config.AUTO_READ = "off";
         await m.reply("✅ Auto-read disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}autoread on/off\nCurrent: ${config.AUTO_READ}`);
+        await m.reply(`⚙️ *autoread*  —  currently *${config.AUTO_READ}*
+
+📖 Usage:  \`.autoread on\`  /  \`.autoread off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -129,7 +146,11 @@ const commands = [
         console.log("[DESAM-STATUS] AUTO_STATUS_VIEW toggled OFF via setautostatus command.");
         await m.reply("✅ Auto-status view disabled. (persisted)");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}setautostatus on/off\nCurrent: ${config.AUTO_STATUS_VIEW || "off"}`);
+        await m.reply(`⚙️ *setautostatus*  —  currently *${config.AUTO_STATUS_VIEW || "off"}*
+
+📖 Usage:  \`.setautostatus on\`  /  \`.setautostatus off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -146,7 +167,11 @@ const commands = [
         config.ANTI_CALL = "off";
         await m.reply("✅ Anti-call disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}anticall on/off\nCurrent: ${config.ANTI_CALL}`);
+        await m.reply(`⚙️ *anticall*  —  currently *${config.ANTI_CALL}*
+
+📖 Usage:  \`.anticall on\`  /  \`.anticall off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -163,7 +188,11 @@ const commands = [
         config.AUTO_BIO = "off";
         await m.reply("✅ Auto-bio disabled.");
       } else {
-        await m.reply(`Usage: ${config.PREFIX}autobio on/off\nCurrent: ${config.AUTO_BIO}`);
+        await m.reply(`⚙️ *autobio*  —  currently *${config.AUTO_BIO}*
+
+📖 Usage:  \`.autobio on\`  /  \`.autobio off\`
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
     },
   },
@@ -201,7 +230,7 @@ const commands = [
     handler: async (sock, m, { text }) => {
       const durations = { off: 0, "24h": 86400, "7d": 604800, "90d": 7776000 };
       if (!text || !durations.hasOwnProperty(text)) {
-        return m.reply(`Usage: ${config.PREFIX}disappear off/24h/7d/90d`);
+        return m.usageReply("disappear off/24h/7d/90d");
       }
       await sock.sendMessage(m.chat, { disappearingMessagesInChat: durations[text] });
       await m.reply(`✅ Disappearing messages ${text === "off" ? "disabled" : `set to ${text}`}.`);
@@ -257,7 +286,7 @@ const commands = [
     admin: true,
     botAdmin: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}setgroupname <new name>`);
+      if (!text) return m.usageReply("setgroupname <new name>");
       try {
         await sock.groupUpdateSubject(m.chat, text);
         await m.reply(`✅ Group name changed to: *${text}*`);
@@ -274,7 +303,7 @@ const commands = [
     admin: true,
     botAdmin: true,
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}setgroupdesc <description>`);
+      if (!text) return m.usageReply("setgroupdesc <description>");
       try {
         await sock.groupUpdateDescription(m.chat, text);
         await m.reply("✅ Group description updated!");
@@ -329,7 +358,7 @@ const commands = [
         const code = await sock.groupInviteCode(m.chat);
         await m.reply(`🔗 *Group Invite Link*\n\nhttps://chat.whatsapp.com/${code}\n\n_Only share this with trusted members._`);
       } catch {
-        await m.reply("❌ Failed to get invite link. Make sure the bot has access.");
+        return m.errorReply("Failed to get invite link. Make sure the bot has access. Please try again.");
       }
     },
   },

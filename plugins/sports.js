@@ -430,7 +430,7 @@ const commands = [
             if (comp.venue?.fullName) msg += `🏟️ ${comp.venue.fullName}\n`;
             msg += `\n`;
           });
-          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
           await replyLongText(m, msg);
         } else {
           const fallbackEvents = await buildSportsDbScoreFallback(league);
@@ -444,7 +444,7 @@ const commands = [
               if (match.venue) msg += `🏟️ ${match.venue}\n`;
               msg += `\n`;
             }
-            msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+            msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
             await replyLongText(m, msg);
           } else {
             await m.reply(`⏳ No matches found for "${league.display}" right now.\n\n💡 You can also use a league ID, e.g. ${config.PREFIX}league 4328`);
@@ -453,7 +453,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Football Scores API is currently overloaded.");
+        return m.apiErrorReply("Football Scores");
       }
     },
   },
@@ -507,7 +507,7 @@ const commands = [
             if (e.intRound) msg += `🎫 Round: ${e.intRound}\n`;
             msg += `\n`;
           });
-          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
           await replyLongText(m, msg);
         } else {
           await m.reply(`📅 No upcoming fixtures found for "${league.display}".`);
@@ -515,7 +515,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Fixtures API is currently overloaded.");
+        return m.apiErrorReply("Fixtures");
       }
     },
   },
@@ -570,7 +570,7 @@ const commands = [
             msg += `${pos}. ${name} | ${t.played} ${t.win} ${t.draw} ${t.loss} | *${t.points}*\n`;
           });
           msg += `\n`;
-          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
           await replyLongText(m, msg);
         } else {
           await m.reply(`❌ Standings not found for "${league.display}". Try: premier league, la liga, bundesliga, serie a, ligue 1`);
@@ -578,7 +578,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Standings API is currently overloaded.");
+        return m.apiErrorReply("Standings");
       }
     },
   },
@@ -639,7 +639,7 @@ const commands = [
     category: "sports",
     desc: "Search football player info",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}player <player name>`);
+      if (!text) return m.usageReply("player <player name>");
       m.react("⚽");
       try {
         const data = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=${encodeURIComponent(text)}`);
@@ -720,7 +720,7 @@ const commands = [
           msg += `📝 *Biography:*\n${p.strDescriptionEN}\n\n`;
         }
 
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
         if (p.strThumb || p.strCutout) {
           const imgUrl = p.strCutout || p.strThumb;
@@ -735,7 +735,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Player Info API is currently overloaded.");
+        return m.apiErrorReply("Player Info");
       }
     },
   },
@@ -744,7 +744,7 @@ const commands = [
     category: "sports",
     desc: "Search football team info",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}team <team name>`);
+      if (!text) return m.usageReply("team <team name>");
       m.react("⚽");
       try {
         const data = await fetchJson(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(text)}`);
@@ -800,7 +800,7 @@ const commands = [
           msg += `\n\n`;
         }
 
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
         if (t.strBadge) {
           const imgBuf = await fetchBuffer(t.strBadge).catch(() => null);
@@ -814,7 +814,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Team Info API is currently overloaded.");
+        return m.apiErrorReply("Team Info");
       }
     },
   },
@@ -837,7 +837,7 @@ const commands = [
             if (e.intRound) msg += `🔢 Round: ${e.intRound}\n`;
             msg += `\n`;
           });
-          msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
           await replyLongText(m, msg);
         } else {
           await m.reply("🏀 No recent NBA games found.");
@@ -845,7 +845,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The NBA API is currently overloaded.");
+        return m.apiErrorReply("NBA");
       }
     },
   },

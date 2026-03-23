@@ -10,7 +10,7 @@ const commands = [
     category: "tools",
     desc: "Calculate tip and total for a bill",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}tip <bill amount> [tip%] [people]\nExample: ${config.PREFIX}tip 50 15 3`);
+      if (!text) return m.usageReply("tip <bill amount> [tip%] [people]", "tip 50 15 3");
       const parts = text.trim().split(/\s+/);
       const bill = parseFloat(parts[0]);
       const tipPct = parseFloat(parts[1] || "15");
@@ -31,7 +31,9 @@ const commands = [
         msg += `Per person: ${fmtMoney(perPerson)}\n`;
         msg += `Tip/person: ${fmtMoney(tipPP)}\n`;
       }
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -40,7 +42,7 @@ const commands = [
     category: "tools",
     desc: "Split a bill equally among people",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}split <total amount> <number of people>\nExample: ${config.PREFIX}split 120 4`);
+      if (!text) return m.usageReply("split <total amount> <number of people>", "split 120 4");
       const parts = text.trim().split(/\s+/);
       const total = parseFloat(parts[0]);
       const people = parseInt(parts[1]);
@@ -53,7 +55,9 @@ const commands = [
       msg += `People:      ${people}\n`;
       msg += `Each pays:   ${fmtMoney(each)}\n`;
       msg += `Rounded up:  ${fmtMoney(rounded)}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -62,7 +66,7 @@ const commands = [
     category: "tools",
     desc: "Calculate compound interest",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}compound <principal> <annual rate%> <years> [compounds/year]\nExample: ${config.PREFIX}compound 10000 8 10 12`);
+      if (!text) return m.usageReply("compound <principal> <annual rate%> <years> [compounds/year]", "compound 10000 8 10 12");
       const parts = text.trim().split(/\s+/);
       const P = parseFloat(parts[0]);
       const r = parseFloat(parts[1]) / 100;
@@ -83,7 +87,7 @@ const commands = [
       msg += `Final amount: *${fmtMoney(A)}*\n\n`;
       msg += `📊 vs Simple interest: ${fmtMoney(total_simple - P)} (${fmtMoney(total_simple)})\n`;
       msg += `💡 Extra from compounding: ${fmtMoney(A - total_simple)}\n\n`;
-      msg += `_${config.BOT_NAME}_`;
+      msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -92,7 +96,7 @@ const commands = [
     category: "tools",
     desc: "Calculate loan/mortgage monthly payment",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}loan <amount> <annual rate%> <years>\nExample: ${config.PREFIX}loan 200000 6.5 30`);
+      if (!text) return m.usageReply("loan <amount> <annual rate%> <years>", "loan 200000 6.5 30");
       const parts = text.trim().split(/\s+/);
       const P = parseFloat(parts[0]);
       const annualRate = parseFloat(parts[1]);
@@ -116,7 +120,7 @@ const commands = [
       msg += `Total paid:      ${fmtMoney(totalPaid)}\n`;
       msg += `Total interest:  ${fmtMoney(totalInterest)}\n`;
       msg += `Interest ratio:  ${(totalInterest / P * 100).toFixed(1)}%\n\n`;
-      msg += `_${config.BOT_NAME}_`;
+      msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -125,14 +129,16 @@ const commands = [
     category: "tools",
     desc: "Calculate how long to reach a savings goal",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}savings <goal> <monthly saving> [annual interest%]\nExample: ${config.PREFIX}savings 50000 500 5`);
+      if (!text) return m.usageReply("savings <goal> <monthly saving> [annual interest%]", "savings 50000 500 5");
       const parts = text.trim().split(/\s+/);
       const goal = parseFloat(parts[0]);
       const monthly = parseFloat(parts[1]);
       const rate = parseFloat(parts[2] || "0") / 100 / 12;
       if ([goal, monthly].some(isNaN) || goal <= 0 || monthly <= 0) return m.reply("❌ Invalid values.");
       if (monthly >= goal) {
-        return m.reply(`💰 *Savings Calculator*\n\nYou can reach your goal of ${fmtMoney(goal)} in *1 month* saving ${fmtMoney(monthly)}/month!\n\n_${config.BOT_NAME}_`);
+        return m.reply(`💰 *Savings Calculator*\n\nYou can reach your goal of ${fmtMoney(goal)} in *1 month* saving ${fmtMoney(monthly)}/month!\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
       let months, totalInterest = 0;
       if (rate === 0) {
@@ -156,7 +162,9 @@ const commands = [
       msg += `Time needed: *${years > 0 ? `${years} year${years !== 1 ? "s" : ""} ` : ""}${remMonths > 0 ? `${remMonths} month${remMonths !== 1 ? "s" : ""}` : ""}*\n`;
       msg += `Total saved:    ${fmtMoney(monthly * months)}\n`;
       if (totalInterest > 0.01) msg += `Interest earned: ${fmtMoney(totalInterest)}\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -165,7 +173,7 @@ const commands = [
     category: "tools",
     desc: "Calculate income tax amount",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}tax <income> <tax rate%>\nExample: ${config.PREFIX}tax 75000 25`);
+      if (!text) return m.usageReply("tax <income> <tax rate%>", "tax 75000 25");
       const parts = text.trim().split(/\s+/);
       const income = parseFloat(parts[0]);
       const rate = parseFloat(parts[1]);
@@ -179,7 +187,9 @@ const commands = [
       msg += `Tax amount:    ${fmtMoney(taxAmt)}\n`;
       msg += `Net income:    *${fmtMoney(netIncome)}*\n`;
       msg += `Monthly take-home: ${fmtMoney(monthly)}\n\n`;
-      msg += `_Note: This is a simplified flat-rate calculation._\n_${config.BOT_NAME}_`;
+      msg += `_Note: This is a simplified flat-rate calculation._
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -188,7 +198,7 @@ const commands = [
     category: "tools",
     desc: "Calculate discounted price",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}discount <original price> <discount%>\nExample: ${config.PREFIX}discount 250 30`);
+      if (!text) return m.usageReply("discount <original price> <discount%>", "discount 250 30");
       const parts = text.trim().split(/\s+/);
       const price = parseFloat(parts[0]);
       const disc = parseFloat(parts[1]);
@@ -200,7 +210,7 @@ const commands = [
       msg += `Discount:       ${disc}% off\n`;
       msg += `You save:       *${fmtMoney(saved)}*\n`;
       msg += `Final price:    *${fmtMoney(final)}*\n\n`;
-      msg += `_${config.BOT_NAME}_`;
+      msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -258,7 +268,7 @@ const commands = [
     category: "tools",
     desc: "Calculate inflation-adjusted purchasing power",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}inflation <amount> <start year> <end year> [avg inflation%]\nExample: ${config.PREFIX}inflation 1000 2000 2024 3.5`);
+      if (!text) return m.usageReply("inflation <amount> <start year> <end year> [avg inflation%]", "inflation 1000 2000 2024 3.5");
       const parts = text.trim().split(/\s+/);
       const amount = parseFloat(parts[0]);
       const fromYear = parseInt(parts[1]);
@@ -280,7 +290,9 @@ const commands = [
         msg += `Equivalent in ${toYear}: *${fmtMoney(real)}*\n`;
         msg += `Purchasing power gained: ${fmtMoney(amount - real)}\n`;
       }
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },
@@ -299,7 +311,7 @@ const commands = [
         `Example: ${config.PREFIX}unitconv 100 km mi`
       );
       const parts = text.trim().split(/\s+/);
-      if (parts.length < 3) return m.reply(`Usage: ${config.PREFIX}unitconv <value> <from> <to>`);
+      if (parts.length < 3) return m.usageReply("unitconv <value> <from> <to>");
       const val = parseFloat(parts[0]);
       const from = parts[1].toLowerCase();
       const to = parts[2].toLowerCase();
@@ -334,7 +346,9 @@ const commands = [
         return m.reply(`❌ Cannot convert *${from}* to *${to}*. Check the supported units.`);
       }
       const fmt = Math.abs(result) < 0.001 ? result.toExponential(4) : result < 10000 ? parseFloat(result.toFixed(6)).toString() : result.toFixed(2);
-      return m.reply(`📏 *Unit Converter*\n\n${val} ${from} = *${fmt} ${unit}*\n\n_${config.BOT_NAME}_`);
+      return m.reply(`📏 *Unit Converter*\n\n${val} ${from} = *${fmt} ${unit}*\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
     },
   },
   {
@@ -342,7 +356,7 @@ const commands = [
     category: "tools",
     desc: "Calculate profit or loss on a trade/investment",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}profit <buy price> <sell price> [quantity]\nExample: ${config.PREFIX}profit 100 150 10`);
+      if (!text) return m.usageReply("profit <buy price> <sell price> [quantity]", "profit 100 150 10");
       const parts = text.trim().split(/\s+/);
       const buy = parseFloat(parts[0]);
       const sell = parseFloat(parts[1]);
@@ -359,7 +373,9 @@ const commands = [
       msg += `\nChange:       ${isProfit ? "+" : ""}${fmtMoney(diff)} (${isProfit ? "+" : ""}${pct.toFixed(2)}%)\n`;
       if (qty !== 1) msg += `Total ${isProfit ? "profit" : "loss"}: *${isProfit ? "+" : ""}${fmtMoney(total)}*\n`;
       else msg += `Result: *${isProfit ? "Profit" : "Loss"} of ${fmtMoney(Math.abs(diff))}*\n`;
-      msg += `\n_${config.BOT_NAME}_`;
+      msg += `
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
       return m.reply(msg);
     },
   },

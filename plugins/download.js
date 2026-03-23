@@ -575,7 +575,7 @@ const commands = [
     category: "download",
     desc: "Play/download a song from YouTube",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}play <song name>`);
+      if (!text) return m.usageReply("play <song name>");
       m.react("⏳");
       try {
         const results = await ytSearch(text);
@@ -587,7 +587,7 @@ const commands = [
           let msg = `🎵 *Audio Preview*\n\n${formatVideoMeta(first)}\n\n`;
           msg += `⚠️ Direct audio download is temporarily unavailable.\n`;
           msg += `Use the link above and try again shortly.\n\n`;
-          msg += `_${config.BOT_NAME}_`;
+          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
           return m.reply(msg);
         }
         await sock.sendMessage(m.chat, {
@@ -608,7 +608,7 @@ const commands = [
     category: "download",
     desc: "Download YouTube video",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}video <video name or URL>`);
+      if (!text) return m.usageReply("video <video name or URL>");
       m.react("⏳");
       try {
         let videoUrl = text;
@@ -625,10 +625,12 @@ const commands = [
             `🎬 *Video Preview*\n\n${formatVideoMeta(picked)}\n\n` +
             `⚠️ Direct video download is temporarily unavailable.\n` +
             `Use the link above and try again shortly.\n\n` +
-            `_${config.BOT_NAME}_`
+            `_${config.BOT_NAME} · Desam Tech_ ⚡`
           );
         }
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 *${picked.title || "YouTube Video"}*\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 *${picked.title || "YouTube Video"}*\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -641,7 +643,7 @@ const commands = [
     category: "download",
     desc: "Download YouTube audio by URL",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.reply(`Usage: ${config.PREFIX}ytmp3 <YouTube URL>`);
+      if (!text || !isUrl(text)) return m.usageReply("ytmp3 <YouTube URL>");
       m.react("⏳");
       try {
         let audioBuffer = await ytDownloadAudio(text);
@@ -660,7 +662,7 @@ const commands = [
     desc: "Download TikTok video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tiktok <TikTok URL>`);
+      if (!targetUrl) return m.usageReply("tiktok <TikTok URL>");
       m.react("⏳");
       try {
         let videoBuffer = null;
@@ -673,7 +675,9 @@ const commands = [
           console.error('[TikTok Download] tikwm error:', err);
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download TikTok video. The link may be expired, region-locked, or TikTok changed their endpoints.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📱 TikTok Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch (err) {
         m.react("❌");
@@ -688,7 +692,7 @@ const commands = [
     desc: "Download TikTok audio",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}tta <TikTok URL>`);
+      if (!targetUrl) return m.usageReply("tta <TikTok URL>");
       m.react("⏳");
       try {
         let audioBuffer = null;
@@ -716,7 +720,7 @@ const commands = [
     desc: "Download Instagram post/reel",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}ig <Instagram URL>`);
+      if (!targetUrl) return m.usageReply("ig <Instagram URL>");
       if (!/instagram\.com|instagr\.am/i.test(targetUrl)) return m.reply("❌ Please provide a valid Instagram URL.");
       m.react("⏳");
       try {
@@ -725,7 +729,9 @@ const commands = [
           return m.reply("❌ Could not download. The post may be private, age-restricted, or has been removed.");
         }
         const { buffer, type } = result;
-        const caption = `📸 Instagram Download\n\n_${config.BOT_NAME}_`;
+        const caption = `📸 Instagram Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         if (type === "image") {
           await sock.sendMessage(m.chat, { image: buffer, caption }, { quoted: { key: m.key, message: m.message } });
         } else {
@@ -744,13 +750,15 @@ const commands = [
     desc: "Download Facebook video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}fb <Facebook URL>`);
+      if (!targetUrl) return m.usageReply("fb <Facebook URL>");
       if (!/facebook\.com|fb\.watch|fb\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Facebook URL.");
       m.react("⏳");
       try {
         let videoBuffer = await fbDownload(targetUrl);
         if (!videoBuffer) return m.reply("❌ Could not download Facebook video. The download servers may be busy.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📘 Facebook Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📘 Facebook Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -764,13 +772,15 @@ const commands = [
     desc: "Download Twitter/X video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}twitter <Twitter/X URL>`);
+      if (!targetUrl) return m.usageReply("twitter <Twitter/X URL>");
       if (!/twitter\.com|x\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Twitter/X URL.");
       m.react("⏳");
       try {
         let videoBuffer = await twitterDownload(targetUrl);
         if (!videoBuffer) return m.reply("❌ Could not download Twitter video. The download servers may be busy.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🐦 Twitter/X Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🐦 Twitter/X Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -784,7 +794,7 @@ const commands = [
     desc: "Download Spotify track",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}spotify <Spotify URL>`);
+      if (!targetUrl) return m.usageReply("spotify <Spotify URL>");
       m.react("⏳");
       try {
         if (!/spotify\.com/i.test(targetUrl)) return m.reply("❌ Please provide a Spotify URL.");
@@ -823,7 +833,7 @@ const commands = [
     category: "download",
     desc: "Search Pinterest images",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}pinterest <query>`);
+      if (!text) return m.usageReply("pinterest <query>");
       m.react("⏳");
       try {
         let imgBuffer = null;
@@ -853,7 +863,9 @@ const commands = [
           } catch {}
         }
         if (!imgBuffer || imgBuffer.length < 1000) return m.reply("❌ No images found for that query.");
-        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `📌 *${text}* (via ${imgSource})\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { image: imgBuffer, caption: `📌 *${text}* (via ${imgSource})\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -867,7 +879,7 @@ const commands = [
     desc: "Download from MediaFire",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}mediafire <MediaFire URL>`);
+      if (!targetUrl) return m.usageReply("mediafire <MediaFire URL>");
       m.react("⏳");
       try {
         if (!/^https?:\/\/(www\.)?mediafire\.com\//i.test(targetUrl)) return m.reply("❌ Please provide a valid MediaFire URL.");
@@ -890,7 +902,7 @@ const commands = [
     category: "download",
     desc: "Search APK from Google Play Store",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}apk <app name>`);
+      if (!text) return m.usageReply("apk <app name>");
       m.react("⏳");
       try {
         const { default: gplay } = require("google-play-scraper");
@@ -914,7 +926,7 @@ const commands = [
           msg += `   📦 APKPure: https://apkpure.com/${app.appId.replace(/\./g, '-')}/${app.appId}\n`;
           msg += `\n`;
         });
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch (err) {
@@ -930,7 +942,7 @@ const commands = [
     desc: "Download from Google Drive",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}gdrive <Google Drive URL>`);
+      if (!targetUrl) return m.usageReply("gdrive <Google Drive URL>");
       m.react("⏳");
       try {
         const match = targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
@@ -952,7 +964,7 @@ const commands = [
     desc: "Download from SoundCloud",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}soundcloud <SoundCloud URL>`);
+      if (!targetUrl) return m.usageReply("soundcloud <SoundCloud URL>");
       if (!/soundcloud\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid SoundCloud URL.");
       m.react("⏳");
       try {
@@ -983,7 +995,7 @@ const commands = [
     desc: "Download Reddit video/image",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}reddit <Reddit URL>`);
+      if (!targetUrl) return m.usageReply("reddit <Reddit URL>");
       m.react("⏳");
       try {
         let mediaBuffer = null;
@@ -1017,7 +1029,9 @@ const commands = [
           } catch {}
         }
         if (!mediaBuffer || mediaBuffer.length < 1000) return m.reply("❌ Could not download Reddit media.");
-        const caption = `🔴 Reddit Download\n\n_${config.BOT_NAME}_`;
+        const caption = `🔴 Reddit Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         if (isVideo) {
           await sock.sendMessage(m.chat, { video: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
         } else {
@@ -1036,7 +1050,7 @@ const commands = [
     desc: "Download Snapchat Spotlight/Story video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}snap <Snapchat URL>`);
+      if (!targetUrl) return m.usageReply("snap <Snapchat URL>");
       if (!/snapchat\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Snapchat URL.");
       m.react("⏳");
       try {
@@ -1081,7 +1095,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download. Only public Snapchat Spotlight videos are supported.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `👻 Snapchat Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `👻 Snapchat Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1095,7 +1111,7 @@ const commands = [
     desc: "Download Vimeo video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}vimeo <Vimeo URL>`);
+      if (!targetUrl) return m.usageReply("vimeo <Vimeo URL>");
       if (!/vimeo\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Vimeo URL.");
       m.react("⏳");
       try {
@@ -1132,7 +1148,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Vimeo video. It may be password-protected or private.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Vimeo Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Vimeo Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1146,7 +1164,7 @@ const commands = [
     desc: "Download Dailymotion video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}dm <Dailymotion URL>`);
+      if (!targetUrl) return m.usageReply("dm <Dailymotion URL>");
       if (!/dailymotion\.com|dai\.ly/i.test(targetUrl)) return m.reply("❌ Please provide a valid Dailymotion URL.");
       m.react("⏳");
       try {
@@ -1183,7 +1201,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Dailymotion video.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📺 Dailymotion Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📺 Dailymotion Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1197,7 +1217,7 @@ const commands = [
     desc: "Download Likee video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}likee <Likee URL>`);
+      if (!targetUrl) return m.usageReply("likee <Likee URL>");
       if (!/likee\.com|like\.video/i.test(targetUrl)) return m.reply("❌ Please provide a valid Likee URL.");
       m.react("⏳");
       try {
@@ -1233,7 +1253,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Likee video.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `❤️ Likee Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `❤️ Likee Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1247,7 +1269,7 @@ const commands = [
     desc: "Download Kwai video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}kwai <Kwai URL>`);
+      if (!targetUrl) return m.usageReply("kwai <Kwai URL>");
       if (!/kwai\.com|kwai\.net/i.test(targetUrl)) return m.reply("❌ Please provide a valid Kwai URL.");
       m.react("⏳");
       try {
@@ -1280,7 +1302,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Kwai video.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Kwai Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Kwai Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1294,7 +1318,7 @@ const commands = [
     desc: "Download Threads (Meta) post media",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}threads <Threads URL>`);
+      if (!targetUrl) return m.usageReply("threads <Threads URL>");
       if (!/threads\.net/i.test(targetUrl)) return m.reply("❌ Please provide a valid Threads URL.");
       m.react("⏳");
       try {
@@ -1335,7 +1359,9 @@ const commands = [
           } catch {}
         }
         if (!mediaBuffer || mediaBuffer.length < 1000) return m.reply("❌ Could not download Threads post. Only public posts with media are supported.");
-        const caption = `🧵 Threads Download\n\n_${config.BOT_NAME}_`;
+        const caption = `🧵 Threads Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         if (isVideo) {
           await sock.sendMessage(m.chat, { video: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
         } else {
@@ -1354,7 +1380,7 @@ const commands = [
     desc: "Download LinkedIn video post",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}linkedin <LinkedIn URL>`);
+      if (!targetUrl) return m.usageReply("linkedin <LinkedIn URL>");
       if (!/linkedin\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid LinkedIn URL.");
       m.react("⏳");
       try {
@@ -1387,7 +1413,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download. LinkedIn videos must be public posts.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `💼 LinkedIn Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `💼 LinkedIn Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1401,7 +1429,7 @@ const commands = [
     desc: "Download CapCut video",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}capcut <CapCut URL>`);
+      if (!targetUrl) return m.usageReply("capcut <CapCut URL>");
       if (!/capcut\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid CapCut URL.");
       m.react("⏳");
       try {
@@ -1434,7 +1462,9 @@ const commands = [
           } catch {}
         }
         if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download CapCut video. The video must be publicly shared.");
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `✂️ CapCut Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `✂️ CapCut Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
@@ -1448,7 +1478,7 @@ const commands = [
     desc: "Download Pinterest pin/video from URL",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
-      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}pindl <Pinterest URL>`);
+      if (!targetUrl) return m.usageReply("pindl <Pinterest URL>");
       if (!/pinterest\.com|pin\.it/i.test(targetUrl)) return m.reply("❌ Please provide a valid Pinterest URL.");
       m.react("⏳");
       try {
@@ -1489,7 +1519,9 @@ const commands = [
           } catch {}
         }
         if (!mediaBuffer || mediaBuffer.length < 1000) return m.reply("❌ Could not download Pinterest media.");
-        const caption = `📌 Pinterest Download\n\n_${config.BOT_NAME}_`;
+        const caption = `📌 Pinterest Download\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`;
         if (isVideo) {
           await sock.sendMessage(m.chat, { video: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
         } else {

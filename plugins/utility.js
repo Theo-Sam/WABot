@@ -47,7 +47,7 @@ const commands = [
     category: "utility",
     desc: "Convert currency",
     handler: async (sock, m, { args }) => {
-      if (args.length < 3) return m.reply(`Usage: ${config.PREFIX}currency <amount> <from> <to>\nExample: ${config.PREFIX}currency 100 USD GHS`);
+      if (args.length < 3) return m.usageReply("currency <amount> <from> <to>", "currency 100 USD GHS");
       const amount = parseFloat(args[0]);
       const from = args[1].toUpperCase();
       const to = args[2].toUpperCase();
@@ -83,12 +83,12 @@ const commands = [
         msg += `📊 1 ${from} = ${rate.toFixed(4)} ${to}\n`;
         msg += `📊 1 ${to} = ${reverseRate} ${from}\n`;
         msg += `📅 Updated: ${new Date().toLocaleDateString()}\n\n`;
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Currency API is currently overloaded.");
+        return m.apiErrorReply("Currency");
       }
     },
   },
@@ -97,7 +97,7 @@ const commands = [
     category: "utility",
     desc: "Get country information",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}country <country name>`);
+      if (!text) return m.usageReply("country <country name>");
       m.react("🌍");
       try {
         const data = await fetchJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(text)}`).catch(() => null);
@@ -157,7 +157,7 @@ const commands = [
         msg += `🚗 Driving Side: ${c.car?.side === "right" ? "Right ➡️" : "Left ⬅️"}\n`;
         if (c.timezones?.length) msg += `🕐 Timezones: ${c.timezones.join(", ")}\n`;
         msg += `\n`;
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
 
         const flagUrl = c.flags?.png;
         if (flagUrl) {
@@ -172,7 +172,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Country API is currently overloaded.");
+        return m.apiErrorReply("Country");
       }
     },
   },
@@ -181,7 +181,7 @@ const commands = [
     category: "utility",
     desc: "Calculate BMI",
     handler: async (sock, m, { args }) => {
-      if (args.length < 2) return m.reply(`Usage: ${config.PREFIX}bmi <weight_kg> <height_cm>\nExample: ${config.PREFIX}bmi 70 175`);
+      if (args.length < 2) return m.usageReply("bmi <weight_kg> <height_cm>", "bmi 70 175");
       const weight = parseFloat(args[0]);
       const heightCm = parseFloat(args[1]);
       if (!Number.isFinite(weight) || !Number.isFinite(heightCm) || heightCm <= 0) return m.reply("Invalid numbers.");
@@ -200,7 +200,7 @@ const commands = [
     category: "utility",
     desc: "Calculate age from date (YYYY-MM-DD)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}age <YYYY-MM-DD>\nExample: ${config.PREFIX}age 2000-01-31`);
+      if (!text) return m.usageReply("age <YYYY-MM-DD>", "age 2000-01-31");
       const birth = new Date(text);
       if (Number.isNaN(birth.getTime())) return m.reply("❌ Invalid date. Use format YYYY-MM-DD.");
       const now = new Date();
@@ -271,7 +271,7 @@ const commands = [
     desc: "Hash text (MD5/SHA1/SHA256)",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
-      if (!input) return m.reply(`Usage: ${config.PREFIX}hash <text>`);
+      if (!input) return m.usageReply("hash <text>");
       const md5 = crypto.createHash("md5").update(input).digest("hex");
       const sha1 = crypto.createHash("sha1").update(input).digest("hex");
       const sha256 = crypto.createHash("sha256").update(input).digest("hex");
@@ -288,7 +288,7 @@ const commands = [
     category: "utility",
     desc: "DNS lookup (A/MX/NS/TXT/AAAA)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}whois <domain>`);
+      if (!text) return m.usageReply("whois <domain>");
       m.react("⏳");
       try {
         const domain = String(text).replace(/^https?:\/\//i, "").split("/")[0].trim();
@@ -314,12 +314,12 @@ const commands = [
         msg += formatAnswers(dnsMX, "MX Records", 15);
         msg += formatAnswers(dnsNS, "NS Records", 2);
         msg += formatAnswers(dnsTXT, "TXT Records", 16);
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg.trim());
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The DNS lookup API is currently overloaded.");
+        return m.apiErrorReply("DNS lookup");
       }
     },
   },
@@ -345,7 +345,7 @@ const commands = [
         msg += `🧮 Cores: ${cpus.length}\n\n`;
         msg += `💾 RAM: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)} / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
         msg += `⏱️ Uptime: ${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m\n\n`;
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -359,7 +359,7 @@ const commands = [
     category: "utility",
     desc: "Get daily horoscope",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}zodiac <sign>\nSigns: aries, taurus, gemini, cancer, leo, virgo, libra, scorpio, sagittarius, capricorn, aquarius, pisces`);
+      if (!text) return m.usageReply("zodiac <sign>\nSigns: aries, taurus, gemini, cancer, leo, virgo, libra, scorpio, sagittarius, capricorn, aquarius, pisces");
       m.react("♈");
       try {
         const validSigns = ["aries","taurus","gemini","cancer","leo","virgo","libra","scorpio","sagittarius","capricorn","aquarius","pisces"];
@@ -382,11 +382,13 @@ const commands = [
 
         if (!horoscope) return m.reply("❌ Could not retrieve horoscope right now. Try again later.");
 
-        await m.reply(`🔮 *Daily Horoscope*\n\n♈ Sign: *${sign[0].toUpperCase() + sign.slice(1)}*\n📅 ${new Date().toLocaleDateString()}\n\n${horoscope}\n\n_${config.BOT_NAME}_`);
+        await m.reply(`🔮 *Daily Horoscope*\n\n♈ Sign: *${sign[0].toUpperCase() + sign.slice(1)}*\n📅 ${new Date().toLocaleDateString()}\n\n${horoscope}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`);
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Horoscope API is currently overloaded.");
+        return m.apiErrorReply("Horoscope");
       }
     },
   },
@@ -413,12 +415,12 @@ const commands = [
           msg += `🧮 *Math:* Square = ${n * n}, Cube = ${n * n * n}.\n\n`;
           msg += `📅 *Year:* Roman numerals: ${toRoman(Math.max(1, Math.min(n, 3999)))}.\n\n`;
         }
-        msg += `_${config.BOT_NAME} | Powered by Desam Tech_ ⚡`;
+        msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
         await m.reply(msg.trim());
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Number Fact API is currently overloaded.");
+        return m.apiErrorReply("Number Fact");
       }
     },
   },

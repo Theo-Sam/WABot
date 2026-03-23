@@ -44,7 +44,7 @@ const commands = [
     category: "search",
     desc: "Search for images",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}img <query>`);
+      if (!text) return m.usageReply("img <query>");
       m.react("⏳");
       try {
         const imageUrl = await findImageUrl(text);
@@ -52,12 +52,14 @@ const commands = [
         const heading = pickNonRepeating(imageSearchCaptions, `${m.chat}:img-caption`, { maxHistory: 2 });
         await sock.sendMessage(m.chat, {
           image: buffer,
-          caption: `${heading}\nQuery: ${text}\n\n_${config.BOT_NAME}_`,
+          caption: `${heading}\nQuery: ${text}\n
+────────────────────────────────
+_${config.BOT_NAME} · Desam Tech_ ⚡`,
         }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Image Search API is currently overloaded.");
+        return m.apiErrorReply("Image Search");
       }
     },
   },
@@ -76,7 +78,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Image Upload API is currently overloaded.");
+        return m.apiErrorReply("Image Upload");
       }
     },
   },

@@ -33,7 +33,7 @@ const commands = [
     category: "religious",
     desc: "Get a Bible verse",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}bible <reference> [| <versions>]\nExample: ${config.PREFIX}bible John 3:16\n${config.PREFIX}bible Psalm 23:1 | kjv, web, bbe`);
+      if (!text) return m.usageReply("bible <reference> [| <versions>]", "bible John 3:16\n${config.PREFIX}bible Psalm 23:1 | kjv, web, bbe");
       m.react("📖");
       try {
         let reference = text;
@@ -78,7 +78,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Bible API is currently overloaded or one or more versions are invalid.");
+        return m.apiErrorReply("Bible");
       }
     },
   },
@@ -120,7 +120,7 @@ const commands = [
     category: "religious",
     desc: "Get a Quran verse",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}quran <surah>:<ayah>\nExample: ${config.PREFIX}quran 1:1\n${config.PREFIX}quran 2:255`);
+      if (!text) return m.usageReply("quran <surah>:<ayah>", "quran 1:1\n${config.PREFIX}quran 2:255");
       m.react("📖");
       try {
         const cleaned = String(text || "").trim();

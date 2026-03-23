@@ -48,7 +48,7 @@ const commands = [
     category: "tools",
     desc: "Text to speech",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}tts <text>`);
+      if (!text) return m.usageReply("tts <text>");
       m.react("⏳");
       try {
         const lang = (process.env.TTS_LANG || "en").trim();
@@ -84,7 +84,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ The TTS API is currently overloaded.");
+        return m.apiErrorReply("TTS");
       }
     },
   },
@@ -93,7 +93,7 @@ const commands = [
     category: "tools",
     desc: "Calculate math expression",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}calc <expression>\nExample: ${config.PREFIX}calc 2+2*3`);
+      if (!text) return m.usageReply("calc <expression>", "calc 2+2*3");
       try {
         const safe = text.replace(/[^0-9+\-*/.()% ]/g, "");
         if (!safe) return m.reply("Invalid expression.");
@@ -109,7 +109,7 @@ const commands = [
     category: "tools",
     desc: "Encode text to base64",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}base64encode <text>`);
+      if (!text) return m.usageReply("base64encode <text>");
       const encoded = Buffer.from(text).toString("base64");
       await m.reply(`🔐 *Base64 Encode*\n\n${encoded}`);
     },
@@ -119,7 +119,7 @@ const commands = [
     category: "tools",
     desc: "Decode base64 text",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}base64decode <text>`);
+      if (!text) return m.usageReply("base64decode <text>");
       try {
         const decoded = Buffer.from(text, "base64").toString("utf-8");
         await m.reply(`🔓 *Base64 Decode*\n\n${decoded}`);
@@ -133,7 +133,7 @@ const commands = [
     category: "tools",
     desc: "Get weather info for a city",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}wea <city>`);
+      if (!text) return m.usageReply("wea <city>");
       m.react("⏳");
       try {
         const data = await fetchJson(`${endpoints.weather.wttrBase}/${encodeURIComponent(text)}?format=j1`);
@@ -257,7 +257,7 @@ const commands = [
     category: "fun",
     desc: "Ask the magic 8-ball",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}8ball <question>`);
+      if (!text) return m.usageReply("8ball <question>");
       const answer = pickNonRepeating(magic8Answers, `${m.chat}:8ball`, { maxHistory: 6 });
       await m.reply(`🎱 *Magic 8-Ball*\n\n❓ Question: ${text}\n🔮 Answer: ${answer}`);
     },

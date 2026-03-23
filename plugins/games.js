@@ -147,7 +147,7 @@ const commands = [
       const sub = args[0];
       if (!sub) {
         const target = m.mentions[0];
-        if (!target) return m.reply(`Usage:\n${config.PREFIX}ttt @player - Start a game\n${config.PREFIX}ttt <1-9> - Make a move\n${config.PREFIX}ttt end - End current game`);
+        if (!target) return m.usageReply("ttt @player", "ttt @player", [], "Use .ttt <1-9> to make a move during a game");
         const gameId = m.isGroup ? m.chat : [m.sender, target].sort().join("-");
         if (tttGames.has(gameId)) return m.reply("A game is already in progress! Use .ttt end to finish it.");
         const game = new TicTacToe(m.sender, target);
@@ -255,7 +255,7 @@ const commands = [
           _opentdbTokenExpiry = 0;
           data = await fetchJson("https://opentdb.com/api.php?amount=1&type=multiple");
         }
-        if (!data?.results?.[0]) return m.reply("❌ Failed to get trivia.");
+        if (!data?.results?.[0]) return m.errorReply("Failed to get trivia. Please try again.");
         const q = data.results[0];
         const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
         const answers = [...q.incorrect_answers, q.correct_answer].sort(() => Math.random() - 0.5).map(decode);
@@ -273,7 +273,7 @@ const commands = [
         }, 15000);
       } catch {
         m.react("❌");
-        await m.reply("⏳ The Trivia API is currently overloaded.");
+        return m.apiErrorReply("Trivia");
       }
     },
   },
@@ -294,7 +294,7 @@ const commands = [
     category: "fun",
     desc: "Play Rock Paper Scissors",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}rps rock/paper/scissors`);
+      if (!text) return m.usageReply("rps rock/paper/scissors");
       const choices = ["rock", "paper", "scissors"];
       const emojis = { rock: "🪨", paper: "📄", scissors: "✂️" };
       const userChoice = text.toLowerCase();
@@ -327,7 +327,7 @@ const commands = [
     category: "fun",
     desc: "Pick random item from list",
     handler: async (sock, m, { text }) => {
-      if (!text || !text.includes(",")) return m.reply(`Usage: ${config.PREFIX}choose option1, option2, option3`);
+      if (!text || !text.includes(",")) return m.usageReply("choose option1, option2, option3");
       const options = text.split(",").map((o) => o.trim()).filter(Boolean);
       if (options.length < 2) return m.reply("Provide at least 2 options separated by commas.");
       const picked = pickNonRepeating(options, `${m.chat}:pickone:${options.join("|").toLowerCase()}`, { maxHistory: Math.min(3, options.length - 1) });
@@ -359,7 +359,7 @@ const commands = [
     category: "fun",
     desc: "Rate something",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.reply(`Usage: ${config.PREFIX}rate <something>`);
+      if (!text) return m.usageReply("rate <something>");
       const rating = Math.floor(Math.random() * 11);
       const stars = "⭐".repeat(Math.min(rating, 5)) + "☆".repeat(Math.max(0, 5 - rating));
       await m.reply(`📊 *Rating*\n\n"${text}"\n\n${stars}\nScore: *${rating}/10*`);
