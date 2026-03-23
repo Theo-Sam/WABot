@@ -246,7 +246,48 @@ async function igDownloadFreeApi(url) {
       const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
       return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
     },
-    // SaveIG (Priority 2)
+    // SnapInsta (Priority 2 - updated domain)
+    async () => {
+      const res = await axios.post(
+        'https://snapinsta.to/api/ajaxSearch',
+        `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapinsta.to', 'Referer': 'https://snapinsta.to/' }, timeout: 15000 }
+      );
+      const links = res.data?.data?.url || [];
+      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
+      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
+      const pick = video || image;
+      if (!pick?.url) return null;
+      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
+      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
+    },
+    // Cobalt Community Instances (Priority 3 - v10 Bridge)
+    async () => {
+      const cobaltInstances = [
+        'https://cobalt-api.meowing.de/api/json',
+        'https://kityune.imput.net/api/json',
+        'https://cobalt-backend.canine.tools/api/json'
+      ];
+      for (const inst of cobaltInstances) {
+        try {
+          const res = await axios.post(inst, {
+            url: url,
+            downloadMode: 'auto'
+          }, { 
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': headers['User-Agent'] },
+            timeout: 15000 
+          });
+          const mediaUrl = res.data?.url || res.data?.picker?.[0]?.url;
+          if (mediaUrl) {
+            const isVideo = res.data?.status === 'stream' || mediaUrl.includes('.mp4');
+            const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+            if (buf?.length > 1000) return { buffer: buf, type: isVideo ? 'video' : 'image' };
+          }
+        } catch {}
+      }
+      return null;
+    },
+    // SaveIG (Priority 4)
     async () => {
       const res = await axios.post(
         'https://saveig.app/api/ajaxSearch',
@@ -260,34 +301,6 @@ async function igDownloadFreeApi(url) {
       if (!pick?.url) return null;
       const buf = await fetchBuffer(pick.url, { timeout: 60000 });
       return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
-    },
-    // SnapInsta
-    async () => {
-      const res = await axios.post(
-        'https://snapinsta.app/api/ajaxSearch',
-        `q=${encodeURIComponent(url)}&t=media&lang=en`,
-        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapinsta.app', 'Referer': 'https://snapinsta.app/' }, timeout: 15000 }
-      );
-      const links = res.data?.data?.url || [];
-      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
-      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
-      const pick = video || image;
-      if (!pick?.url) return null;
-      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
-    },
-    // Insta-Downloader API (JSON endpoint)
-    async () => {
-      const res = await axios.get(
-        `https://api.instadownloader.org/v1/?url=${encodeURIComponent(url)}`,
-        { headers, timeout: 15000 }
-      );
-      const media = res.data?.media || res.data?.url;
-      const mediaUrl = Array.isArray(media) ? media[0]?.url : (typeof media === 'string' ? media : null);
-      if (!mediaUrl) return null;
-      const isVideo = mediaUrl.includes('.mp4') || res.data?.type === 'video';
-      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
     },
   ];
 
