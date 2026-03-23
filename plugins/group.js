@@ -330,6 +330,7 @@ const commands = [
     handler: async (sock, m, { text }) => {
       if (!text) return m.reply("Provide a phone number to add.");
       const num = text.replace(/[^0-9]/g, "");
+      if (num.startsWith("0")) return m.reply("❌ Please provide the number with the country code (e.g., 233... or 1...). Local numbers starting with '0' are not allowed.");
       const jid = `${num}@s.whatsapp.net`;
       const res = await sock.groupParticipantsUpdate(m.chat, [jid], "add").catch(() => null);
       if (res) {

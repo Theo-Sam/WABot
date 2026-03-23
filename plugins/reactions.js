@@ -18,7 +18,9 @@ const commands = [
     desc: "Forward a message to a contact",
     handler: async (sock, m, { text }) => {
       if (!m.quoted) return m.reply(`Reply to a message, then use:\n${config.PREFIX}forward @mention  or  ${config.PREFIX}forward <number>\nExample: ${config.PREFIX}forward 233241234567`);
-      const target = m.mentions[0] || (text ? text.replace(/\D/g, "") + "@s.whatsapp.net" : null);
+      let phoneNum = text ? text.replace(/\D/g, "") : null;
+      if (phoneNum && phoneNum.startsWith("0") && !m.mentions[0]) return m.reply("❌ Please provide the number with the country code (e.g., 233... or 1...). Local numbers starting with '0' are not allowed.");
+      const target = m.mentions[0] || (phoneNum ? phoneNum + "@s.whatsapp.net" : null);
       if (!target) return m.reply("Tag someone or provide a phone number with country code.");
       try {
         await sock.sendMessage(target, { forward: { key: m.quoted.key, message: m.quoted.message } });

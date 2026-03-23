@@ -236,7 +236,17 @@ async function igDownloadFreeApi(url) {
   };
 
   const tryApis = [
-    // SaveIG
+    // Nyxs API (Priority 1 - reliable)
+    async () => {
+      const res = await fetchJson(`https://api.nyxs.pw/dl/ig?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+      const media = res?.result;
+      const mediaUrl = Array.isArray(media) ? media[0]?.url : media?.url;
+      if (!mediaUrl) return null;
+      const isVideo = mediaUrl.includes('.mp4') || res?.result?.[0]?.type === 'video';
+      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
+    },
+    // SaveIG (Priority 2)
     async () => {
       const res = await axios.post(
         'https://saveig.app/api/ajaxSearch',

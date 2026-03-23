@@ -29,14 +29,28 @@ async function pollinate(prompt, persona = "openai") {
 
   // No-key default: use Pollinations (community/free endpoint; may rate-limit).
   if (!openaiKey) {
-    const payload = { model: "openai", messages };
-    const data = await postJson("https://text.pollinations.ai/openai", payload, {
-      timeout: 30000,
-      headers: { "Content-Type": "application/json" },
-    });
-    const answer = data?.choices?.[0]?.message?.content;
-    if (!answer || answer.length < 2) throw new Error("empty");
-    return normalizeAiText(answer, { keepLightFormatting: true });
+    try {
+      const payload = { model: "openai", messages };
+      const data = await postJson("https://text.pollinations.ai/openai", payload, {
+        timeout: 30000,
+        headers: { "Content-Type": "application/json" },
+      });
+      const answer = data?.choices?.[0]?.message?.content;
+      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+    } catch {}
+
+    // Fallbacks for when Pollinations is rate-limited or fails
+    try {
+      const fb1 = await fetchJson(`https://api.vyturex.com/prompt=${encodeURIComponent(prompt)}`, { timeout: 15000 });
+      if (fb1 && typeof fb1 === "string") return normalizeAiText(fb1, { keepLightFormatting: true });
+    } catch {}
+
+    try {
+      const fb2 = await fetchJson(`https://api.nyxs.pw/ai/gpt4?text=${encodeURIComponent(prompt)}`, { timeout: 15000 });
+      if (fb2 && fb2.result) return normalizeAiText(fb2.result, { keepLightFormatting: true });
+    } catch {}
+
+    throw new Error("empty");
   }
 
   // If user explicitly configures a paid key, use official OpenAI.
@@ -56,10 +70,11 @@ async function fetchGeneratedImage(prompt) {
 
   // 1. Pollinations — fast, try multiple models with short timeout
   const safePrompt = encodeURIComponent(String(prompt || "").slice(0, 400));
+  const seed = Math.floor(Math.random() * 1000000);
   const pollinationsModels = ["sana", "zimage", "turbo", ""];
   for (const model of pollinationsModels) {
     const modelParam = model ? `&model=${model}` : "";
-    const url = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true${modelParam}`;
+    const url = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true&seed=${seed}${modelParam}`;
     try {
       const buf = await fetchBuffer(url, { timeout: 20000 });
       if (buf && buf.length > 2048) return buf;

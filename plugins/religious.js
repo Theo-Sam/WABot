@@ -150,13 +150,13 @@ const commands = [
           english = enRes?.data || null;
         }
 
-        // Fallback: try a second Quran API if primary failed entirely
-        if (!arabic && !english) {
+        // Fallback: try a second Quran API if primary failed partially or entirely
+        if (!arabic || !english) {
           const fb = await fetchJson(`https://quranapi.pages.dev/api/${surah}/${ayah}.json`).catch(() => null);
-          if (fb?.arabic1) {
+          if (fb?.arabic1 && !arabic) {
             arabic = { text: fb.arabic1, surah: { englishName: fb.surahName || `Surah ${surah}`, name: fb.surahNameArabic || "" }, numberInSurah: ayah };
           }
-          if (fb?.english) {
+          if (fb?.english && !english) {
             english = { text: fb.english, surah: { englishName: fb.surahName || `Surah ${surah}`, name: fb.surahNameArabic || "" }, numberInSurah: ayah };
           }
         }
