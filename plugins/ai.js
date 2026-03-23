@@ -290,14 +290,14 @@ const commands = [
       await m.reply(`🎨 Generating image for: *${text}*\n\n_This may take up to 30 seconds..._`);
       try {
         const imgBuffer = await fetchGeneratedImage(text);
-        if (!imgBuffer) return m.reply("⏳ Image generation is currently busy. Try again in a moment.");
+        if (!imgBuffer) return m.apiErrorReply("Image Generation");
         await sock.sendMessage(m.chat, { image: imgBuffer, caption: `🎨 *AI Generated Image*\n\nPrompt: ${text}\n
 ────────────────────────────────
 _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Image generation temporarily failed. Please try again.");
+        return m.apiErrorReply("Image Generation");
       }
     },
   },

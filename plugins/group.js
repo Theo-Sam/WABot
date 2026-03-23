@@ -74,7 +74,7 @@ async function handleAntilink(sock, m, { groupMeta }) {
   );
   if (isAdmin) return false;
 
-  const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, "");
+  const ownerNum = String(config.OWNER_NUMBER || "").replace(/[^0-9]/g, "");
   if (m.sender.replace(/@.+/, "") === ownerNum) return false;
 
   const urls = extractUrls(m.body);

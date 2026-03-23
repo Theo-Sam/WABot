@@ -96,7 +96,7 @@ const commands = [
         const thumIoUrl = `https://image.thum.io/get/width/1920/noanimate/${text}`;
         const buffer = await fetchBuffer(thumIoUrl).catch(() => null);
 
-        if (!buffer) return m.reply("⏳ Screenshot service is currently busy. Try again later.");
+        if (!buffer) return m.errorReply("Screenshot service is currently busy.", "Try again in a moment.");
         await sock.sendMessage(m.chat, { image: buffer, caption: `📸 *Screenshot*\n\n🔗 ${text}` }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {

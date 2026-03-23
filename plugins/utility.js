@@ -350,7 +350,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Speed test failed. Server might be busy.");
+        return m.apiErrorReply("Speed test");
       }
     },
   },

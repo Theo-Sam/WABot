@@ -82,7 +82,7 @@ const commands = [
         }
         if (!flat.length) {
           m.react("❌");
-          return m.reply("⏳ No search results found. Try a different query.");
+          return m.noResultReply(text, "Try a different or simpler query");
         }
         let msg = `🔎 *Search Results*\n\n`;
         msg += `🔎 Query: *${text}*\n\n`;
@@ -130,7 +130,7 @@ const commands = [
             }
           } catch {}
         }
-        if (!lyrics) return m.reply("⏳ Lyrics not found. Try: artist - song title");
+        if (!lyrics) return m.noResultReply("lyrics", "Try formatting as: artist - song title");
         let msg = `🎵 *Song Lyrics*\n\n`;
         msg += `🎶 *${title}*\n`;
         if (artist) msg += `🎤 Artist: ${artist}\n`;

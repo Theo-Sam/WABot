@@ -599,7 +599,7 @@ const commands = [
       } catch (err) {
         console.error("[DESAM] play error:", err.message);
         m.react("❌");
-        await m.reply("⏳ Server busy: Failed to download song.");
+        return m.apiErrorReply("YouTube");
       }
     },
   },
@@ -634,7 +634,7 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Server busy: Failed to download video.");
+        return m.apiErrorReply("YouTube");
       }
     },
   },
@@ -647,12 +647,12 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
       m.react("⏳");
       try {
         let audioBuffer = await ytDownloadAudio(text);
-        if (!audioBuffer) return m.reply("⏳ Audio download failed. The download servers may be busy.");
+        if (!audioBuffer) return m.errorReply("Audio download failed. The servers may be busy.", `Try using a direct YouTube URL with ${config.PREFIX}ytmp3`);
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
         m.react("❌");
-        await m.reply("⏳ Server busy: Failed to download audio.");
+        return m.apiErrorReply("YouTube");
       }
     },
   },
