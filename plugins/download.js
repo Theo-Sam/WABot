@@ -569,88 +569,157 @@ function formatVideoMeta(item = {}) {
   return lines.join("\n");
 }
 
+const AUDIO_SIZE_LIMIT = 15 * 1024 * 1024; // 15 MB — WhatsApp audio cap
+const VIDEO_SIZE_LIMIT = 60 * 1024 * 1024; // 60 MB — WhatsApp video cap
+
 const commands = [
+  // ── .music — YouTube audio downloader (search by name OR paste URL) ──────
   {
-    name: ["play", "song", "music", "p", "m"],
+    name: ["music", "song", "play", "mp3", "ytsong", "yta"],
     category: "download",
-    desc: "Play/download a song from YouTube",
+    desc: "Download a song from YouTube as audio",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.usageReply("play <song name>");
+      if (!text) return m.usageReply(
+        "music <song name or YouTube URL>",
+        `music Shape of You\n${config.PREFIX}music https://youtu.be/JGwWNGJdvx8`
+      );
       m.react("⏳");
       try {
-        const results = await ytSearch(text);
-        if (!results.length) return m.reply("❌ No results found. Try a different search term.");
-        const first = results[0];
-        const { url: videoUrl, title } = first;
-        let audioBuffer = await ytDownloadAudio(videoUrl);
-        if (!audioBuffer) {
-          let msg = `🎵 *Audio Preview*\n\n${formatVideoMeta(first)}\n\n`;
-          msg += `⚠️ Direct audio download is temporarily unavailable.\n`;
-          msg += `Use the link above and try again shortly.\n\n`;
-          msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
-          return m.reply(msg);
-        }
-        await sock.sendMessage(m.chat, {
-          audio: audioBuffer,
-          mimetype: "audio/mpeg",
-          fileName: `${title}.mp3`,
-        }, { quoted: { key: m.key, message: m.message } });
-        m.react("✅");
-      } catch (err) {
-        console.error("[DESAM] play error:", err.message);
-        m.react("❌");
-        return m.apiErrorReply("YouTube");
-      }
-    },
-  },
-  {
-    name: ["video", "ytmp4", "ytvideo", "youtube", "yt", "v"],
-    category: "download",
-    desc: "Download YouTube video",
-    handler: async (sock, m, { text }) => {
-      if (!text) return m.usageReply("video <video name or URL>");
-      m.react("⏳");
-      try {
-        let videoUrl = text;
-        let picked = { title: text, url: text };
-        if (!isUrl(text)) {
+        let videoUrl, picked;
+
+        if (isUrl(text)) {
+          // Direct URL — skip search, build a minimal info object
+          videoUrl = text;
+          picked = { title: "Audio", url: text, author: "", duration: "" };
+          // Try to get title from yt-dlp metadata (best effort)
+          try {
+            const results = await ytSearch(text);
+            if (results.length) picked = results[0];
+          } catch {}
+        } else {
           const results = await ytSearch(text);
-          if (!results.length) return m.reply("❌ No results found.");
+          if (!results.length) {
+            m.react("❌");
+            return m.noResultReply(text, "Try a more specific song name or paste a YouTube URL directly");
+          }
           picked = results[0];
           videoUrl = picked.url;
         }
-        let videoBuffer = await ytDownloadVideo(videoUrl);
-        if (!videoBuffer) {
-          return m.reply(
-            `🎬 *Video Preview*\n\n${formatVideoMeta(picked)}\n\n` +
-            `⚠️ Direct video download is temporarily unavailable.\n` +
-            `Use the link above and try again shortly.\n\n` +
-            `_${config.BOT_NAME} · Desam Tech_ ⚡`
+
+        // Inform user which song was found (before the slow download)
+        const infoLines = [];
+        if (picked.title && picked.title !== "Audio") infoLines.push(`🎵 *${picked.title}*`);
+        if (picked.author) infoLines.push(`👤 ${picked.author}`);
+        if (picked.duration) infoLines.push(`⏱️ ${picked.duration}`);
+        if (infoLines.length) await m.reply(infoLines.join("\n") + "\n\n_Downloading audio, please wait..._");
+
+        const audioBuffer = await ytDownloadAudio(videoUrl);
+
+        if (!audioBuffer || audioBuffer.length < 1000) {
+          m.react("❌");
+          return m.errorReply(
+            "Could not download this audio.",
+            "The video may be age-restricted, region-locked, or unavailable. Try a different song."
           );
         }
-        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 *${picked.title || "YouTube Video"}*\n
-────────────────────────────────
-_${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.message } });
+
+        if (audioBuffer.length > AUDIO_SIZE_LIMIT) {
+          m.react("❌");
+          return m.errorReply(
+            `Audio file is too large (${(audioBuffer.length / 1024 / 1024).toFixed(1)} MB).`,
+            "WhatsApp has a 15 MB audio limit. Try a shorter track."
+          );
+        }
+
+        const safeName = (picked.title || "audio").replace(/[\\/:*?"<>|]/g, "").trim();
+        await sock.sendMessage(m.chat, {
+          audio: audioBuffer,
+          mimetype: "audio/mpeg",
+          fileName: `${safeName}.mp3`,
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[music] error:", err.message);
         m.react("❌");
-        return m.apiErrorReply("YouTube");
+        return m.apiErrorReply("YouTube Music");
       }
     },
   },
+
+  // ── .youtube — YouTube video downloader (search by name OR paste URL) ────
   {
-    name: ["ytmp3", "yta"],
+    name: ["youtube", "yt", "ytdl", "ytvideo", "ytmp4", "ytvid"],
     category: "download",
-    desc: "Download YouTube audio by URL",
+    desc: "Download a YouTube video",
     handler: async (sock, m, { text }) => {
-      if (!text || !isUrl(text)) return m.usageReply("ytmp3 <YouTube URL>");
+      if (!text) return m.usageReply(
+        "youtube <video name or URL>",
+        `youtube Ronaldo top skills 2024\n${config.PREFIX}youtube https://youtu.be/JGwWNGJdvx8`
+      );
       m.react("⏳");
       try {
-        let audioBuffer = await ytDownloadAudio(text);
-        if (!audioBuffer) return m.errorReply("Audio download failed. The servers may be busy.", `Try using a direct YouTube URL with ${config.PREFIX}ytmp3`);
-        await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
+        let videoUrl, picked;
+
+        if (isUrl(text)) {
+          videoUrl = text;
+          picked = { title: "Video", url: text, author: "", duration: "" };
+          try {
+            const results = await ytSearch(text);
+            if (results.length) picked = results[0];
+          } catch {}
+        } else {
+          const results = await ytSearch(text);
+          if (!results.length) {
+            m.react("❌");
+            return m.noResultReply(text, "Try a more specific search or paste a YouTube URL directly");
+          }
+          picked = results[0];
+          videoUrl = picked.url;
+        }
+
+        // Inform user which video was found before the slow download
+        const infoLines = [];
+        if (picked.title && picked.title !== "Video") infoLines.push(`🎬 *${picked.title}*`);
+        if (picked.author) infoLines.push(`👤 ${picked.author}`);
+        if (picked.duration) infoLines.push(`⏱️ ${picked.duration}`);
+        if (picked.views) infoLines.push(`👁️ ${picked.views} views`);
+        if (infoLines.length) await m.reply(infoLines.join("\n") + "\n\n_Downloading video (720p), please wait..._");
+
+        const videoBuffer = await ytDownloadVideo(videoUrl);
+
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          m.react("❌");
+          return m.errorReply(
+            "Could not download this video.",
+            "The video may be too long, age-restricted, region-locked, or unavailable. Try a shorter or different video."
+          );
+        }
+
+        if (videoBuffer.length > VIDEO_SIZE_LIMIT) {
+          m.react("❌");
+          return m.errorReply(
+            `Video file is too large (${(videoBuffer.length / 1024 / 1024).toFixed(1)} MB).`,
+            "WhatsApp has a 60 MB video limit. Try a shorter video or use .music for audio only."
+          );
+        }
+
+        const title = (picked.title && picked.title !== "Video") ? picked.title : "YouTube Video";
+        const caption = [
+          `🎬 *${title}*`,
+          picked.author ? `👤 ${picked.author}` : "",
+          picked.duration ? `⏱️ ${picked.duration}` : "",
+          "",
+          `────────────────────────────────`,
+          `_${config.BOT_NAME} · Desam Tech_ ⚡`,
+        ].filter(Boolean).join("\n");
+
+        await sock.sendMessage(m.chat, {
+          video: videoBuffer,
+          caption,
+        }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
-      } catch {
+      } catch (err) {
+        console.error("[youtube] error:", err.message);
         m.react("❌");
         return m.apiErrorReply("YouTube");
       }
