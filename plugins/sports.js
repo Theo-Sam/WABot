@@ -4,158 +4,187 @@ const { fetchJson, fetchBuffer, sendImageOrText, replyLongText } = require("../l
 const SPORTSDB_BASE = "https://www.thesportsdb.com/api/v1/json/3";
 
 const LEAGUE_CATALOG = [
-  {
-    key: "premier league",
-    display: "Premier League",
-    espnCode: "eng.1",
-    sportsDbCode: "PL",
-    sportsDbId: "4328",
-    aliases: ["premier league", "premier", "epl", "pl", "english league", "england"],
-  },
-  {
-    key: "la liga",
-    display: "La Liga",
-    espnCode: "esp.1",
-    sportsDbCode: "PD",
-    sportsDbId: "4335",
-    aliases: ["la liga", "laliga", "spanish league", "spain"],
-  },
-  {
-    key: "bundesliga",
-    display: "Bundesliga",
-    espnCode: "ger.1",
-    sportsDbCode: "BL1",
-    sportsDbId: "4331",
-    aliases: ["bundesliga", "german league", "germany"],
-  },
-  {
-    key: "serie a",
-    display: "Serie A",
-    espnCode: "ita.1",
-    sportsDbCode: "SA",
-    sportsDbId: "4332",
-    aliases: ["serie a", "seriea", "italian league", "italy"],
-  },
-  {
-    key: "ligue 1",
-    display: "Ligue 1",
-    espnCode: "fra.1",
-    sportsDbCode: "FL1",
-    sportsDbId: "4334",
-    aliases: ["ligue 1", "ligue1", "french league", "france"],
-  },
-  {
-    key: "uefa europa league",
-    display: "UEFA Europa League",
-    espnCode: "uefa.europa",
-    sportsDbCode: "EL",
-    sportsDbId: "4481",
-    aliases: ["europa league", "uel", "uefa europa", "europa"],
-  },
-  {
-    key: "uefa conference league",
-    display: "UEFA Conference League",
-    espnCode: "uefa.europa.conf",
-    sportsDbCode: "UECL",
-    sportsDbId: "100819",
-    aliases: ["conference league", "uecl", "uefa conference"],
-  },
-  {
-    key: "eredvisie",
-    display: "Eredivisie",
-    espnCode: "ned.1",
-    sportsDbCode: "DED",
-    sportsDbId: "4337",
-    aliases: ["eredvisie", "dutch league", "netherlands league", "holland league"],
-  },
-  {
-    key: "primeira liga",
-    display: "Primeira Liga",
-    espnCode: "por.1",
-    sportsDbCode: "PPL",
-    sportsDbId: "4344",
-    aliases: ["primeira liga", "portuguese league", "liga portugal", "portugal league"],
-  },
-  {
-    key: "major league soccer",
-    display: "Major League Soccer",
-    espnCode: "usa.1",
-    sportsDbCode: "MLS",
-    sportsDbId: "4346",
-    aliases: ["mls", "major league soccer", "usa league", "us league"],
-  },
-  {
-    key: "brasileirao",
-    display: "Brasileirao Serie A",
-    espnCode: "bra.1",
-    sportsDbCode: "BSA",
-    sportsDbId: "4351",
-    aliases: ["brasileirao", "brazil serie a", "brazilian league", "serie a brazil"],
-  },
-  {
-    key: "argentina primera division",
-    display: "Argentina Primera Division",
-    espnCode: "arg.1",
-    sportsDbCode: "AR1N",
-    sportsDbId: "4406",
-    aliases: ["argentina league", "primera division argentina", "argentina primera", "liga argentina"],
-  },
-  {
-    key: "j1 league",
-    display: "J1 League",
-    espnCode: "jpn.1",
-    sportsDbCode: "JPN1",
-    sportsDbId: "4420",
-    aliases: ["j1", "j1 league", "japan league", "j league"],
-  },
-  {
-    key: "k league 1",
-    display: "K League 1",
-    espnCode: "kor.1",
-    sportsDbCode: "KOR1",
-    sportsDbId: "4767",
-    aliases: ["k league", "k league 1", "korea league", "south korea league"],
-  },
-  {
-    key: "a league",
-    display: "A-League",
-    espnCode: "aus.1",
-    sportsDbCode: "AL",
-    sportsDbId: "4356",
-    aliases: ["a league", "a-league", "australia league", "australian league"],
-  },
-  {
-    key: "south african premier division",
-    display: "South African Premier Division",
-    espnCode: "rsa.1",
-    sportsDbCode: "SAPL",
-    sportsDbId: "4798",
-    aliases: ["psl", "south africa league", "south african league", "south african premier division"],
-  },
-  {
-    key: "caf champions league",
-    display: "CAF Champions League",
-    espnCode: "caf.champions",
-    sportsDbCode: "CAFCL",
-    sportsDbId: "105521",
-    aliases: ["caf champions league", "caf cl", "africa champions league"],
-  },
-  {
-    key: "afc champions league",
-    display: "AFC Champions League",
-    espnCode: "afc.champions",
-    sportsDbCode: "AFCCL",
-    sportsDbId: "105552",
-    aliases: ["afc champions league", "afc cl", "asia champions league"],
-  },
-  {
-    key: "champions league",
-    display: "UEFA Champions League",
-    espnCode: "uefa.champions",
-    sportsDbCode: "CL",
-    sportsDbId: "4480",
-    aliases: ["champions league", "ucl", "cl", "uefa champions"],
-  },
+  // ── UEFA / EUROPE ──────────────────────────────────────────
+  { key:"champions league", display:"UEFA Champions League", espnCode:"uefa.champions", sportsDbId:"4480",
+    aliases:["champions league","ucl","cl","uefa champions","european champions league"] },
+  { key:"europa league", display:"UEFA Europa League", espnCode:"uefa.europa", sportsDbId:"4481",
+    aliases:["europa league","uel","uefa europa","europa"] },
+  { key:"conference league", display:"UEFA Conference League", espnCode:"uefa.europa.conf", sportsDbId:"100819",
+    aliases:["conference league","uecl","uefa conference","ecl"] },
+  { key:"premier league", display:"Premier League", espnCode:"eng.1", sportsDbId:"4328",
+    aliases:["premier league","premier","epl","pl","english premier league","england","england premier league"] },
+  { key:"championship", display:"EFL Championship", espnCode:"eng.2", sportsDbId:"4329",
+    aliases:["championship","efl championship","english championship","england championship"] },
+  { key:"league one", display:"EFL League One", espnCode:"eng.3", sportsDbId:"4330",
+    aliases:["league one","efl league one","england league one"] },
+  { key:"fa cup", display:"FA Cup", espnCode:"eng.fa", sportsDbId:"4364",
+    aliases:["fa cup","fa cup england","english fa cup"] },
+  { key:"la liga", display:"La Liga", espnCode:"esp.1", sportsDbId:"4335",
+    aliases:["la liga","laliga","spanish league","spain","spanish primera","la liga santander"] },
+  { key:"segunda division", display:"La Liga 2", espnCode:"esp.2", sportsDbId:"4336",
+    aliases:["segunda","la liga 2","segunda division","spain second division"] },
+  { key:"bundesliga", display:"Bundesliga", espnCode:"ger.1", sportsDbId:"4331",
+    aliases:["bundesliga","german league","germany","german bundesliga","1. bundesliga"] },
+  { key:"2. bundesliga", display:"2. Bundesliga", espnCode:"ger.2", sportsDbId:"4332",
+    aliases:["2 bundesliga","2. bundesliga","german second","germany second"] },
+  { key:"serie a", display:"Serie A", espnCode:"ita.1", sportsDbId:"4332",
+    aliases:["serie a","seriea","italian league","italy","italian serie a"] },
+  { key:"serie b", display:"Serie B", espnCode:"ita.2", sportsDbId:"4333",
+    aliases:["serie b","italian serie b","italy serie b","italy second division"] },
+  { key:"ligue 1", display:"Ligue 1", espnCode:"fra.1", sportsDbId:"4334",
+    aliases:["ligue 1","ligue1","french league","france","french ligue 1"] },
+  { key:"ligue 2", display:"Ligue 2", espnCode:"fra.2", sportsDbId:"4341",
+    aliases:["ligue 2","ligue2","french second","france second"] },
+  { key:"eredivisie", display:"Eredivisie", espnCode:"ned.1", sportsDbId:"4337",
+    aliases:["eredivisie","dutch league","netherlands","netherlands league","holland","dutch eredivisie"] },
+  { key:"primeira liga", display:"Primeira Liga", espnCode:"por.1", sportsDbId:"4344",
+    aliases:["primeira liga","portuguese league","liga portugal","portugal","portugal league","portuguese primera"] },
+  { key:"scottish premiership", display:"Scottish Premiership", espnCode:"sco.1", sportsDbId:"4338",
+    aliases:["scottish premiership","scotland","scotland league","scottish league","spfl"] },
+  { key:"belgian pro league", display:"Belgian Pro League", espnCode:"bel.1", sportsDbId:"4339",
+    aliases:["belgian pro league","belgium","belgium league","first division a","jupiler"] },
+  { key:"turkish super lig", display:"Turkish Süper Lig", espnCode:"tur.1", sportsDbId:"4342",
+    aliases:["super lig","turkish super lig","turkey","turkey league","turkish league"] },
+  { key:"russian premier league", display:"Russian Premier League", espnCode:"rus.1", sportsDbId:"4350",
+    aliases:["russian premier league","russia","russia league","rpl"] },
+  { key:"ukrainian premier league", display:"Ukrainian Premier League", espnCode:"ukr.1", sportsDbId:"4357",
+    aliases:["ukrainian premier league","ukraine","ukraine league","upl"] },
+  { key:"polish ekstraklasa", display:"Ekstraklasa", espnCode:"pol.1", sportsDbId:"4356",
+    aliases:["ekstraklasa","polish league","poland","poland league","polish ekstraklasa"] },
+  { key:"czech liga", display:"Czech First League", espnCode:"cze.1", sportsDbId:"4349",
+    aliases:["czech league","czech first league","czech liga","czech republic","czechia"] },
+  { key:"romanian liga 1", display:"Liga I", espnCode:"rom.1", sportsDbId:"4374",
+    aliases:["romanian league","liga 1 romania","liga i","romania","romanian liga"] },
+  { key:"greek super league", display:"Super League Greece", espnCode:"gre.1", sportsDbId:"4373",
+    aliases:["greek super league","greece","greece league","super league greece","greek league"] },
+  { key:"austrian bundesliga", display:"Austrian Football Bundesliga", espnCode:"aut.1", sportsDbId:"4365",
+    aliases:["austrian bundesliga","austria","austria league","austrian league"] },
+  { key:"swiss super league", display:"Swiss Super League", espnCode:"swi.1", sportsDbId:"4368",
+    aliases:["swiss super league","switzerland","switzerland league","swiss league"] },
+  { key:"danish superliga", display:"Danish Superliga", espnCode:"den.1", sportsDbId:"4345",
+    aliases:["danish superliga","denmark","denmark league","danish league"] },
+  { key:"swedish allsvenskan", display:"Allsvenskan", espnCode:"swe.1", sportsDbId:"4346",
+    aliases:["allsvenskan","swedish league","sweden","sweden league"] },
+  { key:"norwegian eliteserien", display:"Eliteserien", espnCode:"nor.1", sportsDbId:"4347",
+    aliases:["eliteserien","norwegian league","norway","norway league"] },
+  { key:"croatian hnl", display:"Croatian Football League", espnCode:"cro.1", sportsDbId:"4387",
+    aliases:["croatian league","croatia","hnl","croatia league"] },
+  { key:"serbian superliga", display:"Serbian SuperLiga", espnCode:"srb.1", sportsDbId:"4385",
+    aliases:["serbian league","serbia","serbian superliga","serbia league"] },
+  { key:"hungarian nb i", display:"Nemzeti Bajnokság I", espnCode:"hun.1", sportsDbId:"4386",
+    aliases:["hungarian league","hungary","nb i","nb1","hungary league"] },
+  { key:"slovenian prvaliga", display:"Slovenian PrvaLiga", espnCode:"svn.1", sportsDbId:"4382",
+    aliases:["slovenian league","slovenia","prvaliga","slovenia league"] },
+  { key:"cypriot first division", display:"Cyprus Football League", espnCode:"cyp.1", sportsDbId:"4391",
+    aliases:["cypriot league","cyprus","cyprus league","cypriot first division"] },
+
+  // ── AFRICA ─────────────────────────────────────────────────
+  { key:"caf champions league", display:"CAF Champions League", espnCode:"caf.champions", sportsDbId:"105521",
+    aliases:["caf champions league","caf cl","africa champions league","african champions league"] },
+  { key:"caf confederation cup", display:"CAF Confederation Cup", espnCode:null, sportsDbId:"4410",
+    aliases:["caf confederation cup","caf confed","caf confederation","africa confederation"] },
+  { key:"south african premier division", display:"South African Premier Division", espnCode:"rsa.1", sportsDbId:"4798",
+    aliases:["psl","south africa league","south african league","south africa","dstv premiership","absa premiership"] },
+  { key:"egyptian premier league", display:"Egyptian Premier League", espnCode:null, sportsDbId:"4418",
+    aliases:["egyptian league","egypt","egypt league","egyptian premier league"] },
+  { key:"moroccan botola", display:"Botola Pro", espnCode:null, sportsDbId:"4424",
+    aliases:["moroccan league","morocco","botola","botola pro","moroccan botola"] },
+  { key:"algerian ligue professionnelle 1", display:"Ligue Professionnelle 1", espnCode:null, sportsDbId:"4416",
+    aliases:["algerian league","algeria","ligue 1 algerie","ligue pro 1 algerie"] },
+  { key:"tunisian ligue professionnelle 1", display:"Tunisian Ligue Professionnelle 1", espnCode:null, sportsDbId:"4415",
+    aliases:["tunisian league","tunisia","ligue pro 1 tunisie","tunisian pro league"] },
+  { key:"ghanaian premier league", display:"Ghana Premier League", espnCode:null, sportsDbId:"4417",
+    aliases:["ghana league","ghana","ghana premier league","ghanaian league","gpl"] },
+  { key:"nigerian premier football league", display:"Nigeria Premier Football League", espnCode:null, sportsDbId:"4419",
+    aliases:["nigeria league","nigeria","nigerian league","npfl","nigeria premier league"] },
+  { key:"kenyan premier league", display:"FKF Premier League", espnCode:null, sportsDbId:"4422",
+    aliases:["kenya league","kenya","kenyan league","kenya premier league","fkf premier league"] },
+  { key:"tanzanian premier league", display:"NBC Premier League", espnCode:null, sportsDbId:"4423",
+    aliases:["tanzania league","tanzania","tanzanian league","nbc premier league"] },
+  { key:"ugandan premier league", display:"StarTimes Uganda Premier League", espnCode:null, sportsDbId:"4425",
+    aliases:["uganda league","uganda","ugandan league","uganda premier league"] },
+  { key:"ethiopian premier league", display:"Ethiopian Premier League", espnCode:null, sportsDbId:"4426",
+    aliases:["ethiopia league","ethiopia","ethiopian league","ethiopian premier league"] },
+  { key:"zimbabwe premier soccer league", display:"Zimbabwe Premier Soccer League", espnCode:null, sportsDbId:"4428",
+    aliases:["zimbabwe league","zimbabwe","zimbabwe premier league","psl zimbabwe"] },
+  { key:"zambian super league", display:"FAZ Super League", espnCode:null, sportsDbId:"4429",
+    aliases:["zambia league","zambia","zambian league","faz super league"] },
+  { key:"cameroonian elite one", display:"MTN Elite One", espnCode:null, sportsDbId:"4427",
+    aliases:["cameroon league","cameroon","cameroonian league","elite one","mtn elite one"] },
+  { key:"senegal premier league", display:"Senegal Ligue 1", espnCode:null, sportsDbId:"4421",
+    aliases:["senegal league","senegal","senegalese league","senegal ligue 1"] },
+  { key:"ivory coast ligue 1", display:"Ivory Coast Ligue 1", espnCode:null, sportsDbId:"4514",
+    aliases:["ivory coast league","ivory coast","cote d ivoire league","ci league","cote divoire"] },
+
+  // ── MIDDLE EAST / ASIA ─────────────────────────────────────
+  { key:"afc champions league", display:"AFC Champions League", espnCode:"afc.champions", sportsDbId:"105552",
+    aliases:["afc champions league","afc cl","asia champions league","asian champions league"] },
+  { key:"saudi professional league", display:"Saudi Professional League", espnCode:null, sportsDbId:"4405",
+    aliases:["saudi league","saudi arabia","saudi pro league","spfl saudi","saudi professional league","roshn league"] },
+  { key:"uae pro league", display:"UAE Pro League", espnCode:null, sportsDbId:"4406",
+    aliases:["uae league","uae","emirates league","uae pro league","adnoc league"] },
+  { key:"qatar stars league", display:"Qatar Stars League", espnCode:null, sportsDbId:"4407",
+    aliases:["qatar league","qatar","qatar stars league","qsl"] },
+  { key:"bahraini premier league", display:"Bahrain Premier League", espnCode:null, sportsDbId:"4413",
+    aliases:["bahrain league","bahrain","bahraini league","bahrain premier league"] },
+  { key:"iranian persian gulf pro league", display:"Persian Gulf Pro League", espnCode:null, sportsDbId:"4408",
+    aliases:["iran league","iran","persian gulf league","ipgl","iran premier league"] },
+  { key:"iraqi premier league", display:"Iraqi Premier League", espnCode:null, sportsDbId:"4409",
+    aliases:["iraq league","iraq","iraqi league","iraq premier league"] },
+  { key:"jordanian pro league", display:"Jordan Pro League", espnCode:null, sportsDbId:"4412",
+    aliases:["jordan league","jordan","jordanian league","jordan pro league"] },
+  { key:"kuwaiti premier league", display:"Kuwait Premier League", espnCode:null, sportsDbId:"4411",
+    aliases:["kuwait league","kuwait","kuwaiti league","kuwait premier league"] },
+  { key:"chinese super league", display:"Chinese Super League", espnCode:null, sportsDbId:"4401",
+    aliases:["chinese league","china","csl","chinese super league","super league china"] },
+  { key:"j1 league", display:"J1 League", espnCode:"jpn.1", sportsDbId:"4420",
+    aliases:["j1","j1 league","japan league","j league","japanese league"] },
+  { key:"k league 1", display:"K League 1", espnCode:"kor.1", sportsDbId:"4767",
+    aliases:["k league","k league 1","korea league","south korea league","korean league"] },
+  { key:"thai league 1", display:"Thai League 1", espnCode:null, sportsDbId:"4403",
+    aliases:["thai league","thailand","thailand league","thai premier league","thai league 1"] },
+  { key:"vietnam v league 1", display:"V.League 1", espnCode:null, sportsDbId:"4404",
+    aliases:["vietnam league","vietnam","v league","v league 1","vietnamese league"] },
+  { key:"malaysian super league", display:"Malaysian Super League", espnCode:null, sportsDbId:"4402",
+    aliases:["malaysia league","malaysia","malaysian league","msl","malaysian super league"] },
+  { key:"indonesian liga 1", display:"Liga 1", espnCode:null, sportsDbId:"4414",
+    aliases:["indonesia league","indonesia","liga 1 indonesia","indonesian league","bri liga 1"] },
+  { key:"indian super league", display:"Indian Super League", espnCode:null, sportsDbId:"4356",
+    aliases:["isl","india league","india","indian super league","isl india"] },
+  { key:"a league", display:"A-League Men", espnCode:"aus.1", sportsDbId:"4356",
+    aliases:["a league","a-league","australia league","australian league","australia"] },
+
+  // ── AMERICAS ───────────────────────────────────────────────
+  { key:"major league soccer", display:"Major League Soccer", espnCode:"usa.1", sportsDbId:"4346",
+    aliases:["mls","major league soccer","usa league","us league","usa","united states league"] },
+  { key:"usl championship", display:"USL Championship", espnCode:"usa.2", sportsDbId:"4351",
+    aliases:["usl","usl championship","usa second division","us second league"] },
+  { key:"brasileirao", display:"Brasileirão Serie A", espnCode:"bra.1", sportsDbId:"4351",
+    aliases:["brasileirao","brazil serie a","brazilian league","serie a brazil","brazil league","brazil"] },
+  { key:"brazil serie b", display:"Brasileirão Serie B", espnCode:"bra.2", sportsDbId:"4670",
+    aliases:["brazil serie b","brasileirao b","brazil second division","serie b brazil"] },
+  { key:"argentina primera division", display:"Liga Profesional de Fútbol", espnCode:"arg.1", sportsDbId:"4406",
+    aliases:["argentina league","primera division argentina","argentina primera","liga argentina","arg","argentina"] },
+  { key:"colombia primera a", display:"Categoría Primera A", espnCode:"col.1", sportsDbId:"4407",
+    aliases:["colombia league","colombia","colombian league","primera a","liga betplay"] },
+  { key:"chile primera division", display:"Primera División de Chile", espnCode:"chi.1", sportsDbId:"4406",
+    aliases:["chile league","chile","chilean league","primera division chile"] },
+  { key:"peru primera division", display:"Liga 1 Perú", espnCode:"per.1", sportsDbId:"4408",
+    aliases:["peru league","peru","peruvian league","liga 1 peru"] },
+  { key:"ecuadorian serie a", display:"Serie A Ecuador", espnCode:"ecu.1", sportsDbId:"4409",
+    aliases:["ecuador league","ecuador","ecuadorian league","serie a ecuador"] },
+  { key:"uruguay primera division", display:"Primera División", espnCode:"uru.1", sportsDbId:"4410",
+    aliases:["uruguay league","uruguay","uruguayan league","primera division uruguay"] },
+  { key:"venezuela primera division", display:"Liga FUTVE", espnCode:"ven.1", sportsDbId:"4411",
+    aliases:["venezuela league","venezuela","venezuelan league","liga futve"] },
+  { key:"mexico liga mx", display:"Liga MX", espnCode:"mex.1", sportsDbId:"4398",
+    aliases:["liga mx","mexico","mexico league","mexican league","liga mx mexico"] },
+  { key:"concacaf champions cup", display:"Concacaf Champions Cup", espnCode:"concacaf.champions", sportsDbId:"4402",
+    aliases:["concacaf champions","concacaf cup","concacaf champions league","ccl"] },
+  { key:"copa libertadores", display:"Copa Libertadores", espnCode:"conmebol.libertadores", sportsDbId:"4405",
+    aliases:["copa libertadores","libertadores","south america champions","conmebol libertadores"] },
+  { key:"copa sudamericana", display:"Copa Sudamericana", espnCode:"conmebol.sudamericana", sportsDbId:"4404",
+    aliases:["copa sudamericana","sudamericana","south america cup"] },
 ];
 
 function normalizeLeagueText(text) {
@@ -363,7 +392,7 @@ function flattenEspnStandings(data) {
   }
 
   return items
-    .filter((entry) => entry.teamName && (entry.played > 0 || entry.rank > 0))
+    .filter((entry) => entry.teamName && entry.teamName !== "Unknown")
     .sort((a, b) => (a.rank || 999) - (b.rank || 999));
 }
 
@@ -501,32 +530,38 @@ const commands = [
         const date = new Date();
         const startYear = date.getMonth() < 7 ? date.getFullYear() - 1 : date.getFullYear();
         const season = `${startYear}-${startYear + 1}`;
-        const espnStandingRaw = league.espnCode
-          ? await fetchJson(`https://site.api.espn.com/apis/v2/sports/soccer/${league.espnCode}/standings`).catch(() => null)
-          : null;
-        let table = flattenEspnStandings(espnStandingRaw);
+        // Fetch both ESPN and SportsDB in parallel, then use whichever gives more teams
+        const [espnStandingRaw, sdbDataSeason, sdbDataLatest] = await Promise.all([
+          league.espnCode
+            ? fetchJson(`https://site.api.espn.com/apis/v2/sports/soccer/${league.espnCode}/standings`).catch(() => null)
+            : Promise.resolve(null),
+          fetchJson(`${SPORTSDB_BASE}/lookuptable.php?l=${league.sportsDbId}&s=${season}`).catch(() => null),
+          fetchJson(`${SPORTSDB_BASE}/lookuptable.php?l=${league.sportsDbId}`).catch(() => null),
+        ]);
 
-        if (!table.length || table.length < 10) {
-          let data = await fetchJson(`${SPORTSDB_BASE}/lookuptable.php?l=${league.sportsDbId}&s=${season}`).catch(() => null);
-          if (!data?.table?.length || data.table.length < 10) {
-            const fallback = await fetchJson(`${SPORTSDB_BASE}/lookuptable.php?l=${league.sportsDbId}`).catch(() => null);
-            if (fallback?.table?.length) data = fallback;
-          }
-          table = (data?.table || []).map((t) => ({
-            rank: Number.parseInt(t.intRank, 10) || 0,
-            teamName: t.strTeam || "???",
-            played: Number.parseInt(t.intPlayed, 10) || 0,
-            win: Number.parseInt(t.intWin, 10) || 0,
-            draw: Number.parseInt(t.intDraw, 10) || 0,
-            loss: Number.parseInt(t.intLoss, 10) || 0,
-            points: Number.parseInt(t.intPoints, 10) || 0,
-            leagueName: t.strLeague,
-          }));
-        }
+        const espnTable = flattenEspnStandings(espnStandingRaw);
+
+        // Use the SportsDB response that has more entries
+        const sdbRaw = (sdbDataSeason?.table?.length || 0) >= (sdbDataLatest?.table?.length || 0)
+          ? sdbDataSeason : sdbDataLatest;
+        const sdbTable = (sdbRaw?.table || []).map((t) => ({
+          rank: Number.parseInt(t.intRank, 10) || 0,
+          teamName: t.strTeam || "???",
+          played: Number.parseInt(t.intPlayed, 10) || 0,
+          win: Number.parseInt(t.intWin, 10) || 0,
+          draw: Number.parseInt(t.intDraw, 10) || 0,
+          loss: Number.parseInt(t.intLoss, 10) || 0,
+          points: Number.parseInt(t.intPoints, 10) || 0,
+          leagueName: t.strLeague,
+        }));
+
+        // Pick whichever source returns more teams
+        const table = espnTable.length >= sdbTable.length ? espnTable : sdbTable;
+        const leagueDisplayName = sdbRaw?.table?.[0]?.strLeague || espnStandingRaw?.name || league.display;
 
         if (table.length) {
           let msg = `🏆 *LEAGUE STANDINGS*\n\n`;
-          msg += `🏆 ${table[0]?.leagueName || espnStandingRaw?.name || league.display}\n`;
+          msg += `🏆 ${leagueDisplayName}\n`;
           msg += `📅 Season: ${season}\n\n`;
           msg += `*# Team | P W D L | Pts*\n`;
           table.forEach((t) => {
