@@ -1030,6 +1030,478 @@ const commands = [
       }
     },
   },
+  {
+    name: ["snapchat", "snap", "snapdl"],
+    category: "download",
+    desc: "Download Snapchat Spotlight/Story video",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}snap <Snapchat URL>`);
+      if (!/snapchat\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Snapchat URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp direct
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. cobalt.tools
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        // 3. snapdl free scraper
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://snapdl.app/api?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.url || res?.data?.url || res?.result?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        // 4. snapsave.app scraper
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const res = await axios.post(
+              'https://snapsave.app/action.php',
+              `url=${encodeURIComponent(targetUrl)}`,
+              { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapsave.app', 'Referer': 'https://snapsave.app/' }, timeout: 15000 }
+            );
+            const match = String(res.data || '').match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/);
+            if (match?.[1]) videoBuffer = await fetchBuffer(match[1], { timeout: 60000 });
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download. Only public Snapchat Spotlight videos are supported.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `👻 Snapchat Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Snapchat media.");
+      }
+    },
+  },
+  {
+    name: ["vimeo", "vimdl"],
+    category: "download",
+    desc: "Download Vimeo video",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}vimeo <Vimeo URL>`);
+      if (!/vimeo\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid Vimeo URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. cobalt
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 90000 });
+          } catch {}
+        }
+        // 3. Vimeo config API (public videos)
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const videoId = targetUrl.match(/vimeo\.com\/(\d+)/)?.[1];
+            if (videoId) {
+              const cfg = await fetchJson(`https://player.vimeo.com/video/${videoId}/config`, { timeout: 10000 });
+              const files = cfg?.request?.files?.progressive || [];
+              const best = files.sort((a, b) => (b.height || 0) - (a.height || 0))[0];
+              if (best?.url) videoBuffer = await fetchBuffer(best.url, { timeout: 90000 });
+            }
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Vimeo video. It may be password-protected or private.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Vimeo Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Vimeo video.");
+      }
+    },
+  },
+  {
+    name: ["dailymotion", "dmdl", "dm"],
+    category: "download",
+    desc: "Download Dailymotion video",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}dm <Dailymotion URL>`);
+      if (!/dailymotion\.com|dai\.ly/i.test(targetUrl)) return m.reply("❌ Please provide a valid Dailymotion URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. cobalt
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 90000 });
+          } catch {}
+        }
+        // 3. Dailymotion embed API
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const videoId = targetUrl.match(/\/video\/([a-zA-Z0-9]+)/)?.[1] || targetUrl.match(/dai\.ly\/([a-zA-Z0-9]+)/)?.[1];
+            if (videoId) {
+              const meta = await fetchJson(`https://www.dailymotion.com/player/metadata/video/${videoId}?embedder=https%3A%2F%2Fwww.dailymotion.com&locale=en&dmV1st=&dmTs=&is_native_app=0`, { timeout: 10000 });
+              const streams = meta?.qualities?.auto || [];
+              const best = streams.find(s => s.url) || streams[0];
+              if (best?.url) videoBuffer = await fetchBuffer(best.url, { timeout: 90000 });
+            }
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Dailymotion video.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `📺 Dailymotion Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Dailymotion video.");
+      }
+    },
+  },
+  {
+    name: ["likee", "likedl"],
+    category: "download",
+    desc: "Download Likee video",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}likee <Likee URL>`);
+      if (!/likee\.com|like\.video/i.test(targetUrl)) return m.reply("❌ Please provide a valid Likee URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. Likee public API
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const videoId = targetUrl.match(/\/video\/(\d+)/)?.[1];
+            if (videoId) {
+              const res = await axios.post(
+                'https://api.likee.video/likee-activity-flow-micro/videoApi/getVideoInfo',
+                { videoIds: videoId },
+                { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+              );
+              const videoUrl = res.data?.data?.videoList?.[0]?.videoUrl;
+              if (videoUrl) videoBuffer = await fetchBuffer(videoUrl, { timeout: 60000 });
+            }
+          } catch {}
+        }
+        // 3. tikwm-style scraper
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://api.nyxs.pw/dl/likee?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.result?.url || res?.result?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Likee video.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `❤️ Likee Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Likee video.");
+      }
+    },
+  },
+  {
+    name: ["kwai", "kwaidl"],
+    category: "download",
+    desc: "Download Kwai video",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}kwai <Kwai URL>`);
+      if (!/kwai\.com|kwai\.net/i.test(targetUrl)) return m.reply("❌ Please provide a valid Kwai URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. tikwm-compatible scraper
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.data?.play || res?.data?.wmplay;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        // 3. cobalt
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download Kwai video.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `🎬 Kwai Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Kwai video.");
+      }
+    },
+  },
+  {
+    name: ["threads", "threadsdl", "thr"],
+    category: "download",
+    desc: "Download Threads (Meta) post media",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}threads <Threads URL>`);
+      if (!/threads\.net/i.test(targetUrl)) return m.reply("❌ Please provide a valid Threads URL.");
+      m.react("⏳");
+      try {
+        let mediaBuffer = null;
+        let isVideo = false;
+        // 1. cobalt
+        try {
+          const d = await postJson(
+            endpoints.download.cobaltApiJson,
+            { url: targetUrl, downloadMode: 'auto' },
+            { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+          );
+          const mediaUrl = d?.url || d?.picker?.[0]?.url;
+          if (mediaUrl) {
+            isVideo = d?.status === 'stream' || mediaUrl.includes('.mp4');
+            mediaBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          }
+        } catch {}
+        // 2. yt-dlp
+        if (!mediaBuffer || mediaBuffer.length < 1000) {
+          try {
+            mediaBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+              '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+              '--merge-output-format', 'mp4', '--no-part',
+            ], 'mp4');
+            if (mediaBuffer?.length > 1000) isVideo = true;
+          } catch {}
+        }
+        // 3. Nyxs scraper
+        if (!mediaBuffer || mediaBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://api.nyxs.pw/dl/threads?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.result?.url || res?.result?.[0]?.url;
+            if (mediaUrl) {
+              isVideo = mediaUrl.includes('.mp4');
+              mediaBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+            }
+          } catch {}
+        }
+        if (!mediaBuffer || mediaBuffer.length < 1000) return m.reply("❌ Could not download Threads post. Only public posts with media are supported.");
+        const caption = `🧵 Threads Download\n\n_${config.BOT_NAME}_`;
+        if (isVideo) {
+          await sock.sendMessage(m.chat, { video: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
+        } else {
+          await sock.sendMessage(m.chat, { image: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
+        }
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Threads media.");
+      }
+    },
+  },
+  {
+    name: ["linkedin", "linkedindl", "li"],
+    category: "download",
+    desc: "Download LinkedIn video post",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}linkedin <LinkedIn URL>`);
+      if (!/linkedin\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid LinkedIn URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. cobalt
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        // 3. Nyxs scraper
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://api.nyxs.pw/dl/linkedin?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.result?.url || res?.result?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download. LinkedIn videos must be public posts.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `💼 LinkedIn Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download LinkedIn video.");
+      }
+    },
+  },
+  {
+    name: ["capcut", "capcutdl", "cc"],
+    category: "download",
+    desc: "Download CapCut video",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}capcut <CapCut URL>`);
+      if (!/capcut\.com/i.test(targetUrl)) return m.reply("❌ Please provide a valid CapCut URL.");
+      m.react("⏳");
+      try {
+        let videoBuffer = null;
+        // 1. yt-dlp
+        try {
+          videoBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+        } catch {}
+        // 2. cobalt
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        // 3. Nyxs scraper
+        if (!videoBuffer || videoBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://api.nyxs.pw/dl/capcut?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.result?.url || res?.result?.[0]?.url;
+            if (mediaUrl) videoBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        if (!videoBuffer || videoBuffer.length < 1000) return m.reply("❌ Could not download CapCut video. The video must be publicly shared.");
+        await sock.sendMessage(m.chat, { video: videoBuffer, caption: `✂️ CapCut Download\n\n_${config.BOT_NAME}_` }, { quoted: { key: m.key, message: m.message } });
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download CapCut video.");
+      }
+    },
+  },
+  {
+    name: ["pindl", "pinurl", "pinvideo"],
+    category: "download",
+    desc: "Download Pinterest pin/video from URL",
+    handler: async (sock, m, { text }) => {
+      const targetUrl = resolveInputUrl(text, m);
+      if (!targetUrl) return m.reply(`Usage: ${config.PREFIX}pindl <Pinterest URL>`);
+      if (!/pinterest\.com|pin\.it/i.test(targetUrl)) return m.reply("❌ Please provide a valid Pinterest URL.");
+      m.react("⏳");
+      try {
+        let mediaBuffer = null;
+        let isVideo = false;
+        // 1. yt-dlp (works for Pinterest videos)
+        try {
+          mediaBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--merge-output-format', 'mp4', '--no-part',
+          ], 'mp4');
+          if (mediaBuffer?.length > 1000) isVideo = true;
+        } catch {}
+        // 2. cobalt
+        if (!mediaBuffer || mediaBuffer.length < 1000) {
+          try {
+            const d = await postJson(
+              endpoints.download.cobaltApiJson,
+              { url: targetUrl, downloadMode: 'auto' },
+              { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+            );
+            const mediaUrl = d?.url || d?.picker?.[0]?.url;
+            if (mediaUrl) {
+              isVideo = d?.status === 'stream' || mediaUrl.includes('.mp4');
+              mediaBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+            }
+          } catch {}
+        }
+        // 3. Pinterest OEmbed (image fallback)
+        if (!mediaBuffer || mediaBuffer.length < 1000) {
+          try {
+            const oembed = await fetchJson(`https://www.pinterest.com/oembed/?url=${encodeURIComponent(targetUrl)}`, { timeout: 10000 });
+            const imgUrl = oembed?.thumbnail_url;
+            if (imgUrl) {
+              mediaBuffer = await fetchBuffer(imgUrl, { timeout: 30000 });
+              isVideo = false;
+            }
+          } catch {}
+        }
+        if (!mediaBuffer || mediaBuffer.length < 1000) return m.reply("❌ Could not download Pinterest media.");
+        const caption = `📌 Pinterest Download\n\n_${config.BOT_NAME}_`;
+        if (isVideo) {
+          await sock.sendMessage(m.chat, { video: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
+        } else {
+          await sock.sendMessage(m.chat, { image: mediaBuffer, caption }, { quoted: { key: m.key, message: m.message } });
+        }
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        await m.reply("❌ Failed to download Pinterest media.");
+      }
+    },
+  },
 ];
 
 module.exports = { commands };
