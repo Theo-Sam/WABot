@@ -46,36 +46,67 @@ function addExifToWebp(webpBuffer, exifData) {
     return webpBuffer;
   }
 
-  const RIFF = Buffer.from("RIFF");
-  const WEBP = Buffer.from("WEBP");
-  const EXIF = Buffer.from("EXIF");
-
   const chunks = [];
-  let offset = 12;
+  let offset = 12; // skip RIFF(4) + size(4) + WEBP(4)
+  let hasVP8X = false;
 
   while (offset + 8 <= webpBuffer.length) {
     const chunkId = webpBuffer.slice(offset, offset + 4).toString();
     const chunkSize = webpBuffer.readUInt32LE(offset + 4);
+    // WebP chunks are padded to even size but the stored size is the actual size
     const paddedSize = chunkSize + (chunkSize % 2);
+    const chunkEnd = offset + 8 + paddedSize;
 
-    if (chunkId !== "EXIF") {
-      chunks.push(webpBuffer.slice(offset, offset + 8 + paddedSize));
+    if (chunkId === "VP8X") {
+      hasVP8X = true;
+      // Copy the VP8X chunk and set the EXIF metadata flag (bit 2 = 0x04)
+      // VP8X chunk data layout: flags(1) + reserved(3) + canvasW-1(3) + canvasH-1(3)
+      // The flags byte is at position 8 (right after the 8-byte RIFF chunk header)
+      const vp8xCopy = Buffer.from(webpBuffer.slice(offset, chunkEnd));
+      vp8xCopy[8] = vp8xCopy[8] | 0x04; // set EXIF present flag
+      chunks.push(vp8xCopy);
+    } else if (chunkId !== "EXIF") {
+      chunks.push(webpBuffer.slice(offset, chunkEnd));
     }
-    offset += 8 + paddedSize;
+
+    offset = chunkEnd;
   }
 
-  const exifPayload = exifData.length % 2 ? Buffer.concat([exifData, Buffer.from([0])]) : exifData;
-  const exifChunk = Buffer.concat([
-    EXIF,
-    Buffer.from(new Uint32Array([exifData.length]).buffer),
-    exifPayload,
-  ]);
+  // If no VP8X chunk exists (plain VP8/VP8L), we must create one before adding EXIF.
+  // Sharp with transparent background always emits VP8X, but handle the fallback anyway.
+  if (!hasVP8X) {
+    // Read canvas dimensions from VP8 bitstream header if possible
+    let canvasW = 0;
+    let canvasH = 0;
+    const firstChunkId = webpBuffer.slice(12, 16).toString();
+    if (firstChunkId === "VP8 " && webpBuffer.length >= 34) {
+      canvasW = (webpBuffer.readUInt16LE(26) & 0x3fff);
+      canvasH = (webpBuffer.readUInt16LE(28) & 0x3fff);
+    }
+    const vp8xData = Buffer.alloc(10, 0);
+    vp8xData[0] = 0x04; // EXIF flag
+    vp8xData.writeUIntLE(Math.max(0, canvasW - 1), 4, 3);
+    vp8xData.writeUIntLE(Math.max(0, canvasH - 1), 7, 3);
+    const vp8xSizeBuf = Buffer.allocUnsafe(4);
+    vp8xSizeBuf.writeUInt32LE(10, 0);
+    const vp8xChunk = Buffer.concat([Buffer.from("VP8X"), vp8xSizeBuf, vp8xData]);
+    // VP8X must be first — prepend it before all other chunks
+    chunks.unshift(vp8xChunk);
+  }
+
+  // Build EXIF chunk (pad to even size)
+  const exifPayload = exifData.length % 2
+    ? Buffer.concat([exifData, Buffer.from([0])])
+    : exifData;
+  const exifSizeBuf = Buffer.allocUnsafe(4);
+  exifSizeBuf.writeUInt32LE(exifData.length, 0);
+  const exifChunk = Buffer.concat([Buffer.from("EXIF"), exifSizeBuf, exifPayload]);
   chunks.push(exifChunk);
 
   const body = Buffer.concat(chunks);
-  const totalSize = 4 + body.length;
-
-  return Buffer.concat([RIFF, Buffer.from(new Uint32Array([totalSize]).buffer), WEBP, body]);
+  const totalSizeBuf = Buffer.allocUnsafe(4);
+  totalSizeBuf.writeUInt32LE(4 + body.length, 0); // 4 = "WEBP"
+  return Buffer.concat([Buffer.from("RIFF"), totalSizeBuf, Buffer.from("WEBP"), body]);
 }
 
 async function createSticker(buffer, opts = {}) {
