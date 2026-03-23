@@ -648,7 +648,7 @@ const commands = [
 
   // ── .youtube — YouTube video downloader (search by name OR paste URL) ────
   {
-    name: ["youtube", "yt", "ytdl", "ytvideo", "ytmp4", "ytvid"],
+    name: ["youtube", "yt", "ytdl", "ytvideo", "ytmp4", "ytvid", "video"],
     category: "download",
     desc: "Download a YouTube video",
     handler: async (sock, m, { text }) => {
