@@ -27,7 +27,7 @@ async function pollinate(prompt, persona = "openai") {
   });
   messages.push({ role: "user", content: prompt });
 
-  // If user has a paid OpenAI key, use official OpenAI directly.
+  // ── Priority 1: Paid OpenAI key ────────────────────────────────────────────
   if (openaiKey) {
     const { OpenAI } = require("openai");
     const openai = new OpenAI({ apiKey: openaiKey });
@@ -40,8 +40,46 @@ async function pollinate(prompt, persona = "openai") {
     return normalizeAiText(answer, { keepLightFormatting: true });
   }
 
-  // No-key mode: Pollinations gen API (free public endpoint, may rate-limit).
-  // The API moved from text.pollinations.ai/openai → gen.pollinations.ai/v1/chat/completions
+  const { OpenAI } = require("openai");
+
+  // ── Priority 2: Groq (free — 14 400 req/day, no credit card needed) ───────
+  //    Get a free key at: https://console.groq.com
+  const groqKey = String(process.env.GROQ_API_KEY || "").trim();
+  if (groqKey) {
+    const groq = new OpenAI({ apiKey: groqKey, baseURL: "https://api.groq.com/openai/v1" });
+    const groqModels = ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"];
+    for (const model of groqModels) {
+      try {
+        const completion = await groq.chat.completions.create({ model, messages });
+        const answer = completion.choices?.[0]?.message?.content;
+        if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+      } catch (e) {
+        if (e?.status === 429) await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  // ── Priority 3: Google Gemini (free — 1 500 req/day, no credit card needed) ─
+  //    Get a free key at: https://ai.google.dev/aistudio → "Get API key"
+  const geminiKey = String(process.env.GEMINI_API_KEY || "").trim();
+  if (geminiKey) {
+    const gemini = new OpenAI({
+      apiKey: geminiKey,
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    });
+    const geminiModels = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    for (const model of geminiModels) {
+      try {
+        const completion = await gemini.chat.completions.create({ model, messages });
+        const answer = completion.choices?.[0]?.message?.content;
+        if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+      } catch (e) {
+        if (e?.status === 429) await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  // ── Priority 4: Pollinations (no key needed, but rate-limited) ─────────────
   const POLL_URL = "https://gen.pollinations.ai/v1/chat/completions";
   const POLL_HEADERS = {
     "Content-Type": "application/json",
@@ -49,30 +87,16 @@ async function pollinate(prompt, persona = "openai") {
     "Referer": "https://pollinations.ai/",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
-
-  // Try multiple models; on rate-limit (401/429) retry with alternative auth
-  const tryModels = ["openai", "openai-fast", "mistral", "llama"];
-  for (let i = 0; i < tryModels.length; i++) {
-    const model = tryModels[i];
-    if (i > 0) await new Promise(r => setTimeout(r, 1500 * i));
-
-    // Attempt A: Origin header (works when not rate-limited)
+  for (const [model, auth] of [
+    ["openai",      { "Authorization": "Bearer pollen" }],
+    ["openai-fast", { "Authorization": "Bearer pollen" }],
+    ["openai",      {}],
+    ["mistral",     {}],
+  ]) {
     try {
       const res = await axios.post(POLL_URL, { model, messages }, {
-        timeout: 30000,
-        headers: { ...POLL_HEADERS, "Authorization": "Bearer pollen" },
-      });
-      const answer = res.data?.choices?.[0]?.message?.content;
-      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
-    } catch (e) {
-      if (![401, 403, 429].includes(e?.response?.status)) continue;
-    }
-
-    // Attempt B: ?key=free query param fallback
-    try {
-      const res = await axios.post(POLL_URL + "?key=free", { model, messages }, {
-        timeout: 30000,
-        headers: POLL_HEADERS,
+        timeout: 28000,
+        headers: { ...POLL_HEADERS, ...auth },
       });
       const answer = res.data?.choices?.[0]?.message?.content;
       if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
