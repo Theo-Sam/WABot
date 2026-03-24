@@ -185,25 +185,82 @@ async function igFetchItem(mediaUrl) {
 }
 
 /**
+ * Decode the obfuscated JavaScript response returned by snapsave.app and rapidsave.com.
+ *
+ * Their action.php returns: eval(function(h,u,n,t,e,r){...}("ENCODED",u,"nStr",t,e,r))
+ * The encoded string is a custom base-N encoding. This function reverses it to get
+ * the plain HTML containing download links.
+ *
+ * Returns an array of media URLs found in the decoded HTML, or [] on failure.
+ */
+function decodeSnapsaveResponse(body) {
+  try {
+    const m = String(body).match(/\}\("([^"]+)",\s*\d+,\s*"([^"]+)",\s*(\d+),\s*(\d+),\s*\d+\)\)/);
+    if (!m) return [];
+    const [, encoded, tokenStr, tStr, eStr] = m;
+    const t = parseInt(tStr, 10);
+    const e = parseInt(eStr, 10);
+    const ALPHA = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/';
+    const fromAlpha = ALPHA.slice(0, e);
+
+    function toBase10(s) {
+      return s.split('').reverse().reduce((acc, ch, idx) => {
+        const pos = fromAlpha.indexOf(ch);
+        return pos !== -1 ? acc + pos * Math.pow(e, idx) : acc;
+      }, 0);
+    }
+
+    const delimiter = tokenStr[e];
+    let result = '';
+    let i = 0;
+    while (i < encoded.length) {
+      let chunk = '';
+      while (i < encoded.length && encoded[i] !== delimiter) { chunk += encoded[i++]; }
+      i++;
+      for (let j = 0; j < tokenStr.length; j++) {
+        chunk = chunk.split(tokenStr[j]).join(String(j));
+      }
+      const code = toBase10(chunk) - t;
+      if (code > 0 && code < 65535) result += String.fromCharCode(code);
+    }
+
+    const html = (() => { try { return decodeURIComponent(escape(result)); } catch { return result; } })();
+
+    // If decoded to an error message, return nothing
+    if (html.includes('Unable to connect') || html.includes('error_api_get_instagram')) return [];
+
+    // Extract href links from decoded HTML — these are the direct CDN download URLs
+    const hrefs = [...html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
+    const srcs  = [...html.matchAll(/src="(https?:\/\/[^"]+\.(?:mp4|jpg|jpeg|png|webp)[^"]*)"/g)].map(m => m[1]);
+    const all = [...hrefs, ...srcs].filter(u => u && !u.includes('snapsave.app') && !u.includes('rapidsave.com'));
+    // Videos first
+    return [
+      ...all.filter(u => u.includes('.mp4') || u.includes('video')),
+      ...all.filter(u => !u.includes('.mp4') && !u.includes('video')),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Download Instagram media using a comprehensive chain of free public APIs.
  *
  * Services tried in order (no login / no session required):
- *   1.  fastdl.app                   — popular free downloader with JSON API
- *   2.  igram.world                  — igram.io mirror, no-auth scraper
- *   3.  snapinsta.app                — SnapInsta public scraper
- *   4.  saveig.app                   — SaveIG public scraper
- *   5.  reelsaver.net                — ReelSaver public scraper
- *   6.  sssinstagram.com             — SSS Instagram scraper
- *   7.  saveinsta.app                — SaveInsta public scraper
- *   8.  api.nyxs.pw                  — Nyxs community API
- *   9.  api.ryzendesu.vip            — Ryzendesu community API
- *   10. api.cobalt.tools             — Cobalt open-source downloader
- *   11. RapidAPI services            — Instagram downloaders (needs RAPIDAPI_KEY env var)
+ *   1.  snapsave.app                 — popular scraper with JS-encoded response (decoded server-side)
+ *   2.  rapidsave.com                — snapsave clone with same JS encoding
+ *   3.  snapinsta.app                — SnapInsta public scraper (ajaxSearch API)
+ *   4.  saveig.app                   — SaveIG public scraper (ajaxSearch API)
+ *   5.  saveinsta.app                — SaveInsta public scraper (ajaxSearch API)
+ *   6.  igram.world                  — igram.io mirror, no-auth scraper
+ *   7.  sssinstagram.com             — SSS Instagram scraper (ajaxSearch API)
+ *   8.  api.nyxs.pw                  — Nyxs community API (JSON)
+ *   9.  RapidAPI services            — Instagram downloaders (needs RAPIDAPI_KEY env var)
  *       - All-in-One Social Downloader (SaverAPI.net)
  *       - Social Saver API
  *       - Instagram Post/Reels/Stories Downloader (diyorbekkanal)
  *       - Instagram Video Downloader (skdeveloper)
- *   12. yt-dlp                       — last resort; fails for most content without auth
+ *   10. yt-dlp                       — last resort; fails for most content without auth
  *
  * Returns an array of { buffer, type } or [] if all services fail.
  */
@@ -211,40 +268,34 @@ async function igDownload(url) {
   const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "") + "/";
 
   // Desktop + mobile UA variants to rotate and bypass some bot filters
-  const uaDesktop = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const uaDesktop = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
   const uaMobile  = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
-  // Helper: parse the common "ajaxSearch" response format used by many scrapers
+  // Helper: parse the common "ajaxSearch" WordPress-plugin response format
   function parseAjaxResponse(data) {
     const links = data?.data?.url || data?.medias || data?.links || [];
     if (!Array.isArray(links)) return [];
-    // Videos first, then images
     return [
       ...links.filter(l => l.url?.includes('.mp4')),
       ...links.filter(l => l.url && !l.url.includes('.mp4')),
     ].map(l => l.url || l.link).filter(Boolean);
   }
 
-  // Helper: run one API attempt, return array of media URLs
+  // Helper: make a snapsave/rapidsave-style POST and decode the obfuscated JS response
+  async function trySnapsaveStyle(baseUrl) {
+    const r = await axios.post(`${baseUrl}/action.php`,
+      `url=${encodeURIComponent(cleanUrl)}&lang=en&button=`,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaMobile, 'Origin': baseUrl, 'Referer': `${baseUrl}/` }, timeout: 15000 });
+    return decodeSnapsaveResponse(String(r.data));
+  }
+
   const tryApis = [
 
-    // ── 1. fastdl.app (JSON API) ──────────────────────────────────────────────
-    async () => {
-      const r = await axios.post('https://fastdl.app/api/v1/download',
-        JSON.stringify({ url: cleanUrl }),
-        { headers: { 'Content-Type': 'application/json', 'User-Agent': uaDesktop, 'Origin': 'https://fastdl.app', 'Referer': 'https://fastdl.app/' }, timeout: 12000 });
-      const links = r.data?.links || [];
-      return links.map(l => l.link || l.url).filter(Boolean);
-    },
+    // ── 1. snapsave.app ───────────────────────────────────────────────────────
+    () => trySnapsaveStyle('https://snapsave.app'),
 
-    // ── 2. igram.world (igram.io mirror) ─────────────────────────────────────
-    async () => {
-      const r = await axios.post('https://igram.world/api/convert',
-        `data=${encodeURIComponent(cleanUrl)}`,
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaMobile, 'Origin': 'https://igram.world', 'Referer': 'https://igram.world/' }, timeout: 12000 });
-      const items = r.data?.url || r.data?.data || [];
-      return (Array.isArray(items) ? items : [items]).map(i => i?.url || i?.src || i).filter(u => typeof u === 'string');
-    },
+    // ── 2. rapidsave.com ──────────────────────────────────────────────────────
+    () => trySnapsaveStyle('https://rapidsave.com'),
 
     // ── 3. snapinsta.app ──────────────────────────────────────────────────────
     async () => {
@@ -262,27 +313,28 @@ async function igDownload(url) {
       return parseAjaxResponse(r.data);
     },
 
-    // ── 5. reelsaver.net ──────────────────────────────────────────────────────
-    async () => {
-      const r = await axios.post('https://reelsaver.net/api/ajaxSearch',
-        `q=${encodeURIComponent(cleanUrl)}&t=media&lang=en`,
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaDesktop, 'Origin': 'https://reelsaver.net', 'Referer': 'https://reelsaver.net/' }, timeout: 12000 });
-      return parseAjaxResponse(r.data);
-    },
-
-    // ── 6. sssinstagram.com ───────────────────────────────────────────────────
-    async () => {
-      const r = await axios.post('https://sssinstagram.com/api/ajaxSearch',
-        `q=${encodeURIComponent(cleanUrl)}&t=media&lang=en`,
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaDesktop, 'Origin': 'https://sssinstagram.com', 'Referer': 'https://sssinstagram.com/' }, timeout: 12000 });
-      return parseAjaxResponse(r.data);
-    },
-
-    // ── 7. saveinsta.app ──────────────────────────────────────────────────────
+    // ── 5. saveinsta.app ──────────────────────────────────────────────────────
     async () => {
       const r = await axios.post('https://saveinsta.app/api/ajaxSearch',
         `q=${encodeURIComponent(cleanUrl)}&t=media&lang=en`,
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaDesktop, 'Origin': 'https://saveinsta.app', 'Referer': 'https://saveinsta.app/' }, timeout: 12000 });
+      return parseAjaxResponse(r.data);
+    },
+
+    // ── 6. igram.world ────────────────────────────────────────────────────────
+    async () => {
+      const r = await axios.post('https://igram.world/api/convert',
+        `data=${encodeURIComponent(cleanUrl)}&url=${encodeURIComponent(cleanUrl)}`,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaMobile, 'Origin': 'https://igram.world', 'Referer': 'https://igram.world/' }, timeout: 12000 });
+      const items = r.data?.data || r.data?.url || r.data?.result || [];
+      return (Array.isArray(items) ? items : []).map(i => i?.url || i?.src || i?.link).filter(u => typeof u === 'string' && u.startsWith('http'));
+    },
+
+    // ── 7. sssinstagram.com ───────────────────────────────────────────────────
+    async () => {
+      const r = await axios.post('https://sssinstagram.com/api/ajaxSearch',
+        `q=${encodeURIComponent(cleanUrl)}&t=media&lang=en`,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': uaDesktop, 'Origin': 'https://sssinstagram.com', 'Referer': 'https://sssinstagram.com/' }, timeout: 12000 });
       return parseAjaxResponse(r.data);
     },
 
@@ -293,23 +345,7 @@ async function igDownload(url) {
       return items.slice(0, 10).map(i => i?.url || i?.link).filter(Boolean);
     },
 
-    // ── 9. api.ryzendesu.vip ─────────────────────────────────────────────────
-    async () => {
-      const r = await fetchJson(`https://api.ryzendesu.vip/api/downloader/igdl?url=${encodeURIComponent(cleanUrl)}`, { timeout: 12000 });
-      const items = r?.data || r?.result || [];
-      return (Array.isArray(items) ? items : [items]).map(i => i?.url || i?.link).filter(Boolean);
-    },
-
-    // ── 10. cobalt.tools (open-source, handles reels) ────────────────────────
-    async () => {
-      const r = await axios.post('https://api.cobalt.tools/',
-        JSON.stringify({ url: cleanUrl, downloadMode: 'auto', filenameStyle: 'basic' }),
-        { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': uaDesktop }, timeout: 15000 });
-      const u = r.data?.url || r.data?.audio;
-      return u ? [u] : [];
-    },
-
-    // ── 11a. RapidAPI: All-in-One Social Downloader by SaverAPI.net ───────────
+    // ── 9a. RapidAPI: All-in-One Social Downloader by SaverAPI.net ────────────
     async () => {
       const key = process.env.RAPIDAPI_KEY;
       if (!key) return [];
@@ -321,7 +357,7 @@ async function igDownload(url) {
       return (Array.isArray(links) ? links : []).map(l => l.url || l.link).filter(Boolean);
     },
 
-    // ── 11b. RapidAPI: Social Saver API ──────────────────────────────────────
+    // ── 9b. RapidAPI: Social Saver API ───────────────────────────────────────
     async () => {
       const key = process.env.RAPIDAPI_KEY;
       if (!key) return [];
@@ -333,7 +369,7 @@ async function igDownload(url) {
       return (Array.isArray(links) ? links : []).map(l => l.url || l.link).filter(Boolean);
     },
 
-    // ── 11c. RapidAPI: Instagram Post/Reels/Stories Downloader (diyorbekkanal)
+    // ── 9c. RapidAPI: Instagram Post/Reels/Stories Downloader (diyorbekkanal)
     async () => {
       const key = process.env.RAPIDAPI_KEY;
       if (!key) return [];
@@ -345,7 +381,7 @@ async function igDownload(url) {
       return (Array.isArray(links) ? links : []).map(l => l.url || l.link || l).filter(u => typeof u === 'string');
     },
 
-    // ── 11d. RapidAPI: Instagram Video Downloader (skdeveloper) ──────────────
+    // ── 9d. RapidAPI: Instagram Video Downloader (skdeveloper) ───────────────
     async () => {
       const key = process.env.RAPIDAPI_KEY;
       if (!key) return [];
@@ -357,7 +393,7 @@ async function igDownload(url) {
       return (Array.isArray(links) ? links : []).map(l => l.url || l.link || l).filter(u => typeof u === 'string');
     },
 
-    // ── 12. yt-dlp (last resort — fails for most content without auth) ────────
+    // ── 10. yt-dlp (last resort — fails for most content without auth) ─────────
     async () => {
       const ytdlpBin = findYtDlpBin();
       if (!ytdlpBin) return [];
@@ -388,7 +424,7 @@ async function igDownload(url) {
     },
   ];
 
-  // Try each service; return on first success
+  // Try each service in order; return on first success
   for (let i = 0; i < tryApis.length; i++) {
     try {
       const result = await tryApis[i]();
