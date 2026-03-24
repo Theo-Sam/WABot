@@ -1,6 +1,6 @@
 const config = require("../config");
-const { fetchJson, postJson, normalizeAiText, pickNonRepeating } = require("../lib/helpers");
-// No-key mode: avoid paid AI SDKs (use free endpoints where available)
+const { fetchJson, normalizeAiText, pickNonRepeating } = require("../lib/helpers");
+const { pollinate } = require("./ai");
 
 const planets = {
   mercury: { name: "Mercury", emoji: "☿️", distance: "57.9M km", diameter: "4,879 km", moons: 0, dayLength: "59 Earth days", yearLength: "88 Earth days", temp: "-180°C to 430°C", fact: "Smallest planet in our solar system and closest to the Sun." },
@@ -19,19 +19,59 @@ const wordOfTheDayPool = [
   { word: "Resilient", part: "adjective", meaning: "Able to recover quickly from difficulties", example: "She stayed resilient under pressure.", tip: "Useful for people, systems, or teams." },
   { word: "Ubiquitous", part: "adjective", meaning: "Present everywhere", example: "Smartphones are ubiquitous.", tip: "Use for very common things." },
   { word: "Pragmatic", part: "adjective", meaning: "Practical rather than idealistic", example: "A pragmatic solution.", tip: "Good for decision-making contexts." },
+  { word: "Tenacious", part: "adjective", meaning: "Holding firm; not giving up easily", example: "A tenacious athlete who trains every day.", tip: "Great for describing determination." },
+  { word: "Candid", part: "adjective", meaning: "Truthful and straightforward", example: "She gave a candid opinion.", tip: "Use when someone is being honest and direct." },
+  { word: "Eloquent", part: "adjective", meaning: "Fluent and persuasive in speaking or writing", example: "He gave an eloquent speech.", tip: "Use for well-expressed communication." },
+  { word: "Conundrum", part: "noun", meaning: "A confusing or difficult problem", example: "It's a real conundrum — no easy answer.", tip: "Use for tricky dilemmas." },
+  { word: "Meticulous", part: "adjective", meaning: "Very careful about details", example: "A meticulous researcher.", tip: "Use for someone who pays close attention." },
 ];
 
-async function grammarWithFreeAi(input) {
-  const prompt =
-    "Check the following text for grammar and clarity. " +
-    "Return:\n1) Corrected text\n2) Brief bullet list of issues (if any)\n\nText:\n" +
-    input;
-  const data = await postJson(
-    "https://text.pollinations.ai/openai",
-    { model: "openai", messages: [{ role: "user", content: prompt }] },
-    { timeout: 30000, headers: { "Content-Type": "application/json" } }
-  ).catch(() => null);
-  return data?.choices?.[0]?.message?.content || "";
+/**
+ * Fetch a random fun fact.
+ * Primary: uselessfacts.jsph.pl (reliable JSON API)
+ * Fallback: api.api-ninjas.com facts endpoint (no key required for basic use)
+ */
+async function fetchFunFact() {
+  try {
+    const data = await fetchJson("https://uselessfacts.jsph.pl/api/v2/facts/random?language=en", { timeout: 10000 });
+    if (data?.text) return data.text;
+  } catch {}
+  try {
+    const data = await fetchJson("https://api.popcat.xyz/fact", { timeout: 10000 });
+    if (data?.fact) return data.fact;
+  } catch {}
+  return null;
+}
+
+/**
+ * Fetch periodic table element data.
+ * Primary: api.popcat.xyz/periodic-table
+ * Fallback: neelpatel05.pythonanywhere.com
+ */
+async function fetchElement(query) {
+  const q = encodeURIComponent(query.trim());
+  try {
+    const data = await fetchJson(`https://api.popcat.xyz/periodic-table?element=${q}`, { timeout: 10000 });
+    if (data?.name) return data;
+  } catch {}
+  try {
+    const isNum = /^\d+$/.test(query.trim());
+    const endpoint = isNum
+      ? `https://neelpatel05.pythonanywhere.com/element/atomicnumber?elementid=${q}`
+      : `https://neelpatel05.pythonanywhere.com/element/name?elementname=${q}`;
+    const data = await fetchJson(endpoint, { timeout: 10000 });
+    if (data?.ElementName) {
+      return {
+        name: data.ElementName,
+        symbol: data.Symbol,
+        atomic_number: data.AtomicNumber,
+        atomic_mass: data.AtomicMass,
+        phase: data.Phase,
+        summary: `${data.ElementName} (${data.Symbol}) — Group ${data.Group}, Period ${data.Period}. Type: ${data.Type || "N/A"}.`,
+      };
+    }
+  } catch {}
+  return null;
 }
 
 const commands = [
@@ -40,12 +80,11 @@ const commands = [
     category: "education",
     desc: "Periodic table lookup (name/symbol/number)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.usageReply("element <name|symbol|number>", "element oxygen");
+      if (!text) return m.usageReply("element <name|symbol|number>", "element oxygen\nelement Au\nelement 8");
       m.react("⚛️");
       try {
-        const q = String(text).trim();
-        const data = await fetchJson(`https://api.popcat.xyz/periodic-table?element=${encodeURIComponent(q)}`).catch(() => null);
-        if (!data?.name) return m.reply("❌ Element not found. Try name, symbol, or atomic number.");
+        const data = await fetchElement(text);
+        if (!data?.name) return m.reply("❌ Element not found. Try a name (oxygen), symbol (Au), or atomic number (8).");
         let msg = `⚛️ *${data.name}*\n\n`;
         msg += `🔤 Symbol: ${data.symbol}\n`;
         msg += `🔢 Atomic Number: ${data.atomic_number}\n`;
@@ -56,7 +95,7 @@ const commands = [
         m.react("✅");
       } catch {
         m.react("❌");
-        return m.apiErrorReply("element");
+        return m.apiErrorReply("Periodic Table");
       }
     },
   },
@@ -68,7 +107,7 @@ const commands = [
       if (!text) {
         return m.reply(
           `🌌 *Solar System*\n\nAvailable planets:\n` +
-          `- Mercury\n- Venus\n- Earth\n- Mars\n- Jupiter\n- Saturn\n- Uranus\n- Neptune\n\n` +
+          `- Mercury  - Venus  - Earth  - Mars\n- Jupiter  - Saturn  - Uranus  - Neptune\n\n` +
           `Usage: ${config.PREFIX}planet <name>`
         );
       }
@@ -169,21 +208,85 @@ const commands = [
     },
   },
   {
-    name: ["grammar", "gram"],
+    name: ["grammar", "gram", "grammarcheck"],
     category: "education",
-    desc: "Check grammar with AI (no key)",
+    desc: "Check and correct grammar with AI",
     handler: async (sock, m, { text }) => {
       const input = text || m.quoted?.body || "";
-      if (!input) return m.usageReply("grammar <text> or reply to a message");
+      if (!input) return m.usageReply("grammar <text> or reply to a message", "grammar She go to school yesterday");
       m.react("📝");
       try {
-        const answer = await grammarWithFreeAi(input);
-        if (!answer) return m.apiErrorReply("Grammar Check");
+        const prompt =
+          "You are a grammar expert. Check the following text for grammar, spelling, and clarity errors.\n" +
+          "Return ONLY:\n" +
+          "1. ✅ Corrected version of the text\n" +
+          "2. 📋 Short bullet list of corrections made (if any), or 'No errors found' if the text is correct.\n\n" +
+          "Text to check:\n" + input;
+
+        const answer = await pollinate(prompt, "openai");
+        if (!answer || answer.length < 5) {
+          m.react("❌");
+          return m.apiErrorReply("Grammar Check");
+        }
         await m.reply(`📝 *Grammar Check*\n\n${normalizeAiText(answer, { keepLightFormatting: true })}`);
         m.react("✅");
       } catch {
         m.react("❌");
-        return m.apiErrorReply("Grammar");
+        return m.apiErrorReply("Grammar Check");
+      }
+    },
+  },
+  {
+    name: ["explain", "explainit", "whatis"],
+    category: "education",
+    desc: "AI explains any topic in simple terms",
+    handler: async (sock, m, { text }) => {
+      const topic = text || m.quoted?.body || "";
+      if (!topic) return m.usageReply("explain <topic or concept>", "explain black holes\nexplain how vaccines work");
+      m.react("🧠");
+      try {
+        const prompt =
+          "Explain the following topic in simple, easy-to-understand terms. " +
+          "Use short paragraphs and plain language suitable for a general audience. " +
+          "Keep it under 250 words. Do not use markdown headers.\n\nTopic: " + topic;
+
+        const answer = await pollinate(prompt, "openai");
+        if (!answer || answer.length < 10) {
+          m.react("❌");
+          return m.apiErrorReply("Explain");
+        }
+        await m.reply(
+          `🧠 *${topic.trim()}*\n\n` +
+          normalizeAiText(answer, { keepLightFormatting: true }) +
+          `\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`
+        );
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        return m.apiErrorReply("Explain");
+      }
+    },
+  },
+  {
+    name: ["funfact", "fact", "randomfact"],
+    category: "education",
+    desc: "Get a random interesting fact",
+    handler: async (sock, m) => {
+      m.react("💡");
+      try {
+        const fact = await fetchFunFact();
+        if (!fact) {
+          m.react("❌");
+          return m.apiErrorReply("Fun Fact");
+        }
+        await m.reply(
+          `💡 *Random Fact*\n\n${fact}\n\n` +
+          `────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`
+        );
+        m.react("✅");
+      } catch {
+        m.react("❌");
+        return m.apiErrorReply("Fun Fact");
       }
     },
   },
@@ -193,14 +296,15 @@ const commands = [
     desc: "Get word of the day",
     handler: async (sock, m) => {
       m.react("📖");
-      const w = pickNonRepeating(wordOfTheDayPool, `${m.chat}:wotd`, { maxHistory: 4 });
+      const w = pickNonRepeating(wordOfTheDayPool, `${m.chat}:wotd`, { maxHistory: 8 });
       await m.reply(
         `📖 *Word of the Day*\n\n` +
         `📌 *${w.word}* (${w.part})\n\n` +
         `📝 Meaning: ${w.meaning}\n\n` +
         `💬 Example: _"${w.example}"_\n\n` +
         `🎯 Tip: ${w.tip}\n\n` +
-        `📅 ${new Date().toLocaleDateString()}`
+        `📅 ${new Date().toLocaleDateString()}\n` +
+        `────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`
       );
       m.react("✅");
     },
