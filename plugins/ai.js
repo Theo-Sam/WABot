@@ -25,33 +25,76 @@ async function pollinate(prompt, persona = "openai") {
   });
   messages.push({ role: "user", content: prompt });
 
-  // Build a concise plain-text prompt for small Ollama models
+  // Build a concise plain-text prompt for small Ollama models (fallback only)
   const systemParts = messages.filter(m => m.role === "system").map(m => m.content).join(" ");
   const userText    = messages.filter(m => m.role === "user").map(m => m.content).join("\n");
   const ollamaPrompt = `${systemParts}\n\nQuestion: ${userText}\nAnswer:`;
   const ollamaStop   = ["\nQuestion:", "\nUser:", "\n[SYSTEM]"];
 
-  // ── Tier 1: mlvoca.com — public Ollama node (tinyllama), confirmed working ──
-  //    Free, no key, no registration, no rate limit per request
+  // Strip ad blocks injected by api.airforce at the end of responses
+  function stripAds(text) {
+    if (!text) return text;
+    return text
+      .replace(/\n*Need proxies cheaper[\s\S]*$/i, "")
+      .replace(/\n*Ratelimit Exceeded[\s\S]*$/i, "")
+      .replace(/\n*Please join:[\s\S]*$/i, "")
+      .trim();
+  }
+
+  // Detect clearly bad Ollama responses (small model hallucinations)
+  function isBadOllamaResponse(answer) {
+    if (!answer || answer.length < 5) return true;
+    if (answer.includes("Question:") || answer.includes("Answer:")) return true;
+    if (answer.startsWith(userText.slice(0, 20))) return true;
+    // Catch "Dear Gemini/Claude/..." letter-format hallucinations
+    if (/^Dear\s+(Gemini|Claude|Llama|Mistral|GPT|AI|Copilot|Bard)/i.test(answer)) return true;
+    if (/^Subject:/i.test(answer)) return true;
+    return false;
+  }
+
+  // ── Tier 1: api.airforce — gemini-2.0-flash (best free quality, no key) ──────
   try {
-    const res = await axios.post("https://mlvoca.com/api/generate", {
-      model: "tinyllama",
-      prompt: ollamaPrompt,
-      stream: false,
-      options: { stop: ollamaStop, num_predict: 300 },
-    }, { timeout: 30000 });
-    const answer = res.data?.response?.trim();
-    // Guard: if model echoed the prompt template, discard and fall through
-    const isEcho = answer && (answer.includes("Question:") || answer.includes("Answer:") || answer.startsWith(userText.slice(0, 20)));
-    if (answer && answer.length >= 2 && !isEcho) return normalizeAiText(answer, { keepLightFormatting: true });
+    const res = await axios.post("https://api.airforce/v1/chat/completions", {
+      model: "gemini-2.0-flash",
+      messages,
+    }, {
+      timeout: 35000,
+      headers: { "Content-Type": "application/json" },
+      validateStatus: s => s < 500,
+    });
+    const raw = res.data?.choices?.[0]?.message?.content?.trim();
+    const answer = stripAds(raw);
+    if (answer && answer.length >= 5 && !/ratelimit exceeded/i.test(answer)) {
+      return normalizeAiText(answer, { keepLightFormatting: true });
+    }
   } catch {}
 
-  // ── Tier 2: Community-hosted public Ollama nodes ────────────────────────────
-  //    IP-based servers donated by the community; model list tested live
+  // ── Tier 2: api.airforce — other models as rate-limit fallback ────────────────
+  const airforceFallbacks = ["llama-4-scout", "gpt-4o-mini", "deepseek-v3-0324"];
+  for (const model of airforceFallbacks) {
+    try {
+      await new Promise(r => setTimeout(r, 1200));
+      const res = await axios.post("https://api.airforce/v1/chat/completions", {
+        model,
+        messages,
+      }, {
+        timeout: 35000,
+        headers: { "Content-Type": "application/json" },
+        validateStatus: s => s < 500,
+      });
+      const raw = res.data?.choices?.[0]?.message?.content?.trim();
+      const answer = stripAds(raw);
+      if (answer && answer.length >= 5 && !/ratelimit exceeded/i.test(answer)) {
+        return normalizeAiText(answer, { keepLightFormatting: true });
+      }
+    } catch {}
+  }
+
+  // ── Tier 3: Community-hosted public Ollama nodes (better models first) ────────
   const communityNodes = [
     { base: "http://210.212.210.104:84", model: "gemma3:1b" },
-    { base: "http://111.230.71.93:80",   model: "tinyllama:latest" },
     { base: "http://119.3.179.233:80",   model: "qwen:7b" },
+    { base: "http://111.230.71.93:80",   model: "tinyllama:latest" },
   ];
   for (const node of communityNodes) {
     try {
@@ -62,34 +105,21 @@ async function pollinate(prompt, persona = "openai") {
         options: { stop: ollamaStop, num_predict: 300 },
       }, { timeout: 20000 });
       const answer = res.data?.response?.trim();
-      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+      if (!isBadOllamaResponse(answer)) return normalizeAiText(answer, { keepLightFormatting: true });
     } catch {}
   }
 
-  // ── Tier 3: api.airforce — 122 models, no key, 1 req/sec rate limit ─────────
-  //    Free community AI gateway; use smaller models for fastest response
-  const airforceModels = [
-    "gpt-4o-mini",
-    "llama-4-scout",
-    "gemini-2.0-flash",
-    "deepseek-v3-0324",
-  ];
-  for (const model of airforceModels) {
-    try {
-      await new Promise(r => setTimeout(r, 1200)); // respect 1 req/sec limit
-      const res = await axios.post("https://api.airforce/v1/chat/completions", {
-        model,
-        messages,
-      }, {
-        timeout: 35000,
-        headers: { "Content-Type": "application/json" },
-        validateStatus: s => s < 500,
-      });
-      if (res.status === 429) continue; // still rate-limited, try next model
-      const answer = res.data?.choices?.[0]?.message?.content?.trim();
-      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
-    } catch {}
-  }
+  // ── Tier 4: mlvoca.com tinyllama (last resort) ────────────────────────────────
+  try {
+    const res = await axios.post("https://mlvoca.com/api/generate", {
+      model: "tinyllama",
+      prompt: ollamaPrompt,
+      stream: false,
+      options: { stop: ollamaStop, num_predict: 300 },
+    }, { timeout: 30000 });
+    const answer = res.data?.response?.trim();
+    if (!isBadOllamaResponse(answer)) return normalizeAiText(answer, { keepLightFormatting: true });
+  } catch {}
 
   throw new Error("All free AI providers failed or returned empty responses.");
 }
