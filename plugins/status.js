@@ -18,8 +18,16 @@ function getOwnerJid(sock) {
   return "";
 }
 
+function isStatusReplyContext(m) {
+  // Direct status@broadcast context
+  if (m.chat === "status@broadcast") return true;
+  // WhatsApp routes status replies as DMs to the poster — detect by quoted remoteJid
+  if (m.quoted?.key?.remoteJid === "status@broadcast") return true;
+  return false;
+}
+
 function getStatusSaveTargetChat(sock, m) {
-  if (m.chat !== "status@broadcast") return m.chat;
+  if (!isStatusReplyContext(m)) return m.chat;
   return getOwnerJid(sock) || m.sender || m.chat;
 }
 
@@ -40,7 +48,7 @@ const commands = [
       }
 
       const targetChat = getStatusSaveTargetChat(sock, m);
-      const inStatusCtx = m.chat === "status@broadcast";
+      const inStatusCtx = isStatusReplyContext(m);
 
       // Helper: all text feedback goes to targetChat (owner's DM in status context)
       const sendText = (text) => sock.sendMessage(targetChat, { text });
