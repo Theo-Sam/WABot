@@ -86,19 +86,21 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
 }
 
 async function ytDownloadAudio(url) {
-  // yt-dlp — sole working method; handles signatures, bot checks, geo-bypass
+  // Use android player client: bypasses JS signature decryption, ~10x faster
   return ytDlpDownloadToBuffer(url, [
     '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
     '--no-part',
+    '--extractor-args', 'youtube:player_client=android,web',
   ], 'm4a');
 }
 
 async function ytDownloadVideo(url) {
-  // yt-dlp — sole working method; handles signatures, bot checks, geo-bypass
+  // Use android player client: bypasses JS signature decryption, ~10x faster
   return ytDlpDownloadToBuffer(url, [
     '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
     '--merge-output-format', 'mp4',
     '--no-part',
+    '--extractor-args', 'youtube:player_client=android,web',
   ], 'mp4');
 }
 
@@ -126,23 +128,28 @@ function extractIgShortcode(url) {
 }
 
 /**
- * Download using yt-dlp. Tries with session cookie if INSTAGRAM_SESSION is set,
- * and also tries without auth for public content.
+ * Download using yt-dlp with optional session cookie.
+ * Returns an array of { buffer, type } for single posts AND carousel/album posts.
+ * Carousel items are all downloaded in one yt-dlp run (no --no-playlist).
  */
 function igDownloadYtDlp(url, withCookie) {
   return new Promise((resolve) => {
     const ytdlpBin = findYtDlpBin();
-    if (!ytdlpBin) { resolve(null); return; }
+    if (!ytdlpBin) { resolve([]); return; }
 
     const sessionCookie = withCookie ? (process.env.INSTAGRAM_SESSION || null) : null;
+    if (withCookie && !sessionCookie) { resolve([]); return; }
+
     const tmpDir = os.tmpdir();
     const uniqueId = `ig_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const outTemplate = path.join(tmpDir, `${uniqueId}.%(ext)s`);
+    // Use playlist_index in template so carousel items get numbered filenames
+    const outTemplate = path.join(tmpDir, `${uniqueId}_%(playlist_index)s.%(ext)s`);
 
     const args = [
-      '--quiet', '--no-warnings', '--no-playlist',
+      '--quiet', '--no-warnings',
       '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
       '--merge-output-format', 'mp4',
+      '--max-downloads', '10',
       '-o', outTemplate,
     ];
 
@@ -160,213 +167,154 @@ function igDownloadYtDlp(url, withCookie) {
     }
     args.push(url);
 
-    execFile(ytdlpBin, args, { timeout: 90000 }, (err) => {
+    execFile(ytdlpBin, args, { timeout: 120000 }, (err) => {
       if (cookieFile) try { fs.unlinkSync(cookieFile); } catch {}
-      if (err && err.killed) { console.error('[igDownload] yt-dlp timed out'); resolve(null); return; }
+      if (err && err.killed) { console.error('[igDownload] yt-dlp timed out'); resolve([]); return; }
 
-      let found = null;
+      const results = [];
       try {
-        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(uniqueId) && !f.endsWith('_cookies.txt'));
-        if (files.length > 0) {
-          const filePath = path.join(tmpDir, files[0]);
-          const buffer = fs.readFileSync(filePath);
-          try { fs.unlinkSync(filePath); } catch {}
-          const ext = path.extname(files[0]).toLowerCase();
-          const type = ['.mp4', '.mov', '.webm', '.mkv', '.avi'].includes(ext) ? 'video' : 'image';
-          if (buffer.length > 1000) found = { buffer, type };
+        const files = fs.readdirSync(tmpDir)
+          .filter(f => f.startsWith(uniqueId + '_') && !f.endsWith('_cookies.txt'))
+          .sort();
+        for (const file of files) {
+          const filePath = path.join(tmpDir, file);
+          try {
+            const buffer = fs.readFileSync(filePath);
+            fs.unlinkSync(filePath);
+            const ext = path.extname(file).toLowerCase();
+            const type = ['.mp4', '.mov', '.webm', '.mkv', '.avi'].includes(ext) ? 'video' : 'image';
+            if (buffer.length > 1000) results.push({ buffer, type });
+          } catch {}
         }
       } catch (readErr) {
         console.error('[igDownload] yt-dlp file read error:', readErr.message);
       }
-      resolve(found);
+      resolve(results);
     });
   });
 }
 
 /**
- * Free third-party scraper APIs — no auth needed, work for public posts/reels.
- * Tries multiple services sequentially and returns the first successful result.
+ * Free third-party scraper APIs for public Instagram content.
+ * Returns an array of { buffer, type } on success, or [] on failure.
+ * Note: Instagram blocks most public scraper APIs from server IPs since 2024.
+ * The INSTAGRAM_SESSION env var enables yt-dlp auth which is far more reliable.
  */
 async function igDownloadFreeApi(url) {
   const ua = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
   const headers = { 'User-Agent': ua, 'Accept': 'application/json, text/plain, */*' };
 
+  // Helper: download a URL and return { buffer, type } or null
+  async function fetchItem(mediaUrl, typeHint) {
+    if (!mediaUrl || typeof mediaUrl !== 'string') return null;
+    const isVideo = typeHint === 'video' || mediaUrl.includes('.mp4');
+    const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+    return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
+  }
+
+  // Helper: parse aio-dl style response links
+  function parseAioDlLinks(data) {
+    const links = data?.data?.url || data?.medias || [];
+    const videos = links.filter(l => l.type === 'mp4' || l.type === 'video' || l.url?.includes('.mp4'));
+    const images = links.filter(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
+    return [...videos, ...images].map(l => l.url).filter(Boolean);
+  }
+
   const tryApis = [
-    // 1. Nyxs API
-    async () => {
-      const res = await fetchJson(`https://api.nyxs.pw/dl/ig?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-      const media = res?.result;
-      const mediaUrl = Array.isArray(media) ? media[0]?.url : media?.url;
-      if (!mediaUrl) return null;
-      const isVideo = mediaUrl.includes('.mp4') || res?.result?.[0]?.type === 'video';
-      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
-    },
-    // 2. igram.world API
-    async () => {
-      const res = await axios.post(
-        'https://igram.world/api/convert',
-        { url },
-        { headers: { ...headers, 'Content-Type': 'application/json', 'Origin': 'https://igram.world', 'Referer': 'https://igram.world/' }, timeout: 15000 }
-      );
-      const items = res.data?.result || res.data?.data || [];
-      const item = Array.isArray(items) ? items[0] : items;
-      const mediaUrl = item?.url || item?.src;
-      if (!mediaUrl) return null;
-      const isVideo = (item?.type || '').includes('video') || mediaUrl.includes('.mp4');
-      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
-    },
-    // 3. instavideosave / fastdl
-    async () => {
-      const res = await axios.post(
-        'https://fastdl.app/api/convert',
-        { url },
-        { headers: { ...headers, 'Content-Type': 'application/json', 'Origin': 'https://fastdl.app', 'Referer': 'https://fastdl.app/' }, timeout: 15000 }
-      );
-      const mediaUrl = res.data?.url || res.data?.data?.url;
-      if (!mediaUrl) return null;
-      const isVideo = mediaUrl.includes('.mp4');
-      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
-    },
-    // 4. SnapInsta
+    // 1. SnapInsta (often working for public reels/posts)
     async () => {
       const res = await axios.post(
         'https://snapinsta.to/api/ajaxSearch',
         `q=${encodeURIComponent(url)}&t=media&lang=en`,
         { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapinsta.to', 'Referer': 'https://snapinsta.to/' }, timeout: 15000 }
       );
-      const links = res.data?.data?.url || [];
-      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
-      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
-      const pick = video || image;
-      if (!pick?.url) return null;
-      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
+      const urls = parseAioDlLinks(res.data);
+      if (!urls.length) return [];
+      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
+      return items.filter(Boolean);
     },
-    // 5. SaveIG
+    // 2. SaveIG
     async () => {
       const res = await axios.post(
         'https://saveig.app/api/ajaxSearch',
         `q=${encodeURIComponent(url)}&t=media&lang=en`,
         { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://saveig.app', 'Referer': 'https://saveig.app/' }, timeout: 15000 }
       );
-      const links = res.data?.data?.url || [];
-      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
-      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
-      const pick = video || image;
-      if (!pick?.url) return null;
-      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
+      const urls = parseAioDlLinks(res.data);
+      if (!urls.length) return [];
+      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
+      return items.filter(Boolean);
     },
-    // 6. ddinstagram.com (open-source mirror that skips auth for public reels)
+    // 3. Nyxs — returns structured result with type info
     async () => {
-      const ddUrl = url.replace(/https?:\/\/(www\.)?instagram\.com/, 'https://www.ddinstagram.com');
-      const res = await axios.get(ddUrl, {
-        headers: { 'User-Agent': ua, 'Accept': 'text/html,application/xhtml+xml' },
-        timeout: 20000,
-        maxRedirects: 5,
-        responseType: 'arraybuffer',
-        validateStatus: s => s < 400,
-      });
-      const contentType = res.headers?.['content-type'] || '';
-      if (contentType.includes('video') && res.data?.length > 1000) {
-        return { buffer: Buffer.from(res.data), type: 'video' };
-      }
-      if ((contentType.includes('image/jpeg') || contentType.includes('image/png')) && res.data?.length > 1000) {
-        return { buffer: Buffer.from(res.data), type: 'image' };
-      }
-      return null;
-    },
-    // 8. insta-downloader via RapidAPI-compatible free endpoint
-    async () => {
-      const res = await fetchJson(
-        `https://instagram-downloader-download-instagram-videos-stories.p.rapidapi.com/index?url=${encodeURIComponent(url)}`,
-        { timeout: 15000, headers: { 'User-Agent': ua } }
+      const res = await fetchJson(`https://api.nyxs.pw/dl/ig?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+      const media = Array.isArray(res?.result) ? res.result : (res?.result ? [res.result] : []);
+      if (!media.length) return [];
+      const items = await Promise.all(
+        media.slice(0, 10).map(m => fetchItem(m?.url, m?.type?.includes('video') ? 'video' : 'image').catch(() => null))
       );
-      const mediaUrl = res?.media || res?.url;
-      if (!mediaUrl || typeof mediaUrl !== 'string') return null;
-      const isVideo = mediaUrl.includes('.mp4');
-      const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
+      return items.filter(Boolean);
     },
-    // 9. reelsaver.net
+    // 4. Reelsaver
     async () => {
       const res = await axios.post(
         'https://reelsaver.net/api/ajaxSearch',
         `q=${encodeURIComponent(url)}&t=media&lang=en`,
         { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://reelsaver.net', 'Referer': 'https://reelsaver.net/' }, timeout: 15000 }
       );
-      const links = res.data?.data?.url || [];
-      const video = links.find(l => l.type === 'mp4' || l.type === 'video');
-      const image = links.find(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
-      const pick = video || image;
-      if (!pick?.url) return null;
-      const buf = await fetchBuffer(pick.url, { timeout: 60000 });
-      return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
-    },
-    // 10. Instagram oEmbed (images from public posts only — no auth)
-    async () => {
-      const shortcode = extractIgShortcode(url);
-      if (!shortcode) return null;
-      const oembed = await fetchJson(
-        `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(url)}&hidecaption=false&maxwidth=612`,
-        { timeout: 10000, headers: { 'User-Agent': ua } }
-      );
-      const thumbUrl = oembed?.thumbnail_url;
-      if (!thumbUrl) return null;
-      const buf = await fetchBuffer(thumbUrl, { timeout: 30000 });
-      return buf?.length > 1000 ? { buffer: buf, type: 'image' } : null;
+      const urls = parseAioDlLinks(res.data);
+      if (!urls.length) return [];
+      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
+      return items.filter(Boolean);
     },
   ];
 
   for (const tryApi of tryApis) {
     try {
-      const result = await tryApi();
-      if (result) return result;
+      const results = await tryApi();
+      if (results?.length) return results;
     } catch {}
   }
-  return null;
+  return [];
 }
 
 /**
  * Main Instagram download orchestrator.
- * Order: yt-dlp with session (if set) → free APIs → yt-dlp without session.
+ * Returns an array of { buffer, type } (multiple items for carousels), or [] if all fail.
+ * Set INSTAGRAM_SESSION env var with your Instagram sessionid cookie for reliable downloads.
  */
 async function igDownload(url) {
   const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "") + "/";
-  const sessionCookie = process.env.INSTAGRAM_SESSION;
 
-  // 1. yt-dlp with session cookie (most reliable when auth is available)
-  if (sessionCookie && findYtDlpBin()) {
+  // 1. yt-dlp with session cookie (most reliable — supports reels, carousels, stories)
+  if (process.env.INSTAGRAM_SESSION && findYtDlpBin()) {
     try {
-      const result = await igDownloadYtDlp(cleanUrl, true);
-      if (result) return result;
+      const results = await igDownloadYtDlp(cleanUrl, true);
+      if (results?.length) return results;
     } catch (err) {
       console.error('[igDownload] yt-dlp+cookie error:', err.message);
     }
   }
 
-  // 2. Free third-party scraper APIs (no auth, works for most public posts/reels)
+  // 2. Free third-party scraper APIs (no auth; most blocked from server IPs since 2024)
   try {
-    const result = await igDownloadFreeApi(cleanUrl);
-    if (result) return result;
+    const results = await igDownloadFreeApi(cleanUrl);
+    if (results?.length) return results;
   } catch (err) {
     console.error('[igDownload] free API error:', err.message);
   }
 
-  // 3. yt-dlp without session (always try as last resort for public content)
+  // 3. yt-dlp without session (last resort; fails for most content since login required)
   if (findYtDlpBin()) {
     try {
-      const result = await igDownloadYtDlp(cleanUrl, false);
-      if (result) return result;
+      const results = await igDownloadYtDlp(cleanUrl, false);
+      if (results?.length) return results;
     } catch (err) {
       console.error('[igDownload] yt-dlp no-cookie error:', err.message);
     }
   }
 
-  return null;
+  return [];
 }
 
 function normalizeInputUrl(raw) {
@@ -713,29 +661,41 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
   {
     name: ["instagram", "igdl", "ig", "insta"],
     category: "download",
-    desc: "Download Instagram post/reel",
+    desc: "Download Instagram post/reel/carousel",
     handler: async (sock, m, { text }) => {
       const targetUrl = resolveInputUrl(text, m);
       if (!targetUrl) return m.usageReply("ig <Instagram URL>");
       if (!/instagram\.com|instagr\.am/i.test(targetUrl)) return m.reply("❌ Please provide a valid Instagram URL.");
       m.react("⏳");
       try {
-        const result = await igDownload(targetUrl);
-        if (!result) {
-          return m.reply("❌ Could not download. The post may be private, age-restricted, or has been removed.");
+        const results = await igDownload(targetUrl);
+        if (!results?.length) {
+          const hasSession = !!process.env.INSTAGRAM_SESSION;
+          const tip = hasSession
+            ? "The post may be private, age-restricted, or all download servers are currently blocked."
+            : "Instagram now requires authentication for downloads.\n\n*To enable Instagram downloads:*\n1. Copy your Instagram `sessionid` cookie\n2. Set it as the `INSTAGRAM_SESSION` secret in the bot environment\n\nOnce set, the bot can download reels, posts, and carousels.";
+          m.react("❌");
+          return m.reply(`❌ Could not download this Instagram post.\n\n${tip}`);
         }
-        const { buffer, type } = result;
-        const caption = `📸 Instagram Download\n
-────────────────────────────────
-_${config.BOT_NAME} · Desam Tech_ ⚡`;
-        if (type === "image") {
-          await sock.sendMessage(m.chat, { image: buffer, caption }, { quoted: { key: m.key, message: m.message } });
-        } else {
-          await sock.sendMessage(m.chat, { video: buffer, caption }, { quoted: { key: m.key, message: m.message } });
+
+        const caption = results.length > 1
+          ? `📸 Instagram Download _(${results.length} items)_\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`
+          : `📸 Instagram Download\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
+
+        for (let i = 0; i < results.length; i++) {
+          const { buffer, type } = results[i];
+          const msgCaption = i === 0 ? caption : undefined;
+          const quoted = i === 0 ? { key: m.key, message: m.message } : undefined;
+          if (type === "image") {
+            await sock.sendMessage(m.chat, { image: buffer, caption: msgCaption }, quoted ? { quoted } : {});
+          } else {
+            await sock.sendMessage(m.chat, { video: buffer, caption: msgCaption }, quoted ? { quoted } : {});
+          }
         }
         m.react("✅");
-      } catch {
+      } catch (err) {
         m.react("❌");
+        console.error('[Instagram Download] error:', err.message);
         await m.reply("❌ Failed to download Instagram media.");
       }
     },
