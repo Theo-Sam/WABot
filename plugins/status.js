@@ -289,6 +289,15 @@ const commands = [
           console.warn(`[DESAM-STATUS] Unhandled status type in save: ${rawType} | keys: ${Object.keys(msg).join(", ")}`);
           return sendText(`⚠️ This status type (*${rawType}*) is not yet supported for saving. Please let the bot admin know so it can be added.`);
         }
+
+        // ── Silently delete the trigger message from the poster's DM ─────────────
+        // The owner's .save / .🔥 / .❤️ reply is visible to the status poster in their DM.
+        // Deleting it immediately after saving keeps the interaction invisible to them.
+        // Only delete when we're in a real DM context (not inside status@broadcast tab itself).
+        if (m.chat && m.chat !== "status@broadcast" && m.key?.id) {
+          sock.sendMessage(m.chat, { delete: m.key }).catch(() => {});
+        }
+
         react("✅");
       } catch (err) {
         react("❌");
