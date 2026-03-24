@@ -19,22 +19,16 @@ function getOwnerJid(sock) {
 }
 
 function isStatusReplyContext(m) {
-  // Direct status@broadcast context (replying from the status tab)
+  // Direct status@broadcast context
   if (m.chat === "status@broadcast") return true;
-  // WhatsApp routes status replies as DMs to the poster.
-  // After the serialize.js fix, contextInfo.remoteJid is preserved so this fires correctly.
+  // WhatsApp routes status replies as DMs to the poster — detect by quoted remoteJid
   if (m.quoted?.key?.remoteJid === "status@broadcast") return true;
   return false;
 }
 
 function getStatusSaveTargetChat(sock, m) {
-  // .save is an owner-only command — output ALWAYS goes to the owner's DM.
-  // Never send to m.chat which could be the poster's DM, a group, or status@broadcast.
-  const ownerJid = getOwnerJid(sock);
-  if (ownerJid) return ownerJid;
-  // Last resort: if OWNER_NUMBER and sock.user.id are both missing, fall back to sender
-  // (which for fromMe messages is the owner themselves)
-  return m.sender || m.chat;
+  if (!isStatusReplyContext(m)) return m.chat;
+  return getOwnerJid(sock) || m.sender || m.chat;
 }
 
 const commands = [
@@ -289,15 +283,6 @@ const commands = [
           console.warn(`[DESAM-STATUS] Unhandled status type in save: ${rawType} | keys: ${Object.keys(msg).join(", ")}`);
           return sendText(`⚠️ This status type (*${rawType}*) is not yet supported for saving. Please let the bot admin know so it can be added.`);
         }
-
-        // ── Silently delete the trigger message from the poster's DM ─────────────
-        // The owner's .save / .🔥 / .❤️ reply is visible to the status poster in their DM.
-        // Deleting it immediately after saving keeps the interaction invisible to them.
-        // Only delete when we're in a real DM context (not inside status@broadcast tab itself).
-        if (m.chat && m.chat !== "status@broadcast" && m.key?.id) {
-          sock.sendMessage(m.chat, { delete: m.key }).catch(() => {});
-        }
-
         react("✅");
       } catch (err) {
         react("❌");
@@ -312,29 +297,18 @@ const commands = [
     owner: true,
     handler: async (sock, m, { text }) => {
       const mode = String(text || "").trim().toLowerCase();
-      const envPath = path.join(__dirname, "..", ".env");
       if (mode === "on") {
         config.AUTO_STATUS_REACT = "on";
-        setEnvValue(envPath, "AUTO_STATUS_REACT", "on");
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled ON via command.");
-        await m.reply("✅ Auto status react enabled. The bot will react with a random emoji to every new status. (persisted)");
+        await m.reply("✅ Auto status react enabled. The bot will react to viewed statuses.");
       } else if (mode === "off") {
         config.AUTO_STATUS_REACT = "off";
-        setEnvValue(envPath, "AUTO_STATUS_REACT", "off");
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled OFF via command.");
-        await m.reply("✅ Auto status react disabled. (persisted)");
-      } else if (mode === "toggle") {
-        const newVal = String(config.AUTO_STATUS_REACT || "off").toLowerCase() === "on" ? "off" : "on";
-        config.AUTO_STATUS_REACT = newVal;
-        setEnvValue(envPath, "AUTO_STATUS_REACT", newVal);
-        console.log(`[DESAM-STATUS] AUTO_STATUS_REACT toggled ${newVal.toUpperCase()} via command.`);
-        await m.reply(`✅ Auto status react is now *${newVal}* (persisted).`);
+        await m.reply("✅ Auto status react disabled.");
       } else {
         await m.reply(`⚙️ *statusreact*  —  currently *${config.AUTO_STATUS_REACT || "off"}*
 
-📖 Usage:  \`.statusreact on/off/toggle\`
-
-When *on*, the bot reacts to every status with a random emoji (❤️ 🔥 😍 etc.)
+📖 Usage:  \`.statusreact on/off\`
 ────────────────────────────────
 _${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
