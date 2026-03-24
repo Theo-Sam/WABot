@@ -303,18 +303,29 @@ const commands = [
     owner: true,
     handler: async (sock, m, { text }) => {
       const mode = String(text || "").trim().toLowerCase();
+      const envPath = path.join(__dirname, "..", ".env");
       if (mode === "on") {
         config.AUTO_STATUS_REACT = "on";
+        setEnvValue(envPath, "AUTO_STATUS_REACT", "on");
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled ON via command.");
-        await m.reply("✅ Auto status react enabled. The bot will react to viewed statuses.");
+        await m.reply("✅ Auto status react enabled. The bot will react with a random emoji to every new status. (persisted)");
       } else if (mode === "off") {
         config.AUTO_STATUS_REACT = "off";
+        setEnvValue(envPath, "AUTO_STATUS_REACT", "off");
         console.log("[DESAM-STATUS] AUTO_STATUS_REACT toggled OFF via command.");
-        await m.reply("✅ Auto status react disabled.");
+        await m.reply("✅ Auto status react disabled. (persisted)");
+      } else if (mode === "toggle") {
+        const newVal = String(config.AUTO_STATUS_REACT || "off").toLowerCase() === "on" ? "off" : "on";
+        config.AUTO_STATUS_REACT = newVal;
+        setEnvValue(envPath, "AUTO_STATUS_REACT", newVal);
+        console.log(`[DESAM-STATUS] AUTO_STATUS_REACT toggled ${newVal.toUpperCase()} via command.`);
+        await m.reply(`✅ Auto status react is now *${newVal}* (persisted).`);
       } else {
         await m.reply(`⚙️ *statusreact*  —  currently *${config.AUTO_STATUS_REACT || "off"}*
 
-📖 Usage:  \`.statusreact on/off\`
+📖 Usage:  \`.statusreact on/off/toggle\`
+
+When *on*, the bot reacts to every status with a random emoji (❤️ 🔥 😍 etc.)
 ────────────────────────────────
 _${config.BOT_NAME} · Desam Tech_ ⚡`);
       }
