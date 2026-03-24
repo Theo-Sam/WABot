@@ -1,19 +1,10 @@
 const config = require("../config");
 const { postJson, fetchJson } = require("../lib/helpers");
+const { pollinate: _pollinate } = require("./ai");
 
+// Wrap the robust AI chain so creative handlers can still check `if (!answer)`
 async function pollinate(prompt) {
-  try {
-    const payload = { model: "openai", messages: [{ role: "user", content: prompt }] };
-    const data = await postJson("https://text.pollinations.ai/openai", payload, { timeout: 30000 });
-    const text = data?.choices?.[0]?.message?.content || data?.content || "";
-    if (text) return text.trim();
-  } catch {}
-  try {
-    const fb = await fetchJson(`https://api.nyxs.pw/ai/gpt4?text=${encodeURIComponent(prompt)}`, { timeout: 20000 });
-    const text = fb?.result || fb?.message || fb?.response || "";
-    if (text) return String(text).trim();
-  } catch {}
-  return null;
+  try { return await _pollinate(prompt, "openai"); } catch { return null; }
 }
 
 const PICKUP_LINES = [

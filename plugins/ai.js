@@ -534,4 +534,4 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
   },
 ];
 
-module.exports = { commands };
+module.exports = { commands, pollinate };
