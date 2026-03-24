@@ -19,16 +19,22 @@ function getOwnerJid(sock) {
 }
 
 function isStatusReplyContext(m) {
-  // Direct status@broadcast context
+  // Direct status@broadcast context (replying from the status tab)
   if (m.chat === "status@broadcast") return true;
-  // WhatsApp routes status replies as DMs to the poster — detect by quoted remoteJid
+  // WhatsApp routes status replies as DMs to the poster.
+  // After the serialize.js fix, contextInfo.remoteJid is preserved so this fires correctly.
   if (m.quoted?.key?.remoteJid === "status@broadcast") return true;
   return false;
 }
 
 function getStatusSaveTargetChat(sock, m) {
-  if (!isStatusReplyContext(m)) return m.chat;
-  return getOwnerJid(sock) || m.sender || m.chat;
+  // .save is an owner-only command — output ALWAYS goes to the owner's DM.
+  // Never send to m.chat which could be the poster's DM, a group, or status@broadcast.
+  const ownerJid = getOwnerJid(sock);
+  if (ownerJid) return ownerJid;
+  // Last resort: if OWNER_NUMBER and sock.user.id are both missing, fall back to sender
+  // (which for fromMe messages is the owner themselves)
+  return m.sender || m.chat;
 }
 
 const commands = [
