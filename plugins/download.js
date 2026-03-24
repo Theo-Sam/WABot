@@ -143,39 +143,66 @@ function ytVideoId(url) {
 /**
  * External API fallbacks for YouTube audio download.
  * Used when ALL yt-dlp player clients fail (e.g. VPS IP is rate-limited by YouTube).
- * Chain: vevioz → fabdl → loader.to
+ * Chain: Invidious proxy → cobalt instances → yt-download.org → loader.to
  */
 async function ytAudioExternalFallback(url) {
   const vid = ytVideoId(url);
+  if (!vid) return null;
 
-  // ── 1. api.vevioz.com ─────────────────────────────────────────────────────
-  if (vid) {
+  // ── 1. Invidious proxy API ─────────────────────────────────────────────────
+  // Invidious instances act as YouTube proxies. ?local=true forces URLs to be
+  // routed through the Invidious server itself, bypassing YouTube IP restrictions.
+  for (const instance of INVIDIOUS_INSTANCES) {
     try {
-      console.log('[ytAudio] trying vevioz...');
-      const data = await fetchJson(`https://api.vevioz.com/api/button/mp3/${vid}`, { timeout: 20000 });
-      const link = data?.link || data?.dl_url || data?.url;
-      if (link) {
-        const buf = await fetchBuffer(link, { timeout: 90000 });
-        if (buf?.length > 10000) { console.log('[ytAudio] vevioz OK'); return buf; }
+      console.log(`[ytAudio] trying Invidious: ${instance}`);
+      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 12000 });
+      const audioFormats = (data?.adaptiveFormats || [])
+        .filter(f => f.type?.startsWith('audio/') && f.url)
+        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+      if (audioFormats.length) {
+        const audioUrl = audioFormats[0].url;
+        console.log('[ytAudio] Invidious got audio URL, downloading...');
+        const buf = await fetchBuffer(audioUrl, { timeout: 90000 });
+        if (buf?.length > 10000) { console.log(`[ytAudio] Invidious ${instance} OK`); return buf; }
       }
-    } catch (e) { console.error('[ytAudio] vevioz error:', e.message?.slice(0, 120)); }
+    } catch (e) { console.error(`[ytAudio] Invidious ${instance} error:`, e.message?.slice(0, 100)); }
   }
 
-  // ── 2. api.fabdl.com ──────────────────────────────────────────────────────
-  try {
-    console.log('[ytAudio] trying fabdl...');
-    const data = await fetchJson(
-      `https://api.fabdl.com/youtube/mp3?url=${encodeURIComponent(url)}`,
-      { timeout: 20000 }
-    );
-    const dlUrl = data?.dl_url || data?.download_url || data?.url;
-    if (dlUrl) {
-      const buf = await fetchBuffer(dlUrl, { timeout: 90000 });
-      if (buf?.length > 10000) { console.log('[ytAudio] fabdl OK'); return buf; }
-    }
-  } catch (e) { console.error('[ytAudio] fabdl error:', e.message?.slice(0, 120)); }
+  // ── 2. cobalt.tools (public instance — no auth, audio mode) ───────────────
+  // Some cobalt self-hosted instances don't require JWT. Try a few known ones.
+  const cobaltInstances = [
+    'https://co.wuk.sh',
+    'https://cobalt.tools',
+    'https://api.cobalt.tools',
+  ];
+  for (const cobaltBase of cobaltInstances) {
+    try {
+      console.log(`[ytAudio] trying cobalt: ${cobaltBase}`);
+      const d = await postJson(
+        `${cobaltBase}/api/json`,
+        { url, isAudioOnly: true, aFormat: 'mp3' },
+        { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+      );
+      const dlUrl = d?.url;
+      if (dlUrl && (d?.status === 'redirect' || d?.status === 'stream' || d?.status === 'tunnel')) {
+        const buf = await fetchBuffer(dlUrl, { timeout: 90000 });
+        if (buf?.length > 10000) { console.log(`[ytAudio] cobalt ${cobaltBase} OK`); return buf; }
+      }
+    } catch (e) { console.error(`[ytAudio] cobalt ${cobaltBase} error:`, e.message?.slice(0, 100)); }
+  }
 
-  // ── 3. loader.to (polling) ────────────────────────────────────────────────
+  // ── 3. yt-download.org public API ─────────────────────────────────────────
+  try {
+    console.log('[ytAudio] trying yt-download.org...');
+    const data = await fetchJson(`https://yt-download.org/api/button/mp3/${vid}`, { timeout: 20000 });
+    const link = data?.link || data?.url || data?.dl_url;
+    if (link) {
+      const buf = await fetchBuffer(link, { timeout: 90000 });
+      if (buf?.length > 10000) { console.log('[ytAudio] yt-download.org OK'); return buf; }
+    }
+  } catch (e) { console.error('[ytAudio] yt-download.org error:', e.message?.slice(0, 100)); }
+
+  // ── 4. loader.to (polling, if endpoint recovers) ──────────────────────────
   try {
     console.log('[ytAudio] trying loader.to...');
     const init = await fetchJson(
@@ -184,7 +211,7 @@ async function ytAudioExternalFallback(url) {
     );
     const jobId = init?.id;
     if (jobId) {
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 10; i++) {
         await new Promise(r => setTimeout(r, 4000));
         const prog = await fetchJson(`https://loader.to/api/progress/?id=${jobId}`, { timeout: 15000 });
         const dlUrl = prog?.download_url || prog?.dl_url;
@@ -196,7 +223,7 @@ async function ytAudioExternalFallback(url) {
         if (prog?.status === 'error' || prog?.error) break;
       }
     }
-  } catch (e) { console.error('[ytAudio] loader.to error:', e.message?.slice(0, 120)); }
+  } catch (e) { console.error('[ytAudio] loader.to error:', e.message?.slice(0, 100)); }
 
   return null;
 }
@@ -204,14 +231,17 @@ async function ytAudioExternalFallback(url) {
 /**
  * Download YouTube audio with a full multi-client retry chain, then external API fallback.
  *
- * yt-dlp player clients tried in order (all bypass PO Token on server IPs):
- *   1. ios          — Apple TV app client; no PO Token required, fastest
- *   2. tv_embedded  — Embedded TV client; bypasses age restrictions too
- *   3. android_vr   — Android VR client; last yt-dlp attempt
- * Fallback to external APIs: vevioz → fabdl → loader.to
+ * yt-dlp player clients tried in order (tested working on server IPs, no PO Token):
+ *   1. tv_embedded      — Embedded TV client; most reliable, bypasses age restrictions
+ *   2. android_vr       — Android VR client
+ *   3. android_music    — YouTube Music Android client
+ *   4. android_testsuite — Android test client
+ *   5. android_producer — Android producer client
+ * Fallback to external APIs: Invidious proxy → cobalt → yt-download.org → loader.to
+ * NOTE: 'ios' and 'mweb' are excluded — they fail on most server IPs.
  */
 async function ytDownloadAudio(url) {
-  const AUDIO_CLIENTS = ['ios', 'tv_embedded', 'android_vr'];
+  const AUDIO_CLIENTS = ['tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer'];
   for (const client of AUDIO_CLIENTS) {
     console.log(`[ytAudio] trying yt-dlp client: ${client}`);
     const buf = await ytDlpDownloadToBuffer(url, [
@@ -221,7 +251,7 @@ async function ytDownloadAudio(url) {
     ], 'm4a');
     if (buf) { console.log(`[ytAudio] ${client} succeeded`); return buf; }
   }
-  console.log('[ytAudio] all yt-dlp clients failed — trying external APIs');
+  console.log('[ytAudio] all yt-dlp clients failed — trying external API fallbacks');
   return ytAudioExternalFallback(url);
 }
 
