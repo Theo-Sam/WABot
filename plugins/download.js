@@ -53,10 +53,18 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
   const ytdlpBin = findYtDlpBin();
   if (!ytdlpBin) return null;
   const tmpPath = tempFile(tmpExt);
+  const BASE_ARGS = [
+    '--no-warnings', '--no-playlist', '--quiet',
+    '--geo-bypass',
+    '--extractor-retries', '3',
+    '--fragment-retries', '3',
+    '--retry-sleep', '2',
+    '--user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  ];
   try {
     await new Promise((resolve, reject) => {
       execFile(ytdlpBin, [
-        '--no-warnings', '--no-playlist', '--quiet',
+        ...BASE_ARGS,
         ...extraArgs,
         '-o', tmpPath,
         url,
@@ -78,70 +86,20 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
 }
 
 async function ytDownloadAudio(url) {
-  // Primary: yt-dlp direct to temp file (handles signatures, bot checks, everything)
-  const buf = await ytDlpDownloadToBuffer(url, [
+  // yt-dlp — sole working method; handles signatures, bot checks, geo-bypass
+  return ytDlpDownloadToBuffer(url, [
     '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
     '--no-part',
   ], 'm4a');
-  if (buf) return buf;
-
-  // Fallback: Invidious API audio stream
-  const videoId = url.match(/[?&]v=([A-Za-z0-9_-]{11})/)?.[1]
-    || url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)?.[1];
-  if (videoId) {
-    for (const inst of INVIDIOUS_INSTANCES) {
-      try {
-        const data = await fetchJson(`${inst}/api/v1/videos/${videoId}`, { timeout: 10000 });
-        const formats = data?.adaptiveFormats || [];
-        const audio = formats
-          .filter(f => f.type?.startsWith('audio/') && f.url)
-          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-        if (audio?.url) {
-          const res = await axios.get(audio.url, {
-            responseType: 'arraybuffer', timeout: 60000,
-            maxContentLength: 50 * 1024 * 1024,
-          });
-          if (res.data?.byteLength > 1000) return Buffer.from(res.data);
-        }
-      } catch {}
-    }
-  }
-
-  return null;
 }
 
 async function ytDownloadVideo(url) {
-  // Primary: yt-dlp direct to temp file
-  const buf = await ytDlpDownloadToBuffer(url, [
+  // yt-dlp — sole working method; handles signatures, bot checks, geo-bypass
+  return ytDlpDownloadToBuffer(url, [
     '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
     '--merge-output-format', 'mp4',
     '--no-part',
   ], 'mp4');
-  if (buf) return buf;
-
-  // Fallback: Invidious API combined stream (formatStreams = video+audio muxed)
-  const videoId = url.match(/[?&]v=([A-Za-z0-9_-]{11})/)?.[1]
-    || url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)?.[1];
-  if (videoId) {
-    for (const inst of INVIDIOUS_INSTANCES) {
-      try {
-        const data = await fetchJson(`${inst}/api/v1/videos/${videoId}`, { timeout: 10000 });
-        const streams = data?.formatStreams || [];
-        const mp4 = streams
-          .filter(f => f.container === 'mp4' && f.url)
-          .sort((a, b) => (parseInt(b.resolution) || 0) - (parseInt(a.resolution) || 0))[0];
-        if (mp4?.url) {
-          const res = await axios.get(mp4.url, {
-            responseType: 'arraybuffer', timeout: 90000,
-            maxContentLength: 80 * 1024 * 1024,
-          });
-          if (res.data?.byteLength > 1000) return Buffer.from(res.data);
-        }
-      } catch {}
-    }
-  }
-
-  return null;
 }
 
 /**
@@ -302,30 +260,7 @@ async function igDownloadFreeApi(url) {
       const buf = await fetchBuffer(pick.url, { timeout: 60000 });
       return buf?.length > 1000 ? { buffer: buf, type: video ? 'video' : 'image' } : null;
     },
-    // 6. Cobalt community instances (v10 API)
-    async () => {
-      const cobaltInstances = [
-        'https://cobalt-api.meowing.de/api/json',
-        'https://kityune.imput.net/api/json',
-        'https://cobalt-backend.canine.tools/api/json',
-      ];
-      for (const inst of cobaltInstances) {
-        try {
-          const res = await axios.post(inst, { url, downloadMode: 'auto' }, {
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': ua },
-            timeout: 15000,
-          });
-          const mediaUrl = res.data?.url || res.data?.picker?.[0]?.url;
-          if (mediaUrl) {
-            const isVideo = res.data?.status === 'stream' || mediaUrl.includes('.mp4');
-            const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-            if (buf?.length > 1000) return { buffer: buf, type: isVideo ? 'video' : 'image' };
-          }
-        } catch {}
-      }
-      return null;
-    },
-    // 7. ddinstagram.com (open-source mirror that skips auth for public reels)
+    // 6. ddinstagram.com (open-source mirror that skips auth for public reels)
     async () => {
       const ddUrl = url.replace(/https?:\/\/(www\.)?instagram\.com/, 'https://www.ddinstagram.com');
       const res = await axios.get(ddUrl, {
@@ -513,21 +448,13 @@ async function fbDownload(url) {
 }
 
 async function twitterDownload(url) {
-  // 1. cobalt.tools (v10 API)
+  // 1. yt-dlp (supports Twitter/X natively)
   try {
-    const d = await postJson(
-      endpoints.download.cobaltApiJson,
-      { url, downloadMode: "auto" },
-      { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
-    );
-    if ((d.status === "redirect" || d.status === "tunnel" || d.status === "stream") && d.url) {
-      const buf = await fetchBuffer(d.url, { timeout: 60000 });
-      if (buf?.length > 1000) return buf;
-    }
-    if (d.status === "picker" && d.picker?.length) {
-      const buf = await fetchBuffer(d.picker[0].url, { timeout: 60000 });
-      if (buf?.length > 1000) return buf;
-    }
+    const buf = await ytDlpDownloadToBuffer(url, [
+      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      '--merge-output-format', 'mp4', '--no-part',
+    ], 'mp4');
+    if (buf?.length > 1000) return buf;
   } catch {}
 
   // 2. vxtwitter
@@ -1038,18 +965,21 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
       m.react("⏳");
       try {
         let audioBuffer = null;
-        // 1. cobalt.tools
+        // 1. yt-dlp (supports SoundCloud natively)
         try {
-          const d = await postJson(
-            endpoints.download.cobaltApiJson,
-            { url: targetUrl },
-            { timeout: 25000, headers: { Accept: "application/json", "Content-Type": "application/json" } }
-          );
-          if ((d.status === "redirect" || d.status === "stream") && d.url) {
-            audioBuffer = await fetchBuffer(d.url, { timeout: 60000 });
-          }
+          audioBuffer = await ytDlpDownloadToBuffer(targetUrl, [
+            '-f', 'bestaudio/best', '--no-part',
+          ], 'mp3');
         } catch {}
-        if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download SoundCloud track. The link may be private or the servers are busy.");
+        // 2. Nyxs scraper
+        if (!audioBuffer || audioBuffer.length < 1000) {
+          try {
+            const res = await fetchJson(`https://api.nyxs.pw/dl/soundcloud?url=${encodeURIComponent(targetUrl)}`, { timeout: 15000 });
+            const mediaUrl = res?.result?.url || res?.result?.[0]?.url;
+            if (mediaUrl) audioBuffer = await fetchBuffer(mediaUrl, { timeout: 60000 });
+          } catch {}
+        }
+        if (!audioBuffer || audioBuffer.length < 1000) return m.reply("❌ Could not download SoundCloud track. The link may be private or unavailable.");
         await sock.sendMessage(m.chat, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch {
