@@ -146,12 +146,42 @@ process.on('SIGTERM', () => {
   gracefulShutdown('SIGTERM', 0);
 });
 
+/**
+ * Run yt-dlp --update in the background at startup.
+ * YouTube constantly changes their systems; an outdated yt-dlp is the #1
+ * cause of .music / .youtube command failures. This keeps the binary fresh
+ * without blocking bot startup.
+ */
+function scheduleYtDlpUpdate() {
+  const candidates = [
+    path.join(__dirname, 'bin', 'yt-dlp'),
+    '/usr/local/bin/yt-dlp',
+    '/usr/bin/yt-dlp',
+  ];
+  const bin = candidates.find(p => { try { return fs.existsSync(p); } catch { return false; } });
+  if (!bin) {
+    console.warn('⚠️  yt-dlp not found — .music and .youtube commands will not work');
+    return;
+  }
+  const { execFile: _execFile } = require('child_process');
+  _execFile(bin, ['--update'], { timeout: 60000 }, (err, stdout, stderr) => {
+    const out = (stdout || '').trim() || (stderr || '').trim();
+    if (err) {
+      console.warn('[yt-dlp] update failed:', err.message.slice(0, 200));
+    } else {
+      const line = out.split('\n')[0]?.trim();
+      if (line) console.log('[yt-dlp]', line);
+    }
+  });
+}
+
 // Start the bot
 (async () => {
   try {
     verifyStartupRequirements();
     startServer();
     startHealthWatchdog();
+    scheduleYtDlpUpdate(); // non-blocking background update
     console.log('🚀 Starting bot...\n');
     await startBot();
     console.log('\n✅ Bot is ready!');

@@ -83,19 +83,23 @@ async function ytSearch(query) {
  */
 async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
   const ytdlpBin = findYtDlpBin();
-  if (!ytdlpBin) return null;
+  if (!ytdlpBin) {
+    console.error('[ytDlp] yt-dlp binary not found — checked ./bin/yt-dlp, /usr/local/bin/yt-dlp, /usr/bin/yt-dlp');
+    return null;
+  }
   const tmpPath = tempFile(tmpExt);
   const BASE_ARGS = [
-    '--no-warnings', '--no-playlist', '--quiet',
+    '--no-warnings', '--no-playlist',
     '--geo-bypass',
     '--extractor-retries', '3',
     '--fragment-retries', '3',
     '--retry-sleep', '2',
-    '--user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    '--force-ipv4',
+    '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
   ];
   try {
     await new Promise((resolve, reject) => {
-      execFile(ytdlpBin, [
+      const proc = execFile(ytdlpBin, [
         ...BASE_ARGS,
         ...extraArgs,
         '-o', tmpPath,
@@ -104,13 +108,24 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
         if (err) reject(err);
         else resolve();
       });
+      // Capture stderr so the real YouTube error is visible in logs
+      let stderrBuf = '';
+      proc.stderr?.on('data', (d) => { stderrBuf += d; });
+      proc.on('close', (code) => {
+        if (code !== 0 && stderrBuf.trim()) {
+          console.error('[ytDlp] stderr:', stderrBuf.trim().slice(0, 800));
+        }
+      });
     });
     if (fs.existsSync(tmpPath)) {
       const buf = fs.readFileSync(tmpPath);
       if (buf.length > 1000) return buf;
+      console.error('[ytDlp] output file too small (%d bytes) — download likely failed silently', buf.length);
+    } else {
+      console.error('[ytDlp] output file missing after yt-dlp ran — check stderr above');
     }
   } catch (err) {
-    console.error('[ytDlp] download error:', err.message);
+    console.error('[ytDlp] download error:', err.message?.slice(0, 300));
   } finally {
     try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
   }
@@ -118,28 +133,29 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
 }
 
 async function ytDownloadAudio(url) {
-  // Use android player client: bypasses JS signature decryption, ~10x faster
+  // ios client: currently the most reliable for bypassing YouTube PO Token on server IPs
+  // android is the fallback. web requires PO Token and is excluded.
   return ytDlpDownloadToBuffer(url, [
     '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
     '--no-part',
-    '--extractor-args', 'youtube:player_client=android,web',
+    '--extractor-args', 'youtube:player_client=ios,android',
   ], 'm4a');
 }
 
 async function ytDownloadVideo(url) {
   // Format priority (YouTube 2025+):
-  //   1. Format 22 — 720p progressive MP4 (H.264+AAC, pre-merged, no PO Token, available on older/shorter videos)
-  //   2. Format 18 — 360p progressive MP4 (H.264+AAC, pre-merged, no PO Token, widely available)
+  //   1. Format 22 — 720p progressive MP4 (H.264+AAC, pre-merged, no PO Token)
+  //   2. Format 18 — 360p progressive MP4 (H.264+AAC, pre-merged, no PO Token)
   //   3. best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
   //   4. best[height<=480] — last resort, any codec ≤480p
-  // Adaptive (DASH) formats like 136/137 (720p+/1080p) require a GVS PO Token
-  // and are NOT used here because YouTube now enforces this from server IPs.
+  // ios client bypasses PO Token on server IPs; android is fallback.
+  // Adaptive DASH formats (136/137) require GVS PO Token and are excluded.
   return ytDlpDownloadToBuffer(url, [
     '-f', '22/18/best[ext=mp4][height<=480]/best[height<=480]',
     '--merge-output-format', 'mp4',
     '--no-part',
     '--max-filesize', '55m',
-    '--extractor-args', 'youtube:player_client=android,web',
+    '--extractor-args', 'youtube:player_client=ios,android',
   ], 'mp4');
 }
 
@@ -646,8 +662,8 @@ const commands = [
         const safeName = (picked.title || "audio").replace(/[\\/:*?"<>|]/g, "").trim();
         await sock.sendMessage(m.chat, {
           audio: audioBuffer,
-          mimetype: "audio/mpeg",
-          fileName: `${safeName}.mp3`,
+          mimetype: "audio/mp4",
+          fileName: `${safeName}.m4a`,
         }, { quoted: { key: m.key, message: m.message } });
         m.react("✅");
       } catch (err) {
