@@ -286,6 +286,113 @@ async function igGraphQLDownload(url) {
 }
 
 /**
+ * Three-package Instagram download chain using the exact packages requested:
+ *   Tier 1 — nayan-media-downloader  (npm security placeholder; throws MODULE_NOT_FOUND, caught instantly)
+ *   Tier 2 — api-dylux igstalk       (profile stalker; returns image display_url for image posts only)
+ *   Tier 3 — youtube-dl-exec         (wraps our yt-dlp binary; returns a direct CDN URL without saving to disk)
+ *
+ * Returns { directUrl, type } for Baileys URL-streaming, or null if all tiers fail.
+ * This avoids saving any file to local disk — media URLs are returned raw for Baileys to stream.
+ */
+async function igPackageChain(url) {
+  const shortcode = extractIgShortcode(url);
+
+  // ── Tier 1: nayan-media-downloader ────────────────────────────────────────
+  // This package was removed from npm and replaced with a security placeholder.
+  // require() throws MODULE_NOT_FOUND — caught immediately, chains to Tier 2.
+  try {
+    const nayan = require('nayan-media-downloader');
+    // Detect any callable download function across known method names
+    const fn = nayan.getMedia || nayan.downloadMedia || nayan.download
+      || nayan.instagramDl || nayan.ig || nayan.igDl;
+    if (typeof fn !== 'function') throw new Error('nayan-media-downloader: no download function (security placeholder package)');
+    const result = await fn(url);
+    const directUrl = result?.url || result?.data?.url || result?.media?.[0]?.url
+      || result?.result?.url || (Array.isArray(result) ? result[0]?.url : null);
+    if (!directUrl) throw new Error('nayan-media-downloader: empty result');
+    const type = directUrl.includes('.mp4') ? 'video' : 'image';
+    console.log('[igChain T1] nayan-media-downloader success');
+    return { directUrl, type };
+  } catch (e) {
+    console.log('[igChain T1] nayan-media-downloader:', e.message.slice(0, 80));
+  }
+
+  // ── Tier 2: api-dylux ─────────────────────────────────────────────────────
+  // api-dylux exposes igstalk() which stalks a public profile and returns
+  // post thumbnails (display_url). Only works for image posts — videos only
+  // have a thumbnail, not the video_url. Instagram's API returns 429 from
+  // cloud IPs (rate-limited), so this tier also commonly fails from Replit.
+  if (shortcode) {
+    try {
+      const { igstalk } = require('api-dylux');
+      // Try to resolve the username via Instagram's embed page (no auth needed)
+      const ua = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+      const embedRes = await axios.get(`https://www.instagram.com/p/${shortcode}/embed/`, {
+        headers: { 'User-Agent': ua, 'Accept': 'text/html' },
+        timeout: 8000, validateStatus: () => true,
+      });
+      // Extract username from embed HTML
+      const username = String(embedRes.data || '').match(/(?:"owner":\{"username":"([^"]+)")|(?:class="UsernameText[^>]*>([^<]+)<)|(?:instagrammer">([^<]+)<)/)?.[1]
+        || String(embedRes.data || '').match(/@([a-zA-Z0-9._]+)/)?.[1];
+      if (!username) throw new Error('api-dylux: could not resolve username from embed page');
+
+      const profile = await igstalk(username, 50);
+      if (!profile?.status) throw new Error(`api-dylux: igstalk failed — ${profile?.message || 'blocked'}`);
+
+      const post = profile.posts?.find(p => p.shortcode === shortcode);
+      if (!post) throw new Error('api-dylux: post not found in recent profile feed');
+      if (post.isVideo) throw new Error('api-dylux: igstalk only returns image display_url, not video_url');
+
+      const directUrl = post.display;
+      if (!directUrl) throw new Error('api-dylux: no display URL on post');
+      console.log('[igChain T2] api-dylux success (image post)');
+      return { directUrl, type: 'image' };
+    } catch (e) {
+      console.log('[igChain T2] api-dylux:', e.message.slice(0, 80));
+    }
+  }
+
+  // ── Tier 3: youtube-dl-exec ───────────────────────────────────────────────
+  // Uses our existing yt-dlp binary via youtube-dl-exec's create() API.
+  // --dump-single-json returns full media info including the direct CDN URL.
+  // No file is saved to disk — the CDN URL is returned raw for Baileys to stream.
+  // Note: Instagram requires auth; this tier fails for most public content.
+  try {
+    const { create: createYtDl } = require('youtube-dl-exec');
+    const ytdlpPath = path.resolve('./bin/yt-dlp');
+    if (!fs.existsSync(ytdlpPath)) throw new Error('youtube-dl-exec: yt-dlp binary not found at ./bin/yt-dlp');
+
+    const ytdlp = createYtDl(ytdlpPath);
+    const info = await ytdlp(url, {
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+      quiet: true,
+      format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      extractorArgs: 'youtube:player_client=android,web',
+    });
+
+    if (typeof info !== 'object' || !info) throw new Error('youtube-dl-exec: no JSON response');
+
+    // Pull the best direct URL from the response
+    let directUrl = info.url;
+    if (!directUrl && Array.isArray(info.formats)) {
+      const mp4 = info.formats.filter(f => f.ext === 'mp4' && f.url && f.vcodec !== 'none').pop();
+      directUrl = mp4?.url || info.formats.filter(f => f.url).pop()?.url;
+    }
+    if (!directUrl) throw new Error('youtube-dl-exec: no media URL in response');
+
+    const type = (info.ext === 'mp4' || info._type === 'video' || info.formats?.some(f => f.vcodec)) ? 'video' : 'image';
+    console.log('[igChain T3] youtube-dl-exec success');
+    return { directUrl, type };
+  } catch (e) {
+    console.log('[igChain T3] youtube-dl-exec:', e.message.slice(0, 80));
+  }
+
+  return null;
+}
+
+/**
  * Free third-party scraper APIs — tried in order, return first success.
  * Most are blocked from cloud server IPs by Instagram/Cloudflare since 2024.
  * They will fail fast (DNS errors), wasting minimal time.
@@ -755,36 +862,54 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
       if (!targetUrl) return m.usageReply("ig <Instagram URL>");
       if (!/instagram\.com|instagr\.am/i.test(targetUrl)) return m.reply("❌ Please provide a valid Instagram URL.");
       m.react("⏳");
+
+      const baseCaption = `📸 Instagram Download\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
+      const quotedMsg = { quoted: { key: m.key, message: m.message } };
+
       try {
+        // ── Path A: three-package chain (nayan-media-downloader → api-dylux → youtube-dl-exec)
+        // Returns a direct CDN URL which Baileys streams — no local storage used.
+        const chainResult = await igPackageChain(targetUrl);
+        if (chainResult?.directUrl) {
+          const { directUrl, type } = chainResult;
+          if (type === 'video') {
+            await sock.sendMessage(m.chat, { video: { url: directUrl }, caption: baseCaption, mimetype: 'video/mp4' }, quotedMsg);
+          } else {
+            await sock.sendMessage(m.chat, { image: { url: directUrl }, caption: baseCaption }, quotedMsg);
+          }
+          return m.react("✅");
+        }
+
+        // ── Path B: buffered fallback (GraphQL API / yt-dlp / scraper APIs)
         const results = await igDownload(targetUrl);
         if (!results?.length) {
           const hasSession = !!process.env.INSTAGRAM_SESSION;
           const tip = hasSession
             ? "The post may be private, age-restricted, or all download servers are currently blocked."
-            : "Instagram now requires authentication for downloads.\n\n*To enable Instagram downloads:*\n1. Copy your Instagram `sessionid` cookie\n2. Set it as the `INSTAGRAM_SESSION` secret in the bot environment\n\nOnce set, the bot can download reels, posts, and carousels.";
+            : "Instagram now requires authentication for automated downloads from cloud servers.\n\n*To enable Instagram downloads:*\n1. Copy your Instagram `sessionid` cookie\n2. Set it as the `INSTAGRAM_SESSION` secret in the bot environment\n\nThis is enforced by Meta's server-IP blocking policy (not a bug).";
           m.react("❌");
           return m.reply(`❌ Could not download this Instagram post.\n\n${tip}`);
         }
 
         const caption = results.length > 1
           ? `📸 Instagram Download _(${results.length} items)_\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`
-          : `📸 Instagram Download\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡`;
+          : baseCaption;
 
         for (let i = 0; i < results.length; i++) {
           const { buffer, type } = results[i];
           const msgCaption = i === 0 ? caption : undefined;
-          const quoted = i === 0 ? { key: m.key, message: m.message } : undefined;
+          const opts = i === 0 ? quotedMsg : {};
           if (type === "image") {
-            await sock.sendMessage(m.chat, { image: buffer, caption: msgCaption }, quoted ? { quoted } : {});
+            await sock.sendMessage(m.chat, { image: buffer, caption: msgCaption }, opts);
           } else {
-            await sock.sendMessage(m.chat, { video: buffer, caption: msgCaption }, quoted ? { quoted } : {});
+            await sock.sendMessage(m.chat, { video: buffer, caption: msgCaption }, opts);
           }
         }
         m.react("✅");
       } catch (err) {
         m.react("❌");
         console.error('[Instagram Download] error:', err.message);
-        await m.reply("❌ Failed to download Instagram media.");
+        await m.reply("❌ Failed to download Instagram media. If it's a private account post, it cannot be downloaded.");
       }
     },
   },
