@@ -10,31 +10,63 @@ const { endpoints } = require("../lib/endpoints");
 
 const INVIDIOUS_INSTANCES = endpoints.youtube.invidiousInstances;
 
+// Max duration for search results — prevents downloading DJ mixes / compilations (>25 min)
+const SEARCH_MAX_DURATION_SEC = 25 * 60;
+
 async function ytSearch(query) {
+  // ── play-dl (primary) ─────────────────────────────────────────────────────
+  // Certain queries trigger a play-dl bug where YouTube returns a Browse result
+  // (e.g., an artist page / genre shelf) and play-dl crashes reading browseId.
+  // Workaround: retry with a suffixed query that forces YouTube to return
+  // standard video search results instead.
+  const mapPlayDlResults = (results) => {
+    const mapped = results.map(v => ({
+      url: v.url,
+      title: v.title || query,
+      thumbnail: v.thumbnails?.[0]?.url || "",
+      duration: v.durationRaw || "",
+      durationSec: v.durationInSec || 0,
+      views: v.views?.toLocaleString() || "",
+      author: v.channel?.name || "",
+      videoId: v.id,
+    }));
+    // Prefer videos ≤25 min; fall back to first result only if everything is longer
+    const short = mapped.filter(v => v.durationSec > 0 && v.durationSec <= SEARCH_MAX_DURATION_SEC);
+    return short.length ? short : mapped.slice(0, 1);
+  };
+
+  // Attempt 1: original query
   try {
-    const results = await play.search(query, { limit: 5, source: { youtube: "video" } });
-    if (results.length) {
-      return results.map(v => ({
-        url: v.url,
-        title: v.title || query,
-        thumbnail: v.thumbnails?.[0]?.url || "",
-        duration: v.durationRaw || "",
-        views: v.views?.toLocaleString() || "",
-        author: v.channel?.name || "",
-        videoId: v.id,
-      }));
+    const results = await play.search(query, { limit: 8, source: { youtube: "video" } });
+    if (results.length) return mapPlayDlResults(results);
+  } catch (err) {
+    if (!err.message?.includes("browseId")) {
+      console.error("[ytSearch] play-dl error:", err.message);
+    } else {
+      // Attempt 2+: browseId crash happens when YouTube returns an artist/genre page.
+      // Retry with suffixes that force standard video search results.
+      const retrySuffixes = [" songs", " official video", " music video 2024"];
+      for (const suffix of retrySuffixes) {
+        try {
+          const results2 = await play.search(`${query}${suffix}`, { limit: 8, source: { youtube: "video" } });
+          if (results2.length) return mapPlayDlResults(results2);
+        } catch {}
+      }
     }
-  } catch {}
+  }
+
+  // ── Invidious fallback ────────────────────────────────────────────────────
   for (const inst of INVIDIOUS_INSTANCES) {
     try {
       const data = await fetchJson(`${inst}/api/v1/search?q=${encodeURIComponent(query)}&type=video`, { timeout: 10000 });
-      const videos = Array.isArray(data) ? data.filter(v => v.type === "video") : [];
+      const videos = Array.isArray(data) ? data.filter(v => v.type === "video" && (!v.lengthSeconds || v.lengthSeconds <= SEARCH_MAX_DURATION_SEC)) : [];
       if (videos.length) {
         return videos.map(v => ({
           url: `https://youtube.com/watch?v=${v.videoId}`,
           title: v.title,
           thumbnail: v.videoThumbnails?.[0]?.url || "",
           duration: v.lengthSeconds ? `${Math.floor(v.lengthSeconds / 60)}:${String(v.lengthSeconds % 60).padStart(2, "0")}` : "",
+          durationSec: v.lengthSeconds || 0,
           views: v.viewCount?.toLocaleString() || "",
           author: v.author || "",
           videoId: v.videoId,
@@ -95,11 +127,18 @@ async function ytDownloadAudio(url) {
 }
 
 async function ytDownloadVideo(url) {
-  // Use android player client: bypasses JS signature decryption, ~10x faster
+  // Format priority (YouTube 2025+):
+  //   1. Format 22 — 720p progressive MP4 (H.264+AAC, pre-merged, no PO Token, available on older/shorter videos)
+  //   2. Format 18 — 360p progressive MP4 (H.264+AAC, pre-merged, no PO Token, widely available)
+  //   3. best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
+  //   4. best[height<=480] — last resort, any codec ≤480p
+  // Adaptive (DASH) formats like 136/137 (720p+/1080p) require a GVS PO Token
+  // and are NOT used here because YouTube now enforces this from server IPs.
   return ytDlpDownloadToBuffer(url, [
-    '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
+    '-f', '22/18/best[ext=mp4][height<=480]/best[height<=480]',
     '--merge-output-format', 'mp4',
     '--no-part',
+    '--max-filesize', '55m',
     '--extractor-args', 'youtube:player_client=android,web',
   ], 'mp4');
 }
@@ -753,7 +792,7 @@ const commands = [
         if (picked.author) infoLines.push(`👤 ${picked.author}`);
         if (picked.duration) infoLines.push(`⏱️ ${picked.duration}`);
         if (picked.views) infoLines.push(`👁️ ${picked.views} views`);
-        if (infoLines.length) await m.reply(infoLines.join("\n") + "\n\n_Downloading video (720p), please wait..._");
+        if (infoLines.length) await m.reply(infoLines.join("\n") + "\n\n_Downloading video, please wait..._");
 
         const videoBuffer = await ytDownloadVideo(videoUrl);
 
