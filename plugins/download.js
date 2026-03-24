@@ -256,17 +256,82 @@ async function ytDownloadAudio(url) {
 }
 
 /**
- * Download YouTube video with a multi-client retry chain.
+ * External API fallbacks for YouTube video download.
+ * Used when ALL yt-dlp player clients fail on the VPS.
+ * Chain: Invidious formatStreams → cobalt instances
+ */
+async function ytVideoExternalFallback(url) {
+  const vid = ytVideoId(url);
+  if (!vid) return null;
+
+  // ── 1. Invidious formatStreams (pre-merged progressive MP4 — ideal for WhatsApp) ──
+  // formatStreams contains pre-muxed video+audio — no DASH, no ffmpeg merge needed.
+  // We prefer 720p → 480p → 360p to stay within the 60 MB WhatsApp limit.
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[ytVideo] trying Invidious formatStreams: ${instance}`);
+      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 12000 });
+
+      // formatStreams: pre-merged progressive formats (360p, 720p)
+      const streams = (data?.formatStreams || []).filter(f => f.url && f.container === 'mp4');
+      const preferred = ['hd720', '720p60', '720p', '480p', '360p'];
+      const sorted = [...streams].sort((a, b) => {
+        const ai = preferred.indexOf(a.qualityLabel);
+        const bi = preferred.indexOf(b.qualityLabel);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
+
+      if (sorted.length) {
+        const chosen = sorted[0];
+        console.log(`[ytVideo] Invidious ${instance} — downloading ${chosen.qualityLabel}...`);
+        const buf = await fetchBuffer(chosen.url, { timeout: 120000 });
+        if (buf?.length > 50000) { console.log(`[ytVideo] Invidious ${instance} OK`); return buf; }
+      }
+    } catch (e) { console.error(`[ytVideo] Invidious ${instance} error:`, e.message?.slice(0, 100)); }
+  }
+
+  // ── 2. cobalt.tools instances ─────────────────────────────────────────────
+  const cobaltInstances = ['https://co.wuk.sh', 'https://cobalt.tools', 'https://api.cobalt.tools'];
+  for (const cobaltBase of cobaltInstances) {
+    try {
+      console.log(`[ytVideo] trying cobalt: ${cobaltBase}`);
+      const d = await postJson(
+        `${cobaltBase}/api/json`,
+        { url, vQuality: '720', isAudioMuted: false },
+        { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+      );
+      const dlUrl = d?.url;
+      if (dlUrl && (d?.status === 'redirect' || d?.status === 'stream' || d?.status === 'tunnel')) {
+        const buf = await fetchBuffer(dlUrl, { timeout: 120000 });
+        if (buf?.length > 50000) { console.log(`[ytVideo] cobalt ${cobaltBase} OK`); return buf; }
+      }
+    } catch (e) { console.error(`[ytVideo] cobalt ${cobaltBase} error:`, e.message?.slice(0, 100)); }
+  }
+
+  return null;
+}
+
+/**
+ * Download YouTube video with a multi-client retry chain, then external fallback.
  *
- * Format priority (YouTube 2025+):
- *   1. Format 22 — 720p progressive MP4 (pre-merged, no PO Token)
- *   2. Format 18 — 360p progressive MP4 (pre-merged, no PO Token)
- *   3. best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
- *   4. best[height<=480] — last resort, any codec ≤480p
+ * yt-dlp player clients tried in order (tested working on server IPs, no PO Token):
+ *   1. tv_embedded      — Embedded TV client; most reliable, bypasses age restrictions
+ *   2. android_vr       — Android VR client
+ *   3. android_music    — YouTube Music Android client
+ *   4. android_testsuite — Android test client
+ *   5. android_producer — Android producer client
+ * Fallback: Invidious formatStreams → cobalt instances
+ * NOTE: 'ios' excluded — it cannot access mp4 formats 22/18 on server IPs.
+ *
+ * Format priority:
+ *   22 — 720p progressive MP4 (pre-merged, best for WhatsApp)
+ *   18 — 360p progressive MP4 (pre-merged fallback)
+ *   best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
+ *   best[height<=480] — last resort any codec ≤480p
  * Adaptive DASH formats (136/137) require GVS PO Token and are excluded.
  */
 async function ytDownloadVideo(url) {
-  const VIDEO_CLIENTS = ['ios', 'tv_embedded', 'android_vr'];
+  const VIDEO_CLIENTS = ['tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer'];
   for (const client of VIDEO_CLIENTS) {
     console.log(`[ytVideo] trying yt-dlp client: ${client}`);
     const buf = await ytDlpDownloadToBuffer(url, [
@@ -278,7 +343,8 @@ async function ytDownloadVideo(url) {
     ], 'mp4');
     if (buf) { console.log(`[ytVideo] ${client} succeeded`); return buf; }
   }
-  return null;
+  console.log('[ytVideo] all yt-dlp clients failed — trying external API fallbacks');
+  return ytVideoExternalFallback(url);
 }
 
 /**
