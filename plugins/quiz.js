@@ -46,33 +46,47 @@ function pickFresh(questions, chatId, category) {
   return pool[0];
 }
 
+// ─── Football/soccer keyword filter ──────────────────────────────────────────
+// opentdb category 21 = ALL sports. We must filter to football-only questions.
+const FOOTBALL_KEYWORDS = /\b(football|soccer|FIFA|UEFA|Premier\s*League|Champions\s*League|FA\s*Cup|World\s*Cup|Euro\s*\d{4}|AFCON|Copa\s*America|Copa\s*del\s*Rey|Bundesliga|Serie\s*A|La\s*Liga|Ligue\s*1|Eredivisie|MLS|Ballon\s*d.Or|hat.trick|penalty|offside|goalkeeper|striker|midfielder|winger|free\s*kick|corner\s*kick|yellow\s*card|red\s*card|dribble|header|manager|coach|footballer|EPL|Champions|Europa\s*League|World\s*Cup|Messi|Ronaldo|Pelé|Maradona|Neymar|Mbappé|Haaland|Salah|Arsenal|Chelsea|Liverpool|Man\s*(United|City|Utd)|Barcelona|Real\s*Madrid|Bayern|Juventus|PSG|Inter\s*Milan|AC\s*Milan|Dortmund|Atletico|Ajax|Spurs|Tottenham|Newcastle|Everton|Villa|West\s*Ham)\b/i;
+
+function isFootballQuestion(q) {
+  const text = `${q.question} ${q.answer} ${(q.wrong || []).join(' ')}`;
+  return FOOTBALL_KEYWORDS.test(text);
+}
+
 // ─── opentdb fetch ────────────────────────────────────────────────────────────
 // Category IDs: 12=Music 17=Science&Nature 21=Sports 22=Geography 23=History
-async function fetchOpentdb(categoryId, amount = 10) {
+// filterFn: optional function(q) => boolean to filter API results (e.g. football-only)
+async function fetchOpentdb(categoryId, amount = 10, filterFn = null) {
   try {
+    // Fetch more when filtering, so we have enough after the filter is applied
+    const fetchAmount = filterFn ? Math.min(50, amount * 5) : amount;
     const data = await fetchJson(
-      `https://opentdb.com/api.php?amount=${amount}&category=${categoryId}&type=multiple`,
+      `https://opentdb.com/api.php?amount=${fetchAmount}&category=${categoryId}&type=multiple`,
       { timeout: 9000 }
     );
     if (data?.response_code !== 0 || !data?.results?.length) return [];
-    return data.results.map((q) => ({
+    let results = data.results.map((q) => ({
       question: decodeHtml(q.question),
       answer: decodeHtml(q.correct_answer),
       wrong: q.incorrect_answers.map(decodeHtml),
       fact: `Category: ${decodeHtml(q.category)} | Difficulty: ${q.difficulty}`,
     }));
+    if (filterFn) results = results.filter(filterFn);
+    return results;
   } catch {
     return [];
   }
 }
 
 // ─── Core quiz engine ─────────────────────────────────────────────────────────
-async function runQuiz(sock, m, { opentdbCategory, fallbackPool, label, emoji, category, revealSec = 20 }) {
+async function runQuiz(sock, m, { opentdbCategory, apiFilter, fallbackPool, label, emoji, category, revealSec = 20 }) {
   let question = null;
 
-  // 1. Try opentdb API
+  // 1. Try opentdb API (with optional filter for categories like Sports)
   if (opentdbCategory) {
-    const apiQuestions = await fetchOpentdb(opentdbCategory, 10);
+    const apiQuestions = await fetchOpentdb(opentdbCategory, 10, apiFilter || null);
     if (apiQuestions.length > 0) {
       const fresh = apiQuestions.find((q) => !_isUsed(m.chat, category, q.question));
       if (fresh) {
@@ -318,6 +332,7 @@ const commands = [
     handler: async (sock, m) => {
       await runQuiz(sock, m, {
         opentdbCategory: 21,
+        apiFilter: isFootballQuestion,
         fallbackPool: footballPool,
         label: "Football Quiz",
         emoji: "⚽",
@@ -388,7 +403,7 @@ const commands = [
     handler: async (sock, m) => {
       const all = [
         { opentdbCategory: null, fallbackPool: biblePool, label: "Bible Quiz", emoji: "📖", category: "biblequiz" },
-        { opentdbCategory: 21, fallbackPool: footballPool, label: "Football Quiz", emoji: "⚽", category: "footballquiz" },
+        { opentdbCategory: 21, apiFilter: isFootballQuestion, fallbackPool: footballPool, label: "Football Quiz", emoji: "⚽", category: "footballquiz" },
         { opentdbCategory: 22, fallbackPool: geographyPool, label: "Geography Quiz", emoji: "🌍", category: "geoquiz" },
         { opentdbCategory: 17, fallbackPool: sciencePool, label: "Science Quiz", emoji: "🔬", category: "sciencequiz" },
         { opentdbCategory: 23, fallbackPool: historyPool, label: "History Quiz", emoji: "🏛️", category: "historyquiz" },
