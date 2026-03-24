@@ -1,5 +1,5 @@
 const config = require("../config");
-const { fetchJson, postJson, normalizeAiText } = require("../lib/helpers");
+const { fetchJson, normalizeAiText } = require("../lib/helpers");
 const axios = require("axios");
 const sharp = require("sharp");
 const { endpoints } = require("../lib/endpoints");
@@ -27,42 +27,59 @@ async function pollinate(prompt, persona = "openai") {
   });
   messages.push({ role: "user", content: prompt });
 
-  // No-key default: use Pollinations (community/free endpoint; may rate-limit).
-  if (!openaiKey) {
-    try {
-      const payload = { model: "openai", messages };
-      const data = await postJson("https://text.pollinations.ai/openai", payload, {
-        timeout: 30000,
-        headers: { "Content-Type": "application/json" },
-      });
-      const answer = data?.choices?.[0]?.message?.content;
-      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
-    } catch {}
-
-    // Fallbacks for when Pollinations is rate-limited or fails
-    try {
-      const fb1 = await fetchJson(`https://api.vyturex.com/prompt=${encodeURIComponent(prompt)}`, { timeout: 15000 });
-      if (fb1 && typeof fb1 === "string") return normalizeAiText(fb1, { keepLightFormatting: true });
-    } catch {}
-
-    try {
-      const fb2 = await fetchJson(`https://api.nyxs.pw/ai/gpt4?text=${encodeURIComponent(prompt)}`, { timeout: 15000 });
-      if (fb2 && fb2.result) return normalizeAiText(fb2.result, { keepLightFormatting: true });
-    } catch {}
-
-    throw new Error("empty");
+  // If user has a paid OpenAI key, use official OpenAI directly.
+  if (openaiKey) {
+    const { OpenAI } = require("openai");
+    const openai = new OpenAI({ apiKey: openaiKey });
+    const completion = await openai.chat.completions.create({
+      model: endpoints.openai.model,
+      messages,
+    });
+    const answer = completion.choices?.[0]?.message?.content;
+    if (!answer || answer.length < 2) throw new Error("empty");
+    return normalizeAiText(answer, { keepLightFormatting: true });
   }
 
-  // If user explicitly configures a paid key, use official OpenAI.
-  const { OpenAI } = require("openai");
-  const openai = new OpenAI({ apiKey: openaiKey });
-  const completion = await openai.chat.completions.create({
-    model: endpoints.openai.model,
-    messages,
-  });
-  const answer = completion.choices?.[0]?.message?.content;
-  if (!answer || answer.length < 2) throw new Error("empty");
-  return normalizeAiText(answer, { keepLightFormatting: true });
+  // No-key mode: Pollinations gen API (free public endpoint, may rate-limit).
+  // The API moved from text.pollinations.ai/openai → gen.pollinations.ai/v1/chat/completions
+  const POLL_URL = "https://gen.pollinations.ai/v1/chat/completions";
+  const POLL_HEADERS = {
+    "Content-Type": "application/json",
+    "Origin": "https://pollinations.ai",
+    "Referer": "https://pollinations.ai/",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  };
+
+  // Try multiple models; on rate-limit (401/429) retry with alternative auth
+  const tryModels = ["openai", "openai-fast", "mistral", "llama"];
+  for (let i = 0; i < tryModels.length; i++) {
+    const model = tryModels[i];
+    if (i > 0) await new Promise(r => setTimeout(r, 1500 * i));
+
+    // Attempt A: Origin header (works when not rate-limited)
+    try {
+      const res = await axios.post(POLL_URL, { model, messages }, {
+        timeout: 30000,
+        headers: { ...POLL_HEADERS, "Authorization": "Bearer pollen" },
+      });
+      const answer = res.data?.choices?.[0]?.message?.content;
+      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+    } catch (e) {
+      if (![401, 403, 429].includes(e?.response?.status)) continue;
+    }
+
+    // Attempt B: ?key=free query param fallback
+    try {
+      const res = await axios.post(POLL_URL + "?key=free", { model, messages }, {
+        timeout: 30000,
+        headers: POLL_HEADERS,
+      });
+      const answer = res.data?.choices?.[0]?.message?.content;
+      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+    } catch {}
+  }
+
+  throw new Error("empty");
 }
 
 async function fetchGeneratedImage(prompt) {
