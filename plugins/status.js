@@ -40,13 +40,23 @@ const commands = [
       }
 
       const targetChat = getStatusSaveTargetChat(sock, m);
+      const inStatusCtx = m.chat === "status@broadcast";
+
+      // Helper: all text feedback goes to targetChat (owner's DM in status context)
+      const sendText = (text) => sock.sendMessage(targetChat, { text });
+      const react = (emoji) => {
+        if (!inStatusCtx) return m.react(emoji);
+        // Send reaction as text emoji to owner's DM since status-context reactions are unreliable
+        return sock.sendMessage(targetChat, { react: { text: emoji, key: m.key } }).catch(() => {});
+      };
+
       const arg0 = String(args[0] || "").toLowerCase();
       const orderedEntries = [...statusCache.entries()].sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0));
 
       // ── list subcommand ──────────────────────────────────────────────────────
       if (arg0 === "list") {
         if (orderedEntries.length === 0) {
-          return m.reply(`📭 No statuses cached yet.\nEnable auto-view: ${config.PREFIX}statusview on`);
+          return sendText(`📭 No statuses cached yet.\nEnable auto-view: ${config.PREFIX}statusview on`);
         }
         let list = `📡 *Recent Statuses* (${orderedEntries.length} cached)\n\n`;
         let i = 1;
@@ -58,7 +68,7 @@ const commands = [
           i++;
         }
         list += `\nReply to a status with *${config.PREFIX}save* to save it directly.\nOr use *${config.PREFIX}statusdl <number>* to pick one by number.`;
-        return m.reply(list);
+        return sendText(list);
       }
 
       // ── Resolve which status to save ─────────────────────────────────────────
@@ -92,7 +102,7 @@ const commands = [
           }
         }
         if (!data) {
-          return m.reply("❌ That quoted message is not a saved status. Try quoting the status directly in the status tab.");
+          return sendText("❌ That quoted message is not a saved status. Try quoting the status directly in the status tab.");
         }
       }
 
@@ -100,7 +110,7 @@ const commands = [
       if (!data && arg0 && arg0 !== "latest") {
         const index = parseInt(arg0, 10) - 1;
         if (isNaN(index) || index < 0 || index >= orderedEntries.length) {
-          return m.reply(`❌ Invalid number. Use *${config.PREFIX}statusdl list* to see available statuses (1–${orderedEntries.length}).`);
+          return sendText(`❌ Invalid number. Use *${config.PREFIX}statusdl list* to see available statuses (1–${orderedEntries.length}).`);
         }
         data = orderedEntries[index]?.[1];
       }
@@ -120,7 +130,7 @@ const commands = [
           data = orderedEntries[orderedEntries.length - 1][1];
         }
         if (!data) {
-          return m.reply(`📭 No statuses cached. Enable auto-view first: *${config.PREFIX}statusview on*`);
+          return sendText(`📭 No statuses cached. Enable auto-view first: *${config.PREFIX}statusview on*`);
         }
       }
 
@@ -131,17 +141,22 @@ const commands = [
           const guidance = autoViewState === "on"
             ? "Auto-view is ON. Wait for a new status to arrive, then try again."
             : `Enable auto-view with *${config.PREFIX}statusview on* so statuses are cached as they come in.`;
-          return m.reply(`📭 No statuses cached yet.\n\n${guidance}\n\nOr go to the status tab, open a status, and *reply to it* with *${config.PREFIX}save* to save that specific one.`);
+          return sendText(`📭 No statuses cached yet.\n\n${guidance}\n\nOr go to the status tab, open a status, and *reply to it* with *${config.PREFIX}save* to save that specific one.`);
         }
         data = orderedEntries[orderedEntries.length - 1][1];
       }
 
       console.log(`[DESAM-STATUS] Status retrieval requested by ${m.sender} | cached_records=${statusCache?.size || 0}`);
-      m.react("⏳");
+      react("⏳");
+
+      // In status context, quoting the original status@broadcast key in a DM is invalid.
+      // Use quoted only when replying within the same regular chat.
+      const msgOpts = inStatusCtx ? {} : { quoted: { key: m.key, message: m.message } };
+
       try {
 
         if (!data) {
-          return m.reply("❌ Could not find a status to save.");
+          return sendText("❌ Could not find a status to save.");
         }
 
         const rawType = data.type || getContentType(data.message) || Object.keys(data.message || {})[0];
@@ -153,8 +168,8 @@ const commands = [
           "receiptMessage","pollUpdateMessage","callLogMesssage","senderKeyDistributionMessage"];
         if (!rawType || NON_SAVEABLE.includes(rawType)) {
           console.log(`[DESAM-STATUS] Skipping non-saveable type in save handler: ${rawType}`);
-          m.react("⚠️");
-          return m.reply("⚠️ That status type cannot be saved (it's a system or reaction message, not a real status).");
+          react("⚠️");
+          return sendText("⚠️ That status type cannot be saved (it's a system or reaction message, not a real status).");
         }
 
         // Normalize document mime — some clients send video/audio as documentMessage
@@ -172,7 +187,7 @@ const commands = [
         if (rawType === "conversation" || rawType === "extendedTextMessage") {
           // ── Plain / rich text status ─────────────────────────────────────────
           const text = msg.conversation || msg.extendedTextMessage?.text || "";
-          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, msgOpts);
 
         } else if (MEDIA_TYPES.includes(rawType) || isDocVideo || isDocAudio) {
           // ── All media types (image / video / audio / sticker / document) ─────
@@ -186,9 +201,9 @@ const commands = [
             );
           } catch (dlErr) {
             console.error(`[DESAM-STATUS] downloadMediaMessage failed: ${dlErr.message}`);
-            return m.reply("❌ Failed to download status media. It may have expired — statuses are only available for 24 hours.");
+            return sendText("❌ Failed to download status media. It may have expired — statuses are only available for 24 hours.");
           }
-          if (!buffer || buffer.length < 100) return m.reply("❌ Downloaded media appears empty or corrupt.");
+          if (!buffer || buffer.length < 100) return sendText("❌ Downloaded media appears empty or corrupt.");
 
           let mediaOpts = {};
           if (rawType === "imageMessage") {
@@ -216,25 +231,21 @@ const commands = [
               caption: credit,
             };
           }
-          await sock.sendMessage(targetChat, mediaOpts, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, mediaOpts, msgOpts);
 
         } else if (rawType === "contactMessage") {
           // ── Contact card ──────────────────────────────────────────────────────
           const vcard = msg.contactMessage?.vcard || "";
           const name = msg.contactMessage?.displayName || "Contact";
-          await sock.sendMessage(targetChat, {
-            contacts: { displayName: name, contacts: [{ vcard }] },
-          }, { quoted: { key: m.key, message: m.message } });
-          await sock.sendMessage(targetChat, { text: `${credit}\n_Contact status_` }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { contacts: { displayName: name, contacts: [{ vcard }] } }, msgOpts);
+          await sock.sendMessage(targetChat, { text: `${credit}\n_Contact status_` }, msgOpts);
 
         } else if (rawType === "contactsArrayMessage") {
           // ── Multiple contacts ─────────────────────────────────────────────────
           const contacts = (msg.contactsArrayMessage?.contacts || []).map(c => ({ vcard: c.vcard }));
           const names = (msg.contactsArrayMessage?.contacts || []).map(c => c.displayName).join(", ");
-          await sock.sendMessage(targetChat, {
-            contacts: { displayName: names || "Contacts", contacts },
-          }, { quoted: { key: m.key, message: m.message } });
-          await sock.sendMessage(targetChat, { text: `${credit}\n_Contacts status_` }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { contacts: { displayName: names || "Contacts", contacts } }, msgOpts);
+          await sock.sendMessage(targetChat, { text: `${credit}\n_Contacts status_` }, msgOpts);
 
         } else if (rawType === "locationMessage" || rawType === "liveLocationMessage") {
           // ── Location status ───────────────────────────────────────────────────
@@ -242,32 +253,32 @@ const commands = [
           const locName = loc.name || loc.address || "";
           await sock.sendMessage(targetChat, {
             location: { degreesLatitude: loc.degreesLatitude, degreesLongitude: loc.degreesLongitude },
-          }, { quoted: { key: m.key, message: m.message } });
+          }, msgOpts);
           await sock.sendMessage(targetChat, {
             text: `${credit}\n_Location status_${locName ? `\n📍 ${locName}` : ""}`,
-          }, { quoted: { key: m.key, message: m.message } });
+          }, msgOpts);
 
         } else if (rawType === "templateMessage") {
           // ── Template / button message — extract text ──────────────────────────
           const tmpl = msg.templateMessage?.hydratedTemplate || msg.templateMessage || {};
           const text = tmpl.hydratedContentText || tmpl.hydratedTitleText || JSON.stringify(tmpl);
-          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, msgOpts);
 
         } else if (rawType === "buttonsMessage" || rawType === "interactiveMessage" || rawType === "listMessage") {
           // ── Interactive / list / buttons — extract text ───────────────────────
           const b = msg.buttonsMessage || msg.listMessage || msg.interactiveMessage || {};
           const text = b.contentText || b.title || b.description || b.buttonText?.displayText || JSON.stringify(b).slice(0, 200);
-          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, { quoted: { key: m.key, message: m.message } });
+          await sock.sendMessage(targetChat, { text: `${credit}\n\n${text}` }, msgOpts);
 
         } else {
           // ── Truly unknown saveable type — log for debugging, tell user cleanly ─
           console.warn(`[DESAM-STATUS] Unhandled status type in save: ${rawType} | keys: ${Object.keys(msg).join(", ")}`);
-          return m.reply(`⚠️ This status type (*${rawType}*) is not yet supported for saving. Please let the bot admin know so it can be added.`);
+          return sendText(`⚠️ This status type (*${rawType}*) is not yet supported for saving. Please let the bot admin know so it can be added.`);
         }
-        m.react("✅");
+        react("✅");
       } catch (err) {
-        m.react("❌");
-        await m.reply("❌ Failed to download status.");
+        react("❌");
+        await sendText("❌ Failed to download status.");
       }
     },
   },
