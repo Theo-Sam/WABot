@@ -79,7 +79,30 @@ async function pollinate(prompt, persona = "openai") {
     }
   }
 
-  // ── Priority 4: Pollinations (no key needed, but rate-limited) ─────────────
+  // ── Priority 4: Public Ollama nodes (no key needed, confirmed working) ──────
+  //    mlvoca.com hosts tinyllama — free, no rate limit per request
+  const ollamaNodes = [
+    { base: "https://mlvoca.com", model: "tinyllama" },
+  ];
+  const ollamaPrompt =
+    messages.map(msg => {
+      if (msg.role === "system") return `[SYSTEM] ${msg.content}`;
+      if (msg.role === "user") return `User: ${msg.content}`;
+      return `Assistant: ${msg.content}`;
+    }).join("\n") + "\nAssistant:";
+  for (const node of ollamaNodes) {
+    try {
+      const res = await axios.post(`${node.base}/api/generate`, {
+        model: node.model,
+        prompt: ollamaPrompt,
+        stream: false,
+      }, { timeout: 30000 });
+      const answer = res.data?.response?.trim();
+      if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
+    } catch {}
+  }
+
+  // ── Priority 5: Pollinations (no key needed, but rate-limited) ─────────────
   const POLL_URL = "https://gen.pollinations.ai/v1/chat/completions";
   const POLL_HEADERS = {
     "Content-Type": "application/json",
