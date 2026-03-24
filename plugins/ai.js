@@ -2,7 +2,6 @@ const config = require("../config");
 const { fetchJson, normalizeAiText } = require("../lib/helpers");
 const axios = require("axios");
 const sharp = require("sharp");
-const { endpoints } = require("../lib/endpoints");
 
 const AI_PERSONAS = {
   openai: null,
@@ -17,7 +16,6 @@ const AI_PERSONAS = {
 };
 
 async function pollinate(prompt, persona = "openai") {
-  const openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
   const messages = [];
   const systemMsg = AI_PERSONAS[persona];
   if (systemMsg) messages.push({ role: "system", content: systemMsg });
@@ -27,106 +25,73 @@ async function pollinate(prompt, persona = "openai") {
   });
   messages.push({ role: "user", content: prompt });
 
-  // ── Priority 1: Paid OpenAI key ────────────────────────────────────────────
-  if (openaiKey) {
-    const { OpenAI } = require("openai");
-    const openai = new OpenAI({ apiKey: openaiKey });
-    const completion = await openai.chat.completions.create({
-      model: endpoints.openai.model,
-      messages,
-    });
-    const answer = completion.choices?.[0]?.message?.content;
-    if (!answer || answer.length < 2) throw new Error("empty");
-    return normalizeAiText(answer, { keepLightFormatting: true });
-  }
+  // Build a concise plain-text prompt for small Ollama models
+  const systemParts = messages.filter(m => m.role === "system").map(m => m.content).join(" ");
+  const userText    = messages.filter(m => m.role === "user").map(m => m.content).join("\n");
+  const ollamaPrompt = `${systemParts}\n\nQuestion: ${userText}\nAnswer:`;
+  const ollamaStop   = ["\nQuestion:", "\nUser:", "\n[SYSTEM]"];
 
-  const { OpenAI } = require("openai");
+  // ── Tier 1: mlvoca.com — public Ollama node (tinyllama), confirmed working ──
+  //    Free, no key, no registration, no rate limit per request
+  try {
+    const res = await axios.post("https://mlvoca.com/api/generate", {
+      model: "tinyllama",
+      prompt: ollamaPrompt,
+      stream: false,
+      options: { stop: ollamaStop, num_predict: 300 },
+    }, { timeout: 30000 });
+    const answer = res.data?.response?.trim();
+    // Guard: if model echoed the prompt template, discard and fall through
+    const isEcho = answer && (answer.includes("Question:") || answer.includes("Answer:") || answer.startsWith(userText.slice(0, 20)));
+    if (answer && answer.length >= 2 && !isEcho) return normalizeAiText(answer, { keepLightFormatting: true });
+  } catch {}
 
-  // ── Priority 2: Groq (free — 14 400 req/day, no credit card needed) ───────
-  //    Get a free key at: https://console.groq.com
-  const groqKey = String(process.env.GROQ_API_KEY || "").trim();
-  if (groqKey) {
-    const groq = new OpenAI({ apiKey: groqKey, baseURL: "https://api.groq.com/openai/v1" });
-    const groqModels = ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"];
-    for (const model of groqModels) {
-      try {
-        const completion = await groq.chat.completions.create({ model, messages });
-        const answer = completion.choices?.[0]?.message?.content;
-        if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
-      } catch (e) {
-        if (e?.status === 429) await new Promise(r => setTimeout(r, 2000));
-      }
-    }
-  }
-
-  // ── Priority 3: Google Gemini (free — 1 500 req/day, no credit card needed) ─
-  //    Get a free key at: https://ai.google.dev/aistudio → "Get API key"
-  const geminiKey = String(process.env.GEMINI_API_KEY || "").trim();
-  if (geminiKey) {
-    const gemini = new OpenAI({
-      apiKey: geminiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    });
-    const geminiModels = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
-    for (const model of geminiModels) {
-      try {
-        const completion = await gemini.chat.completions.create({ model, messages });
-        const answer = completion.choices?.[0]?.message?.content;
-        if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
-      } catch (e) {
-        if (e?.status === 429) await new Promise(r => setTimeout(r, 2000));
-      }
-    }
-  }
-
-  // ── Priority 4: Public Ollama nodes (no key needed, confirmed working) ──────
-  //    mlvoca.com hosts tinyllama — free, no rate limit per request
-  const ollamaNodes = [
-    { base: "https://mlvoca.com", model: "tinyllama" },
+  // ── Tier 2: Community-hosted public Ollama nodes ────────────────────────────
+  //    IP-based servers donated by the community; model list tested live
+  const communityNodes = [
+    { base: "http://210.212.210.104:84", model: "gemma3:1b" },
+    { base: "http://111.230.71.93:80",   model: "tinyllama:latest" },
+    { base: "http://119.3.179.233:80",   model: "qwen:7b" },
   ];
-  const ollamaPrompt =
-    messages.map(msg => {
-      if (msg.role === "system") return `[SYSTEM] ${msg.content}`;
-      if (msg.role === "user") return `User: ${msg.content}`;
-      return `Assistant: ${msg.content}`;
-    }).join("\n") + "\nAssistant:";
-  for (const node of ollamaNodes) {
+  for (const node of communityNodes) {
     try {
       const res = await axios.post(`${node.base}/api/generate`, {
         model: node.model,
         prompt: ollamaPrompt,
         stream: false,
-      }, { timeout: 30000 });
+        options: { stop: ollamaStop, num_predict: 300 },
+      }, { timeout: 20000 });
       const answer = res.data?.response?.trim();
       if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
     } catch {}
   }
 
-  // ── Priority 5: Pollinations (no key needed, but rate-limited) ─────────────
-  const POLL_URL = "https://gen.pollinations.ai/v1/chat/completions";
-  const POLL_HEADERS = {
-    "Content-Type": "application/json",
-    "Origin": "https://pollinations.ai",
-    "Referer": "https://pollinations.ai/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  };
-  for (const [model, auth] of [
-    ["openai",      { "Authorization": "Bearer pollen" }],
-    ["openai-fast", { "Authorization": "Bearer pollen" }],
-    ["openai",      {}],
-    ["mistral",     {}],
-  ]) {
+  // ── Tier 3: api.airforce — 122 models, no key, 1 req/sec rate limit ─────────
+  //    Free community AI gateway; use smaller models for fastest response
+  const airforceModels = [
+    "gpt-4o-mini",
+    "llama-4-scout",
+    "gemini-2.0-flash",
+    "deepseek-v3-0324",
+  ];
+  for (const model of airforceModels) {
     try {
-      const res = await axios.post(POLL_URL, { model, messages }, {
-        timeout: 28000,
-        headers: { ...POLL_HEADERS, ...auth },
+      await new Promise(r => setTimeout(r, 1200)); // respect 1 req/sec limit
+      const res = await axios.post("https://api.airforce/v1/chat/completions", {
+        model,
+        messages,
+      }, {
+        timeout: 35000,
+        headers: { "Content-Type": "application/json" },
+        validateStatus: s => s < 500,
       });
-      const answer = res.data?.choices?.[0]?.message?.content;
+      if (res.status === 429) continue; // still rate-limited, try next model
+      const answer = res.data?.choices?.[0]?.message?.content?.trim();
       if (answer && answer.length >= 2) return normalizeAiText(answer, { keepLightFormatting: true });
     } catch {}
   }
 
-  throw new Error("empty");
+  throw new Error("All free AI providers failed or returned empty responses.");
 }
 
 async function fetchGeneratedImage(prompt) {
