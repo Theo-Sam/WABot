@@ -64,8 +64,8 @@ const commands = [
     desc: "Convert audio to video (black screen + audio)",
     handler: async (sock, m) => {
       const media =
-        m.isAudio ? m
-        : m.quoted?.isAudio ? m.quoted
+        (m.isAudio || m.isVideo) ? m
+        : m.quoted && (m.quoted.isAudio || m.quoted.isVideo) ? m.quoted
         : null;
       if (!media) return m.reply(`Reply to an audio or voice note with ${config.PREFIX}tovideo`);
       m.react("⏳");
@@ -77,12 +77,14 @@ const commands = [
         fs.writeFileSync(input, buffer);
         await new Promise((resolve, reject) => {
           const ffmpeg = require("fluent-ffmpeg");
+          // Input 0: audio/video source; Input 1: lavfi black screen
+          // Map video (1:v) first, then audio (0:a) — mp4 expects video stream first
           ffmpeg(input)
             .input("color=black:s=1280x720:r=1")
             .inputFormat("lavfi")
             .outputOptions([
-              "-map", "0:a",
               "-map", "1:v",
+              "-map", "0:a",
               "-shortest",
               "-pix_fmt", "yuv420p",
               "-c:v", "libx264",
@@ -91,7 +93,7 @@ const commands = [
             ])
             .toFormat("mp4")
             .on("end", resolve)
-            .on("error", reject)
+            .on("error", (err) => { console.error("[tovideo] ffmpeg error:", err.message); reject(err); })
             .save(output);
         });
         const videoBuffer = fs.readFileSync(output);
