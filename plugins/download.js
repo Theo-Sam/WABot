@@ -195,84 +195,156 @@ function igDownloadYtDlp(url, withCookie) {
 }
 
 /**
- * Free third-party scraper APIs for public Instagram content.
- * Returns an array of { buffer, type } on success, or [] on failure.
- * Note: Instagram blocks most public scraper APIs from server IPs since 2024.
- * The INSTAGRAM_SESSION env var enables yt-dlp auth which is far more reliable.
+ * Download Instagram media using the Instagram GraphQL API.
+ * Requires INSTAGRAM_SESSION env var (sessionid cookie value).
+ * Supports single posts, reels, AND carousel/album posts (returns all items).
+ */
+async function igGraphQLDownload(url) {
+  const sessionCookie = process.env.INSTAGRAM_SESSION;
+  if (!sessionCookie) return [];
+
+  const shortcode = extractIgShortcode(url);
+  if (!shortcode) return [];
+
+  const ua = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const decodedSession = decodeURIComponent(sessionCookie.trim());
+
+  try {
+    // Get CSRF token without session cookie (avoids redirect loops)
+    let csrfToken = '';
+    try {
+      const homeRes = await axios.get('https://www.instagram.com/', {
+        headers: { 'User-Agent': ua, 'Accept': 'text/html' },
+        timeout: 12000, maxRedirects: 3, validateStatus: () => true,
+      });
+      for (const c of homeRes.headers['set-cookie'] || []) {
+        const m = c.match(/^csrftoken=([^;]+)/);
+        if (m) { csrfToken = m[1]; break; }
+      }
+    } catch {}
+    if (!csrfToken) return [];
+
+    const cookieStr = `csrftoken=${csrfToken}; sessionid=${decodedSession}; ig_did=00000000-0000-0000-0000-000000000000; ig_nrcb=1`;
+    const qs = require('querystring');
+    const body = qs.stringify({
+      variables: JSON.stringify({
+        shortcode, fetch_tagged_user_count: null,
+        hoisted_comment_id: null, hoisted_reply_id: null,
+      }),
+      doc_id: '9510064595728286',
+    });
+
+    const gqlRes = await axios.post('https://www.instagram.com/graphql/query', body, {
+      headers: {
+        'User-Agent': ua,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRFToken': csrfToken,
+        'X-IG-App-ID': '936619743392459',
+        'X-IG-WWW-Claim': '0',
+        'X-ASBD-ID': '129477',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Cookie': cookieStr,
+        'Referer': 'https://www.instagram.com/',
+        'Accept': '*/*',
+        'Origin': 'https://www.instagram.com',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Dest': 'empty',
+      },
+      timeout: 20000, validateStatus: () => true,
+    });
+
+    const media = gqlRes.data?.data?.xdt_shortcode_media;
+    if (!media) {
+      console.error('[igGraphQL] no media in response:', JSON.stringify(gqlRes.data).slice(0, 100));
+      return [];
+    }
+
+    // Collect all media URLs (handles carousel/sidecar automatically)
+    const mediaItems = [];
+    if (media.edge_sidecar_to_children?.edges?.length) {
+      for (const { node } of media.edge_sidecar_to_children.edges) {
+        mediaItems.push({ url: node.is_video ? node.video_url : node.display_url, type: node.is_video ? 'video' : 'image' });
+      }
+    } else {
+      mediaItems.push({ url: media.is_video ? media.video_url : media.display_url, type: media.is_video ? 'video' : 'image' });
+    }
+
+    const results = [];
+    for (const { url: mediaUrl, type } of mediaItems) {
+      if (!mediaUrl) continue;
+      try {
+        const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
+        if (buf?.length > 1000) results.push({ buffer: buf, type });
+      } catch {}
+    }
+    return results;
+  } catch (err) {
+    console.error('[igGraphQL] error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Free third-party scraper APIs — tried in order, return first success.
+ * Most are blocked from cloud server IPs by Instagram/Cloudflare since 2024.
+ * They will fail fast (DNS errors), wasting minimal time.
  */
 async function igDownloadFreeApi(url) {
   const ua = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-  const headers = { 'User-Agent': ua, 'Accept': 'application/json, text/plain, */*' };
+  const h = { 'User-Agent': ua, 'Accept': 'application/json, text/plain, */*' };
 
-  // Helper: download a URL and return { buffer, type } or null
   async function fetchItem(mediaUrl, typeHint) {
     if (!mediaUrl || typeof mediaUrl !== 'string') return null;
-    const isVideo = typeHint === 'video' || mediaUrl.includes('.mp4');
     const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-    return buf?.length > 1000 ? { buffer: buf, type: isVideo ? 'video' : 'image' } : null;
+    return buf?.length > 1000 ? { buffer: buf, type: typeHint === 'video' || mediaUrl.includes('.mp4') ? 'video' : 'image' } : null;
   }
 
-  // Helper: parse aio-dl style response links
-  function parseAioDlLinks(data) {
+  function parseAioDl(data) {
     const links = data?.data?.url || data?.medias || [];
-    const videos = links.filter(l => l.type === 'mp4' || l.type === 'video' || l.url?.includes('.mp4'));
-    const images = links.filter(l => l.type === 'jpg' || l.type === 'image' || l.url?.includes('.jpg'));
-    return [...videos, ...images].map(l => l.url).filter(Boolean);
+    return [...links.filter(l => l.url?.includes('.mp4')), ...links.filter(l => !l.url?.includes('.mp4'))].map(l => l.url).filter(Boolean);
   }
 
   const tryApis = [
-    // 1. SnapInsta (often working for public reels/posts)
+    // SnapInsta
     async () => {
-      const res = await axios.post(
-        'https://snapinsta.to/api/ajaxSearch',
-        `q=${encodeURIComponent(url)}&t=media&lang=en`,
-        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapinsta.to', 'Referer': 'https://snapinsta.to/' }, timeout: 15000 }
-      );
-      const urls = parseAioDlLinks(res.data);
-      if (!urls.length) return [];
-      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
-      return items.filter(Boolean);
+      const r = await axios.post('https://snapinsta.to/api/ajaxSearch', `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        { headers: { ...h, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://snapinsta.to' }, timeout: 10000 });
+      return parseAioDl(r.data);
     },
-    // 2. SaveIG
+    // SaveIG
     async () => {
-      const res = await axios.post(
-        'https://saveig.app/api/ajaxSearch',
-        `q=${encodeURIComponent(url)}&t=media&lang=en`,
-        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://saveig.app', 'Referer': 'https://saveig.app/' }, timeout: 15000 }
-      );
-      const urls = parseAioDlLinks(res.data);
-      if (!urls.length) return [];
-      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
-      return items.filter(Boolean);
+      const r = await axios.post('https://saveig.app/api/ajaxSearch', `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        { headers: { ...h, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://saveig.app' }, timeout: 10000 });
+      return parseAioDl(r.data);
     },
-    // 3. Nyxs — returns structured result with type info
+    // Nyxs
     async () => {
-      const res = await fetchJson(`https://api.nyxs.pw/dl/ig?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-      const media = Array.isArray(res?.result) ? res.result : (res?.result ? [res.result] : []);
-      if (!media.length) return [];
-      const items = await Promise.all(
-        media.slice(0, 10).map(m => fetchItem(m?.url, m?.type?.includes('video') ? 'video' : 'image').catch(() => null))
-      );
-      return items.filter(Boolean);
+      const r = await fetchJson(`https://api.nyxs.pw/dl/ig?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+      const media = Array.isArray(r?.result) ? r.result : (r?.result ? [r.result] : []);
+      return media.slice(0, 10).map(m => m?.url).filter(Boolean);
     },
-    // 4. Reelsaver
+    // Reelsaver
     async () => {
-      const res = await axios.post(
-        'https://reelsaver.net/api/ajaxSearch',
-        `q=${encodeURIComponent(url)}&t=media&lang=en`,
-        { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://reelsaver.net', 'Referer': 'https://reelsaver.net/' }, timeout: 15000 }
-      );
-      const urls = parseAioDlLinks(res.data);
-      if (!urls.length) return [];
-      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
-      return items.filter(Boolean);
+      const r = await axios.post('https://reelsaver.net/api/ajaxSearch', `q=${encodeURIComponent(url)}&t=media&lang=en`,
+        { headers: { ...h, 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://reelsaver.net' }, timeout: 10000 });
+      return parseAioDl(r.data);
+    },
+    // Ryzendesu community API
+    async () => {
+      const r = await fetchJson(`https://api.ryzendesu.vip/api/downloader/igdl?url=${encodeURIComponent(url)}`, { timeout: 10000 });
+      const items = r?.data || r?.result || [];
+      return (Array.isArray(items) ? items : [items]).map(i => i?.url || i?.link).filter(Boolean);
     },
   ];
 
   for (const tryApi of tryApis) {
     try {
-      const results = await tryApi();
-      if (results?.length) return results;
+      const urls = await tryApi();
+      if (!urls?.length) continue;
+      const items = await Promise.all(urls.slice(0, 10).map(u => fetchItem(u, u.includes('.mp4') ? 'video' : 'image').catch(() => null)));
+      const valid = items.filter(Boolean);
+      if (valid.length) return valid;
     } catch {}
   }
   return [];
@@ -281,13 +353,29 @@ async function igDownloadFreeApi(url) {
 /**
  * Main Instagram download orchestrator.
  * Returns an array of { buffer, type } (multiple items for carousels), or [] if all fail.
- * Set INSTAGRAM_SESSION env var with your Instagram sessionid cookie for reliable downloads.
+ *
+ * Priority order:
+ *  1. Instagram GraphQL API with INSTAGRAM_SESSION (supports all content + carousels)
+ *  2. yt-dlp with INSTAGRAM_SESSION (video-focused fallback)
+ *  3. Free third-party scraper APIs (mostly blocked from server IPs, but worth a fast try)
+ *  4. yt-dlp without session (fails for most content — "login required")
  */
 async function igDownload(url) {
   const cleanUrl = normalizeInputUrl(url).split("?")[0].replace(/\/$/, "") + "/";
+  const hasSession = !!process.env.INSTAGRAM_SESSION;
 
-  // 1. yt-dlp with session cookie (most reliable — supports reels, carousels, stories)
-  if (process.env.INSTAGRAM_SESSION && findYtDlpBin()) {
+  // 1. Instagram GraphQL API — best for carousels, fastest when session is set
+  if (hasSession) {
+    try {
+      const results = await igGraphQLDownload(cleanUrl);
+      if (results?.length) return results;
+    } catch (err) {
+      console.error('[igDownload] GraphQL error:', err.message);
+    }
+  }
+
+  // 2. yt-dlp with session — reliable fallback for videos when GraphQL fails
+  if (hasSession && findYtDlpBin()) {
     try {
       const results = await igDownloadYtDlp(cleanUrl, true);
       if (results?.length) return results;
@@ -296,7 +384,7 @@ async function igDownload(url) {
     }
   }
 
-  // 2. Free third-party scraper APIs (no auth; most blocked from server IPs since 2024)
+  // 3. Free third-party APIs — mostly fail from cloud IPs, but try anyway
   try {
     const results = await igDownloadFreeApi(cleanUrl);
     if (results?.length) return results;
@@ -304,7 +392,7 @@ async function igDownload(url) {
     console.error('[igDownload] free API error:', err.message);
   }
 
-  // 3. yt-dlp without session (last resort; fails for most content since login required)
+  // 4. yt-dlp without session — will fail with "login required" but worth a shot
   if (findYtDlpBin()) {
     try {
       const results = await igDownloadYtDlp(cleanUrl, false);
