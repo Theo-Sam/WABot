@@ -132,31 +132,123 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
   return null;
 }
 
-async function ytDownloadAudio(url) {
-  // ios client: currently the most reliable for bypassing YouTube PO Token on server IPs
-  // android is the fallback. web requires PO Token and is excluded.
-  return ytDlpDownloadToBuffer(url, [
-    '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
-    '--no-part',
-    '--extractor-args', 'youtube:player_client=ios,android',
-  ], 'm4a');
+/**
+ * Extract the YouTube video ID from any YouTube URL format.
+ */
+function ytVideoId(url) {
+  const m = String(url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
 }
 
+/**
+ * External API fallbacks for YouTube audio download.
+ * Used when ALL yt-dlp player clients fail (e.g. VPS IP is rate-limited by YouTube).
+ * Chain: vevioz → fabdl → loader.to
+ */
+async function ytAudioExternalFallback(url) {
+  const vid = ytVideoId(url);
+
+  // ── 1. api.vevioz.com ─────────────────────────────────────────────────────
+  if (vid) {
+    try {
+      console.log('[ytAudio] trying vevioz...');
+      const data = await fetchJson(`https://api.vevioz.com/api/button/mp3/${vid}`, { timeout: 20000 });
+      const link = data?.link || data?.dl_url || data?.url;
+      if (link) {
+        const buf = await fetchBuffer(link, { timeout: 90000 });
+        if (buf?.length > 10000) { console.log('[ytAudio] vevioz OK'); return buf; }
+      }
+    } catch (e) { console.error('[ytAudio] vevioz error:', e.message?.slice(0, 120)); }
+  }
+
+  // ── 2. api.fabdl.com ──────────────────────────────────────────────────────
+  try {
+    console.log('[ytAudio] trying fabdl...');
+    const data = await fetchJson(
+      `https://api.fabdl.com/youtube/mp3?url=${encodeURIComponent(url)}`,
+      { timeout: 20000 }
+    );
+    const dlUrl = data?.dl_url || data?.download_url || data?.url;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 90000 });
+      if (buf?.length > 10000) { console.log('[ytAudio] fabdl OK'); return buf; }
+    }
+  } catch (e) { console.error('[ytAudio] fabdl error:', e.message?.slice(0, 120)); }
+
+  // ── 3. loader.to (polling) ────────────────────────────────────────────────
+  try {
+    console.log('[ytAudio] trying loader.to...');
+    const init = await fetchJson(
+      `https://loader.to/api/button/?url=${encodeURIComponent(url)}&f=mp3`,
+      { timeout: 20000 }
+    );
+    const jobId = init?.id;
+    if (jobId) {
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 4000));
+        const prog = await fetchJson(`https://loader.to/api/progress/?id=${jobId}`, { timeout: 15000 });
+        const dlUrl = prog?.download_url || prog?.dl_url;
+        if (dlUrl) {
+          const buf = await fetchBuffer(dlUrl, { timeout: 90000 });
+          if (buf?.length > 10000) { console.log('[ytAudio] loader.to OK'); return buf; }
+          break;
+        }
+        if (prog?.status === 'error' || prog?.error) break;
+      }
+    }
+  } catch (e) { console.error('[ytAudio] loader.to error:', e.message?.slice(0, 120)); }
+
+  return null;
+}
+
+/**
+ * Download YouTube audio with a full multi-client retry chain, then external API fallback.
+ *
+ * yt-dlp player clients tried in order (all bypass PO Token on server IPs):
+ *   1. ios          — Apple TV app client; no PO Token required, fastest
+ *   2. tv_embedded  — Embedded TV client; bypasses age restrictions too
+ *   3. android_vr   — Android VR client; last yt-dlp attempt
+ * Fallback to external APIs: vevioz → fabdl → loader.to
+ */
+async function ytDownloadAudio(url) {
+  const AUDIO_CLIENTS = ['ios', 'tv_embedded', 'android_vr'];
+  for (const client of AUDIO_CLIENTS) {
+    console.log(`[ytAudio] trying yt-dlp client: ${client}`);
+    const buf = await ytDlpDownloadToBuffer(url, [
+      '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+      '--no-part',
+      '--extractor-args', `youtube:player_client=${client}`,
+    ], 'm4a');
+    if (buf) { console.log(`[ytAudio] ${client} succeeded`); return buf; }
+  }
+  console.log('[ytAudio] all yt-dlp clients failed — trying external APIs');
+  return ytAudioExternalFallback(url);
+}
+
+/**
+ * Download YouTube video with a multi-client retry chain.
+ *
+ * Format priority (YouTube 2025+):
+ *   1. Format 22 — 720p progressive MP4 (pre-merged, no PO Token)
+ *   2. Format 18 — 360p progressive MP4 (pre-merged, no PO Token)
+ *   3. best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
+ *   4. best[height<=480] — last resort, any codec ≤480p
+ * Adaptive DASH formats (136/137) require GVS PO Token and are excluded.
+ */
 async function ytDownloadVideo(url) {
-  // Format priority (YouTube 2025+):
-  //   1. Format 22 — 720p progressive MP4 (H.264+AAC, pre-merged, no PO Token)
-  //   2. Format 18 — 360p progressive MP4 (H.264+AAC, pre-merged, no PO Token)
-  //   3. best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
-  //   4. best[height<=480] — last resort, any codec ≤480p
-  // ios client bypasses PO Token on server IPs; android is fallback.
-  // Adaptive DASH formats (136/137) require GVS PO Token and are excluded.
-  return ytDlpDownloadToBuffer(url, [
-    '-f', '22/18/best[ext=mp4][height<=480]/best[height<=480]',
-    '--merge-output-format', 'mp4',
-    '--no-part',
-    '--max-filesize', '55m',
-    '--extractor-args', 'youtube:player_client=ios,android',
-  ], 'mp4');
+  const VIDEO_CLIENTS = ['ios', 'tv_embedded', 'android_vr'];
+  for (const client of VIDEO_CLIENTS) {
+    console.log(`[ytVideo] trying yt-dlp client: ${client}`);
+    const buf = await ytDlpDownloadToBuffer(url, [
+      '-f', '22/18/best[ext=mp4][height<=480]/best[height<=480]',
+      '--merge-output-format', 'mp4',
+      '--no-part',
+      '--max-filesize', '55m',
+      '--extractor-args', `youtube:player_client=${client}`,
+    ], 'mp4');
+    if (buf) { console.log(`[ytVideo] ${client} succeeded`); return buf; }
+  }
+  return null;
 }
 
 /**
