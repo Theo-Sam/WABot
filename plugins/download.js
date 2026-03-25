@@ -183,6 +183,29 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
 }
 
 /**
+ * Strip YouTube-specific title suffixes before passing to SoundCloud search.
+ * "Lasmid - Puul (Official Video)" → "Lasmid - Puul"
+ * SoundCloud tracks don't have these tags so they cause wrong matches.
+ */
+function cleanTitleForSoundCloud(title) {
+  return (title || '')
+    .replace(/\(Official\s*(Music\s*)?Video\)/gi, '')
+    .replace(/\(Official\s*(Audio|Lyric[s]?)\)/gi, '')
+    .replace(/\(Lyric[s]?\s*Video\)/gi, '')
+    .replace(/\(Audio\)/gi, '')
+    .replace(/\(Video\)/gi, '')
+    .replace(/\(HD\)/gi, '')
+    .replace(/\(4K\)/gi, '')
+    .replace(/\(ft\.[^)]*\)/gi, '')
+    .replace(/\(feat\.[^)]*\)/gi, '')
+    .replace(/\[Official[^\]]*\]/gi, '')
+    .replace(/\|\s*Official.*$/gi, '')
+    .replace(/\s*[-–]\s*Official\s*(Music\s*)?Video.*$/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Extract the YouTube video ID from any YouTube URL format.
  */
 function ytVideoId(url) {
@@ -205,7 +228,8 @@ async function ytAudioExternalFallback(url, searchQuery) {
   // ── 0. SoundCloud (via yt-dlp scsearch) ───────────────────────────────────
   // SoundCloud is NOT IP-restricted like YouTube. As long as yt-dlp itself works,
   // this succeeds even on VPS IPs fully blocked by YouTube.
-  const scQuery = searchQuery || await (async () => {
+  // Clean the query first — SoundCloud doesn't have "(Official Video)" etc.
+  const rawQuery = searchQuery || await (async () => {
     try {
       const oe = await fetchJson(
         `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
@@ -214,6 +238,7 @@ async function ytAudioExternalFallback(url, searchQuery) {
       return oe?.title || null;
     } catch { return null; }
   })();
+  const scQuery = rawQuery ? cleanTitleForSoundCloud(rawQuery) : null;
 
   if (scQuery) {
     try {
@@ -227,23 +252,33 @@ async function ytAudioExternalFallback(url, searchQuery) {
     } catch (e) { console.error('[ytAudio] SoundCloud error:', e.message?.slice(0, 100)); }
   }
 
-  // ── 1. Invidious proxy API ─────────────────────────────────────────────────
-  // Invidious instances act as YouTube proxies. ?local=true forces URLs to be
-  // routed through the Invidious server itself, bypassing YouTube IP restrictions.
+  // ── 1a. Invidious /latest_version proxy (simpler than JSON API, often works when API fails) ──
+  // This endpoint streams the raw YouTube content through the Invidious server.
+  // itag 140 = m4a audio ~128kbps (pre-built, no merge needed).
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
-      console.log(`[ytAudio] trying Invidious: ${instance}`);
+      const proxyUrl = `${instance}/latest_version?id=${vid}&itag=140&local=true`;
+      console.log(`[ytAudio] trying Invidious /latest_version: ${instance}`);
+      const buf = await fetchBuffer(proxyUrl, { timeout: 60000 });
+      if (buf?.length > 10000) { console.log(`[ytAudio] Invidious /latest_version ${instance} OK`); return buf; }
+    } catch (e) { console.error(`[ytAudio] Invidious /latest_version ${instance} error:`, e.message?.slice(0, 80)); }
+  }
+
+  // ── 1b. Invidious JSON API (full format list) ──────────────────────────────
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[ytAudio] trying Invidious API: ${instance}`);
       const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 12000 });
       const audioFormats = (data?.adaptiveFormats || [])
         .filter(f => f.type?.startsWith('audio/') && f.url)
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
       if (audioFormats.length) {
         const audioUrl = audioFormats[0].url;
-        console.log('[ytAudio] Invidious got audio URL, downloading...');
+        console.log('[ytAudio] Invidious API got audio URL, downloading...');
         const buf = await fetchBuffer(audioUrl, { timeout: 90000 });
-        if (buf?.length > 10000) { console.log(`[ytAudio] Invidious ${instance} OK`); return buf; }
+        if (buf?.length > 10000) { console.log(`[ytAudio] Invidious API ${instance} OK`); return buf; }
       }
-    } catch (e) { console.error(`[ytAudio] Invidious ${instance} error:`, e.message?.slice(0, 100)); }
+    } catch (e) { console.error(`[ytAudio] Invidious API ${instance} error:`, e.message?.slice(0, 100)); }
   }
 
   // ── 2. cobalt.tools (public instance — no auth, audio mode) ───────────────
@@ -353,12 +388,26 @@ async function ytVideoExternalFallback(url, searchQuery) {
   const vid = ytVideoId(url);
   if (!vid) return null;
 
-  // ── 1. Invidious formatStreams (pre-merged progressive MP4 — ideal for WhatsApp) ──
+  // ── 1a. Invidious /latest_version proxy (bypass JSON API — streams raw content through server) ─
+  // itag 22 = 720p progressive MP4 (video+audio, pre-merged)
+  // itag 18 = 360p progressive MP4 (video+audio, pre-merged, smaller)
+  for (const itag of [22, 18]) {
+    for (const instance of INVIDIOUS_INSTANCES) {
+      try {
+        const proxyUrl = `${instance}/latest_version?id=${vid}&itag=${itag}&local=true`;
+        console.log(`[ytVideo] trying Invidious /latest_version itag=${itag}: ${instance}`);
+        const buf = await fetchBuffer(proxyUrl, { timeout: 120000 });
+        if (buf?.length > 50000) { console.log(`[ytVideo] Invidious /latest_version ${instance} itag=${itag} OK`); return buf; }
+      } catch (e) { console.error(`[ytVideo] Invidious /latest_version ${instance} error:`, e.message?.slice(0, 80)); }
+    }
+  }
+
+  // ── 1b. Invidious JSON API (full formatStreams list) ──────────────────────
   // formatStreams contains pre-muxed video+audio — no DASH, no ffmpeg merge needed.
   // We prefer 720p → 480p → 360p to stay within the 60 MB WhatsApp limit.
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
-      console.log(`[ytVideo] trying Invidious formatStreams: ${instance}`);
+      console.log(`[ytVideo] trying Invidious formatStreams API: ${instance}`);
       const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 12000 });
 
       // formatStreams: pre-merged progressive formats (360p, 720p)
@@ -372,11 +421,11 @@ async function ytVideoExternalFallback(url, searchQuery) {
 
       if (sorted.length) {
         const chosen = sorted[0];
-        console.log(`[ytVideo] Invidious ${instance} — downloading ${chosen.qualityLabel}...`);
+        console.log(`[ytVideo] Invidious API ${instance} — downloading ${chosen.qualityLabel}...`);
         const buf = await fetchBuffer(chosen.url, { timeout: 120000 });
-        if (buf?.length > 50000) { console.log(`[ytVideo] Invidious ${instance} OK`); return buf; }
+        if (buf?.length > 50000) { console.log(`[ytVideo] Invidious API ${instance} OK`); return buf; }
       }
-    } catch (e) { console.error(`[ytVideo] Invidious ${instance} error:`, e.message?.slice(0, 100)); }
+    } catch (e) { console.error(`[ytVideo] Invidious API ${instance} error:`, e.message?.slice(0, 100)); }
   }
 
   // ── 2. cobalt.tools instances ─────────────────────────────────────────────
