@@ -1,6 +1,6 @@
 const config = require("../config");
 const { banUser, unbanUser, isBanned, listBanned } = require("../lib/database");
-const { runtime, getSystemInfo } = require("../lib/helpers");
+const { runtime, getSystemInfo, fetchJson } = require("../lib/helpers");
 
 const commands = [
   {
@@ -221,6 +221,129 @@ const commands = [
       files.forEach((f) => { msg += `▸ ${f}\n`; });
       msg += `\n📊 Total commands: ${cmds.size}`;
       await m.reply(msg);
+    },
+  },
+  {
+    name: ["testdl", "dltest", "diagdl"],
+    category: "owner",
+    desc: "Diagnose download stack — tests yt-dlp, SoundCloud, Invidious on this VPS",
+    owner: true,
+    handler: async (sock, m) => {
+      const { execFile } = require("child_process");
+      const fs = require("fs");
+      const path = require("path");
+      const os = require("os");
+      const axios = require("axios");
+
+      await m.reply("🔍 Running download diagnostics — this may take up to 60 seconds...");
+
+      const results = [];
+      const TEST_VID = "JGwWNGJdvx8"; // Ed Sheeran - Shape of You
+      const TEST_URL = `https://www.youtube.com/watch?v=${TEST_VID}`;
+
+      // Helper: run yt-dlp and return { ok, info }
+      function runYtDlp(args, timeoutMs = 20000) {
+        return new Promise((resolve) => {
+          const ytdlpBin = [
+            path.join(__dirname, "..", "bin", "yt-dlp"),
+            "/usr/local/bin/yt-dlp",
+            "/usr/bin/yt-dlp",
+          ].find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+          if (!ytdlpBin) return resolve({ ok: false, info: "binary not found" });
+          let stderr = "";
+          const proc = execFile(ytdlpBin, args, { timeout: timeoutMs }, (err, stdout) => {
+            if (err) resolve({ ok: false, info: stderr.replace(/\n/g, " ").slice(0, 120) });
+            else resolve({ ok: true, info: stdout.trim().slice(0, 80) });
+          });
+          proc.stderr?.on("data", (d) => { stderr += d; });
+        });
+      }
+
+      // 1. yt-dlp version
+      const ver = await runYtDlp(["--version"], 5000);
+      results.push(`${ver.ok ? "✅" : "❌"} yt-dlp binary: ${ver.ok ? ver.info : ver.info}`);
+
+      // 2. YouTube tv_embedded (--get-url only, no download)
+      const ytEmbed = await runYtDlp([
+        "--no-warnings", "--no-playlist", "--force-ipv4", "--geo-bypass",
+        "--extractor-args", "youtube:player_client=tv_embedded",
+        "-f", "bestaudio[ext=m4a]/bestaudio",
+        "--get-url", TEST_URL,
+      ], 20000);
+      results.push(`${ytEmbed.ok ? "✅" : "❌"} YouTube tv_embedded: ${ytEmbed.ok ? "URL ok" : ytEmbed.info}`);
+
+      // 3. YouTube android_vr (--get-url only)
+      const ytAndroid = await runYtDlp([
+        "--no-warnings", "--no-playlist", "--force-ipv4", "--geo-bypass",
+        "--extractor-args", "youtube:player_client=android_vr",
+        "-f", "bestaudio[ext=m4a]/bestaudio",
+        "--get-url", TEST_URL,
+      ], 20000);
+      results.push(`${ytAndroid.ok ? "✅" : "❌"} YouTube android_vr: ${ytAndroid.ok ? "URL ok" : ytAndroid.info}`);
+
+      // 4. SoundCloud via scsearch (--get-url only)
+      const sc = await runYtDlp([
+        "--no-warnings", "--no-playlist", "--force-ipv4",
+        "-f", "bestaudio",
+        "--get-url", "scsearch1:Shape of You Ed Sheeran",
+      ], 25000);
+      results.push(`${sc.ok ? "✅" : "❌"} SoundCloud scsearch: ${sc.ok ? "URL ok" : sc.info}`);
+
+      // 5. Invidious API
+      const INVIDIOUS = [
+        "https://invidious.protokolla.fi",
+        "https://inv.tux.pizza",
+        "https://invidious.io.lol",
+      ];
+      let invOk = false;
+      for (const inst of INVIDIOUS) {
+        try {
+          const data = await fetchJson(`${inst}/api/v1/videos/${TEST_VID}?local=true`, { timeout: 10000 });
+          if (data?.adaptiveFormats?.length) {
+            results.push(`✅ Invidious (${inst.replace("https://", "")}): ${data.adaptiveFormats.length} formats`);
+            invOk = true;
+            break;
+          }
+        } catch (e) {
+          // continue
+        }
+      }
+      if (!invOk) results.push("❌ Invidious: all instances failed");
+
+      // 6. cookies.txt present?
+      const botRoot = path.join(__dirname, "..");
+      const cookiesPath = [
+        path.join(botRoot, "cookies.txt"),
+        path.join(botRoot, "youtube-cookies.txt"),
+      ].find((p) => { try { return fs.existsSync(p) && fs.statSync(p).size > 100; } catch { return false; } });
+      results.push(`${cookiesPath ? "✅" : "⚠️"} cookies.txt: ${cookiesPath ? "found (" + path.basename(cookiesPath) + ")" : "not found (add for best reliability)"}`);
+
+      // 7. Network: can we reach YouTube at all?
+      try {
+        await axios.get("https://www.youtube.com/robots.txt", { timeout: 6000 });
+        results.push("✅ Network: YouTube reachable");
+      } catch (e) {
+        results.push(`❌ Network: YouTube unreachable (${e.message?.slice(0, 50)})`);
+      }
+
+      // 8. Network: SoundCloud reachable?
+      try {
+        await axios.get("https://soundcloud.com/robots.txt", { timeout: 6000 });
+        results.push("✅ Network: SoundCloud reachable");
+      } catch (e) {
+        results.push(`❌ Network: SoundCloud unreachable (${e.message?.slice(0, 50)})`);
+      }
+
+      const report = [
+        "📊 *Download Diagnostics*",
+        `🖥️ VPS: ${os.hostname()} | Node ${process.version}`,
+        "────────────────────────",
+        ...results,
+        "────────────────────────",
+        "Share this report to diagnose download failures.",
+      ].join("\n");
+
+      await m.reply(report);
     },
   },
 ];
