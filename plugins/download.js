@@ -319,9 +319,12 @@ async function ytDownloadAudio(url, searchQuery) {
 /**
  * External API fallbacks for YouTube video download.
  * Used when ALL yt-dlp player clients fail on the VPS.
- * Chain: Invidious formatStreams → cobalt instances
+ * Chain: Invidious formatStreams → cobalt instances → SaveFrom.net → yt-download.org
+ *
+ * @param {string} url           - YouTube URL
+ * @param {string} [searchQuery] - Video title (reserved for future platform-specific search)
  */
-async function ytVideoExternalFallback(url) {
+async function ytVideoExternalFallback(url, searchQuery) {
   const vid = ytVideoId(url);
   if (!vid) return null;
 
@@ -369,6 +372,45 @@ async function ytVideoExternalFallback(url) {
     } catch (e) { console.error(`[ytVideo] cobalt ${cobaltBase} error:`, e.message?.slice(0, 100)); }
   }
 
+  // ── 3. SaveFrom.net scraper ────────────────────────────────────────────────
+  // savefrom.net routes downloads through their own servers — bypasses VPS IP restrictions.
+  try {
+    console.log('[ytVideo] trying SaveFrom.net...');
+    const sfRes = await fetchJson(
+      `https://sfrom.me/api/button?url=${encodeURIComponent(url)}`,
+      { timeout: 20000 }
+    );
+    const sfUrl = sfRes?.url || sfRes?.data?.url;
+    if (sfUrl && typeof sfUrl === 'string' && sfUrl.startsWith('http')) {
+      const buf = await fetchBuffer(sfUrl, { timeout: 120000 });
+      if (buf?.length > 50000) { console.log('[ytVideo] SaveFrom.net OK'); return buf; }
+    }
+    // Sometimes returns an array of formats
+    const sfLinks = sfRes?.links || sfRes?.data?.links;
+    if (Array.isArray(sfLinks) && sfLinks.length) {
+      const mp4Link = sfLinks.find(l => l.ext === 'mp4' || /mp4/i.test(l.type || '')) || sfLinks[0];
+      const linkUrl = mp4Link?.url;
+      if (linkUrl && linkUrl.startsWith('http')) {
+        const buf = await fetchBuffer(linkUrl, { timeout: 120000 });
+        if (buf?.length > 50000) { console.log('[ytVideo] SaveFrom.net (links) OK'); return buf; }
+      }
+    }
+  } catch (e) { console.error('[ytVideo] SaveFrom.net error:', e.message?.slice(0, 100)); }
+
+  // ── 4. yt-download.org video API ─────────────────────────────────────────
+  try {
+    console.log('[ytVideo] trying yt-download.org...');
+    const data = await fetchJson(`https://yt-download.org/api/button/videos/${vid}`, { timeout: 20000 });
+    // Returns { link: "...", links: [{quality, link}] }
+    const links = data?.links || [];
+    const preferred = links.find(l => /360|480|720/.test(l.quality || '')) || links[0];
+    const dlUrl = preferred?.link || data?.link;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 120000 });
+      if (buf?.length > 50000) { console.log('[ytVideo] yt-download.org OK'); return buf; }
+    }
+  } catch (e) { console.error('[ytVideo] yt-download.org error:', e.message?.slice(0, 100)); }
+
   return null;
 }
 
@@ -376,12 +418,13 @@ async function ytVideoExternalFallback(url) {
  * Download YouTube video with a multi-client retry chain, then external fallback.
  *
  * yt-dlp player clients tried in order (tested working on server IPs, no PO Token):
+ *   0. web              — Only when cookies.txt is present (needs auth to work from VPS)
  *   1. tv_embedded      — Embedded TV client; most reliable, bypasses age restrictions
  *   2. android_vr       — Android VR client
  *   3. android_music    — YouTube Music Android client
  *   4. android_testsuite — Android test client
  *   5. android_producer — Android producer client
- * Fallback: Invidious formatStreams → cobalt instances
+ * Fallback: Invidious formatStreams → cobalt instances → SaveFrom.net → yt-download.org
  * NOTE: 'ios' excluded — it cannot access mp4 formats 22/18 on server IPs.
  *
  * Format priority:
@@ -390,9 +433,16 @@ async function ytVideoExternalFallback(url) {
  *   best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
  *   best[height<=480] — last resort any codec ≤480p
  * Adaptive DASH formats (136/137) require GVS PO Token and are excluded.
+ *
+ * @param {string} url           - YouTube URL
+ * @param {string} [searchQuery] - Video title (passed to external fallback chain)
  */
-async function ytDownloadVideo(url) {
-  const VIDEO_CLIENTS = ['tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer'];
+async function ytDownloadVideo(url, searchQuery) {
+  const hasCookies = !!findCookiesFile();
+  const VIDEO_CLIENTS = [
+    ...(hasCookies ? ['web'] : []),
+    'tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer',
+  ];
   for (const client of VIDEO_CLIENTS) {
     console.log(`[ytVideo] trying yt-dlp client: ${client}`);
     const buf = await ytDlpDownloadToBuffer(url, [
@@ -405,7 +455,7 @@ async function ytDownloadVideo(url) {
     if (buf) { console.log(`[ytVideo] ${client} succeeded`); return buf; }
   }
   console.log('[ytVideo] all yt-dlp clients failed — trying external API fallbacks');
-  return ytVideoExternalFallback(url);
+  return ytVideoExternalFallback(url, searchQuery || null);
 }
 
 /**
@@ -962,7 +1012,7 @@ const commands = [
         if (picked.views) infoLines.push(`👁️ ${picked.views} views`);
         if (infoLines.length) await m.reply(infoLines.join("\n") + "\n\n_Downloading video, please wait..._");
 
-        const videoBuffer = await ytDownloadVideo(videoUrl);
+        const videoBuffer = await ytDownloadVideo(videoUrl, picked.title || text);
 
         if (!videoBuffer || videoBuffer.length < 1000) {
           m.react("❌");
