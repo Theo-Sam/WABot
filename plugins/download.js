@@ -112,6 +112,10 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
   }
   const tmpPath = tempFile(tmpExt);
   const cookiesFile = findCookiesFile();
+
+  // Only inject the YouTube Android User-Agent for actual YouTube URLs.
+  // SoundCloud, Twitch, and other platforms reject it — causing silent download failures.
+  const isYouTubeUrl = /youtube\.com|youtu\.be/i.test(url);
   const BASE_ARGS = [
     '--no-warnings', '--no-playlist',
     '--geo-bypass',
@@ -119,9 +123,12 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
     '--fragment-retries', '3',
     '--retry-sleep', '2',
     '--force-ipv4',
-    '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+    ...(isYouTubeUrl ? ['--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip'] : []),
     ...(cookiesFile ? ['--cookies', cookiesFile] : []),
   ];
+
+  // Track any alternate path yt-dlp may have written (e.g. tmpPath.opus when ext is .m4a)
+  let altPath = null;
   try {
     await new Promise((resolve, reject) => {
       const proc = execFile(ytdlpBin, [
@@ -133,7 +140,7 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
         if (err) reject(err);
         else resolve();
       });
-      // Capture stderr so the real YouTube error is visible in logs
+      // Capture stderr so the real error is visible in logs
       let stderrBuf = '';
       proc.stderr?.on('data', (d) => { stderrBuf += d; });
       proc.on('close', (code) => {
@@ -142,17 +149,35 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
         }
       });
     });
+
+    // Primary check: exact output path
     if (fs.existsSync(tmpPath)) {
       const buf = fs.readFileSync(tmpPath);
       if (buf.length > 1000) return buf;
       console.error('[ytDlp] output file too small (%d bytes) — download likely failed silently', buf.length);
     } else {
+      // yt-dlp sometimes appends the real extension (e.g. writes foo.m4a.opus instead of foo.m4a)
+      // Scan the temp dir for any file that starts with our tmpPath basename
+      try {
+        const dir = path.dirname(tmpPath);
+        const base = path.basename(tmpPath);
+        const siblings = fs.readdirSync(dir).filter(f => f !== base && f.startsWith(base + '.'));
+        if (siblings.length) {
+          altPath = path.join(dir, siblings[0]);
+          const buf = fs.readFileSync(altPath);
+          if (buf.length > 1000) {
+            console.log(`[ytDlp] found alternate output: ${siblings[0]}`);
+            return buf;
+          }
+        }
+      } catch {}
       console.error('[ytDlp] output file missing after yt-dlp ran — check stderr above');
     }
   } catch (err) {
     console.error('[ytDlp] download error:', err.message?.slice(0, 300));
   } finally {
     try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
+    try { if (altPath && fs.existsSync(altPath)) fs.unlinkSync(altPath); } catch {}
   }
   return null;
 }
