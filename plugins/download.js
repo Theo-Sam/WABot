@@ -343,39 +343,16 @@ async function ytAudioExternalFallback(url, searchQuery) {
 }
 
 /**
- * Download YouTube audio with a full multi-client retry chain, then external API fallback.
+ * Download YouTube audio via external API fallbacks only.
  *
- * yt-dlp player clients tried in order (tested working on server IPs, no PO Token):
- *   0. web              — Only when cookies.txt is present (needs auth to work from VPS)
- *   1. tv_embedded      — Embedded TV client; most reliable, bypasses age restrictions
- *   2. android_vr       — Android VR client
- *   3. android_music    — YouTube Music Android client
- *   4. android_testsuite — Android test client
- *   5. android_producer — Android producer client
- * Fallback to external APIs: SoundCloud → Invidious proxy → cobalt → yt-download.org → loader.to
- * NOTE: 'ios' and 'mweb' are excluded — they fail on most server IPs.
+ * yt-dlp YouTube clients are skipped entirely — VPS IP is blocked by YouTube.
+ * Chain: SoundCloud (yt-dlp scsearch) → Invidious proxy → cobalt → yt-download.org → loader.to
  *
  * @param {string} url           - YouTube URL
  * @param {string} [searchQuery] - Song title/query to pass to SoundCloud fallback
  */
 async function ytDownloadAudio(url, searchQuery) {
-  const hasCookies = !!findCookiesFile();
-  const AUDIO_CLIENTS = [
-    ...(hasCookies ? ['web'] : []),
-    'tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer',
-  ];
-  for (const client of AUDIO_CLIENTS) {
-    console.log(`[ytAudio] trying yt-dlp client: ${client}`);
-    const buf = await ytDlpDownloadToBuffer(url, [
-      '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
-      '--no-part',
-      '--extractor-retries', '0',   // IP blocks fail instantly — no point retrying
-      '--fragment-retries', '2',
-      '--extractor-args', `youtube:player_client=${client}`,
-    ], 'm4a', 35000); // 35s: YouTube block returns in ~2s, real download needs ~30s max
-    if (buf) { console.log(`[ytAudio] ${client} succeeded`); return buf; }
-  }
-  console.log('[ytAudio] all yt-dlp clients failed — trying external API fallbacks');
+  console.log('[ytAudio] skipping yt-dlp YouTube clients (VPS IP blocked) — going straight to external fallbacks');
   return ytAudioExternalFallback(url, searchQuery || null);
 }
 
@@ -493,48 +470,16 @@ async function ytVideoExternalFallback(url, searchQuery) {
 }
 
 /**
- * Download YouTube video with a multi-client retry chain, then external fallback.
+ * Download YouTube video via external API fallbacks only.
  *
- * yt-dlp player clients tried in order (tested working on server IPs, no PO Token):
- *   0. web              — Only when cookies.txt is present (needs auth to work from VPS)
- *   1. tv_embedded      — Embedded TV client; most reliable, bypasses age restrictions
- *   2. android_vr       — Android VR client
- *   3. android_music    — YouTube Music Android client
- *   4. android_testsuite — Android test client
- *   5. android_producer — Android producer client
- * Fallback: Invidious formatStreams → cobalt instances → SaveFrom.net → yt-download.org
- * NOTE: 'ios' excluded — it cannot access mp4 formats 22/18 on server IPs.
- *
- * Format priority:
- *   22 — 720p progressive MP4 (pre-merged, best for WhatsApp)
- *   18 — 360p progressive MP4 (pre-merged fallback)
- *   best[ext=mp4][height<=480] — best pre-merged MP4 ≤480p
- *   best[height<=480] — last resort any codec ≤480p
- * Adaptive DASH formats (136/137) require GVS PO Token and are excluded.
+ * yt-dlp YouTube clients are skipped entirely — VPS IP is blocked by YouTube.
+ * Chain: Invidious /latest_version → Invidious JSON API → cobalt → SaveFrom.net → yt-download.org
  *
  * @param {string} url           - YouTube URL
  * @param {string} [searchQuery] - Video title (passed to external fallback chain)
  */
 async function ytDownloadVideo(url, searchQuery) {
-  const hasCookies = !!findCookiesFile();
-  const VIDEO_CLIENTS = [
-    ...(hasCookies ? ['web'] : []),
-    'tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer',
-  ];
-  for (const client of VIDEO_CLIENTS) {
-    console.log(`[ytVideo] trying yt-dlp client: ${client}`);
-    const buf = await ytDlpDownloadToBuffer(url, [
-      '-f', '22/18/best[ext=mp4][height<=480]/best[height<=480]',
-      '--merge-output-format', 'mp4',
-      '--no-part',
-      '--max-filesize', '55m',
-      '--extractor-retries', '0',   // IP blocks fail instantly — no point retrying
-      '--fragment-retries', '2',
-      '--extractor-args', `youtube:player_client=${client}`,
-    ], 'mp4', 35000); // 35s per client: block detected in ~2s, gives 33s for real download
-    if (buf) { console.log(`[ytVideo] ${client} succeeded`); return buf; }
-  }
-  console.log('[ytVideo] all yt-dlp clients failed — trying external API fallbacks');
+  console.log('[ytVideo] skipping yt-dlp YouTube clients (VPS IP blocked) — going straight to external fallbacks');
   return ytVideoExternalFallback(url, searchQuery || null);
 }
 
