@@ -78,6 +78,29 @@ async function ytSearch(query) {
 }
 
 /**
+ * Locate a YouTube cookies.txt file in the bot root directory.
+ * If found, yt-dlp uses it to authenticate — this unlocks the `web` client
+ * and bypasses most IP-based restrictions on VPS hosts.
+ * Place cookies.txt or youtube-cookies.txt in the same folder as index.js.
+ */
+function findCookiesFile() {
+  const botRoot = path.join(__dirname, '..');
+  const candidates = [
+    path.join(botRoot, 'cookies.txt'),
+    path.join(botRoot, 'youtube-cookies.txt'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).size > 100) {
+        console.log(`[ytDlp] Using cookies file: ${p}`);
+        return p;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+/**
  * Use yt-dlp to download media directly to a temp file, then read it into a buffer.
  * This avoids the signed-URL IP-restriction problem from using --get-url + axios.
  */
@@ -88,6 +111,7 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
     return null;
   }
   const tmpPath = tempFile(tmpExt);
+  const cookiesFile = findCookiesFile();
   const BASE_ARGS = [
     '--no-warnings', '--no-playlist',
     '--geo-bypass',
@@ -96,6 +120,7 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
     '--retry-sleep', '2',
     '--force-ipv4',
     '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+    ...(cookiesFile ? ['--cookies', cookiesFile] : []),
   ];
   try {
     await new Promise((resolve, reject) => {
@@ -143,11 +168,39 @@ function ytVideoId(url) {
 /**
  * External API fallbacks for YouTube audio download.
  * Used when ALL yt-dlp player clients fail (e.g. VPS IP is rate-limited by YouTube).
- * Chain: Invidious proxy → cobalt instances → yt-download.org → loader.to
+ * Chain: SoundCloud search → Invidious proxy → cobalt instances → yt-download.org → loader.to
+ *
+ * @param {string} url           - YouTube URL
+ * @param {string} [searchQuery] - Song title/query for SoundCloud search (most reliable fallback)
  */
-async function ytAudioExternalFallback(url) {
+async function ytAudioExternalFallback(url, searchQuery) {
   const vid = ytVideoId(url);
   if (!vid) return null;
+
+  // ── 0. SoundCloud (via yt-dlp scsearch) ───────────────────────────────────
+  // SoundCloud is NOT IP-restricted like YouTube. As long as yt-dlp itself works,
+  // this succeeds even on VPS IPs fully blocked by YouTube.
+  const scQuery = searchQuery || await (async () => {
+    try {
+      const oe = await fetchJson(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+        { timeout: 6000 }
+      );
+      return oe?.title || null;
+    } catch { return null; }
+  })();
+
+  if (scQuery) {
+    try {
+      console.log(`[ytAudio] trying SoundCloud: "${scQuery.slice(0, 60)}"`);
+      const buf = await ytDlpDownloadToBuffer(
+        `scsearch1:${scQuery}`,
+        ['-f', 'bestaudio', '--no-part', '--no-warnings'],
+        'm4a'
+      );
+      if (buf?.length > 10000) { console.log('[ytAudio] SoundCloud OK'); return buf; }
+    } catch (e) { console.error('[ytAudio] SoundCloud error:', e.message?.slice(0, 100)); }
+  }
 
   // ── 1. Invidious proxy API ─────────────────────────────────────────────────
   // Invidious instances act as YouTube proxies. ?local=true forces URLs to be
@@ -232,16 +285,24 @@ async function ytAudioExternalFallback(url) {
  * Download YouTube audio with a full multi-client retry chain, then external API fallback.
  *
  * yt-dlp player clients tried in order (tested working on server IPs, no PO Token):
+ *   0. web              — Only when cookies.txt is present (needs auth to work from VPS)
  *   1. tv_embedded      — Embedded TV client; most reliable, bypasses age restrictions
  *   2. android_vr       — Android VR client
  *   3. android_music    — YouTube Music Android client
  *   4. android_testsuite — Android test client
  *   5. android_producer — Android producer client
- * Fallback to external APIs: Invidious proxy → cobalt → yt-download.org → loader.to
+ * Fallback to external APIs: SoundCloud → Invidious proxy → cobalt → yt-download.org → loader.to
  * NOTE: 'ios' and 'mweb' are excluded — they fail on most server IPs.
+ *
+ * @param {string} url           - YouTube URL
+ * @param {string} [searchQuery] - Song title/query to pass to SoundCloud fallback
  */
-async function ytDownloadAudio(url) {
-  const AUDIO_CLIENTS = ['tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer'];
+async function ytDownloadAudio(url, searchQuery) {
+  const hasCookies = !!findCookiesFile();
+  const AUDIO_CLIENTS = [
+    ...(hasCookies ? ['web'] : []),
+    'tv_embedded', 'android_vr', 'android_music', 'android_testsuite', 'android_producer',
+  ];
   for (const client of AUDIO_CLIENTS) {
     console.log(`[ytAudio] trying yt-dlp client: ${client}`);
     const buf = await ytDlpDownloadToBuffer(url, [
@@ -252,7 +313,7 @@ async function ytDownloadAudio(url) {
     if (buf) { console.log(`[ytAudio] ${client} succeeded`); return buf; }
   }
   console.log('[ytAudio] all yt-dlp clients failed — trying external API fallbacks');
-  return ytAudioExternalFallback(url);
+  return ytAudioExternalFallback(url, searchQuery || null);
 }
 
 /**
@@ -829,7 +890,7 @@ const commands = [
         if (picked.duration) infoLines.push(`⏱️ ${picked.duration}`);
         if (infoLines.length) await m.reply(infoLines.join("\n") + "\n\n_Downloading audio, please wait..._");
 
-        const audioBuffer = await ytDownloadAudio(videoUrl);
+        const audioBuffer = await ytDownloadAudio(videoUrl, picked.title || text);
 
         if (!audioBuffer || audioBuffer.length < 1000) {
           m.react("❌");
@@ -1120,7 +1181,7 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
             }
             if (searchQuery) {
               const results = await play.search(searchQuery, { limit: 1, source: { youtube: "video" } }).catch(() => []);
-              if (results.length) audioBuffer = await ytDownloadAudio(results[0].url);
+              if (results.length) audioBuffer = await ytDownloadAudio(results[0].url, searchQuery);
             }
           }
         } catch {}
