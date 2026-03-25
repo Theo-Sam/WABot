@@ -104,7 +104,7 @@ function findCookiesFile() {
  * Use yt-dlp to download media directly to a temp file, then read it into a buffer.
  * This avoids the signed-URL IP-restriction problem from using --get-url + axios.
  */
-async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
+async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt, timeoutMs = 120000) {
   const ytdlpBin = findYtDlpBin();
   if (!ytdlpBin) {
     console.error('[ytDlp] yt-dlp binary not found — checked ./bin/yt-dlp, /usr/local/bin/yt-dlp, /usr/bin/yt-dlp');
@@ -136,7 +136,7 @@ async function ytDlpDownloadToBuffer(url, extraArgs, tmpExt) {
         ...extraArgs,
         '-o', tmpPath,
         url,
-      ], { timeout: 120000 }, (err) => {
+      ], { timeout: timeoutMs }, (err) => {
         if (err) reject(err);
         else resolve();
       });
@@ -255,11 +255,12 @@ async function ytAudioExternalFallback(url, searchQuery) {
   // ── 1a. Invidious /latest_version proxy (simpler than JSON API, often works when API fails) ──
   // This endpoint streams the raw YouTube content through the Invidious server.
   // itag 140 = m4a audio ~128kbps (pre-built, no merge needed).
+  // Timeout: 20s — if an instance is unreachable it should fail fast, not hang for 2 minutes.
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       const proxyUrl = `${instance}/latest_version?id=${vid}&itag=140&local=true`;
       console.log(`[ytAudio] trying Invidious /latest_version: ${instance}`);
-      const buf = await fetchBuffer(proxyUrl, { timeout: 60000 });
+      const buf = await fetchBuffer(proxyUrl, { timeout: 20000 });
       if (buf?.length > 10000) { console.log(`[ytAudio] Invidious /latest_version ${instance} OK`); return buf; }
     } catch (e) { console.error(`[ytAudio] Invidious /latest_version ${instance} error:`, e.message?.slice(0, 80)); }
   }
@@ -268,14 +269,14 @@ async function ytAudioExternalFallback(url, searchQuery) {
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       console.log(`[ytAudio] trying Invidious API: ${instance}`);
-      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 12000 });
+      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 10000 });
       const audioFormats = (data?.adaptiveFormats || [])
         .filter(f => f.type?.startsWith('audio/') && f.url)
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
       if (audioFormats.length) {
         const audioUrl = audioFormats[0].url;
         console.log('[ytAudio] Invidious API got audio URL, downloading...');
-        const buf = await fetchBuffer(audioUrl, { timeout: 90000 });
+        const buf = await fetchBuffer(audioUrl, { timeout: 25000 });
         if (buf?.length > 10000) { console.log(`[ytAudio] Invidious API ${instance} OK`); return buf; }
       }
     } catch (e) { console.error(`[ytAudio] Invidious API ${instance} error:`, e.message?.slice(0, 100)); }
@@ -368,8 +369,10 @@ async function ytDownloadAudio(url, searchQuery) {
     const buf = await ytDlpDownloadToBuffer(url, [
       '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
       '--no-part',
+      '--extractor-retries', '0',   // IP blocks fail instantly — no point retrying
+      '--fragment-retries', '2',
       '--extractor-args', `youtube:player_client=${client}`,
-    ], 'm4a');
+    ], 'm4a', 35000); // 35s: YouTube block returns in ~2s, real download needs ~30s max
     if (buf) { console.log(`[ytAudio] ${client} succeeded`); return buf; }
   }
   console.log('[ytAudio] all yt-dlp clients failed — trying external API fallbacks');
@@ -391,12 +394,13 @@ async function ytVideoExternalFallback(url, searchQuery) {
   // ── 1a. Invidious /latest_version proxy (bypass JSON API — streams raw content through server) ─
   // itag 22 = 720p progressive MP4 (video+audio, pre-merged)
   // itag 18 = 360p progressive MP4 (video+audio, pre-merged, smaller)
+  // Timeout: 25s — unreachable instances should bail fast, not hang for 2 min each.
   for (const itag of [22, 18]) {
     for (const instance of INVIDIOUS_INSTANCES) {
       try {
         const proxyUrl = `${instance}/latest_version?id=${vid}&itag=${itag}&local=true`;
         console.log(`[ytVideo] trying Invidious /latest_version itag=${itag}: ${instance}`);
-        const buf = await fetchBuffer(proxyUrl, { timeout: 120000 });
+        const buf = await fetchBuffer(proxyUrl, { timeout: 25000 });
         if (buf?.length > 50000) { console.log(`[ytVideo] Invidious /latest_version ${instance} itag=${itag} OK`); return buf; }
       } catch (e) { console.error(`[ytVideo] Invidious /latest_version ${instance} error:`, e.message?.slice(0, 80)); }
     }
@@ -408,7 +412,7 @@ async function ytVideoExternalFallback(url, searchQuery) {
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       console.log(`[ytVideo] trying Invidious formatStreams API: ${instance}`);
-      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 12000 });
+      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 10000 });
 
       // formatStreams: pre-merged progressive formats (360p, 720p)
       const streams = (data?.formatStreams || []).filter(f => f.url && f.container === 'mp4');
@@ -422,7 +426,7 @@ async function ytVideoExternalFallback(url, searchQuery) {
       if (sorted.length) {
         const chosen = sorted[0];
         console.log(`[ytVideo] Invidious API ${instance} — downloading ${chosen.qualityLabel}...`);
-        const buf = await fetchBuffer(chosen.url, { timeout: 120000 });
+        const buf = await fetchBuffer(chosen.url, { timeout: 30000 });
         if (buf?.length > 50000) { console.log(`[ytVideo] Invidious API ${instance} OK`); return buf; }
       }
     } catch (e) { console.error(`[ytVideo] Invidious API ${instance} error:`, e.message?.slice(0, 100)); }
@@ -524,8 +528,10 @@ async function ytDownloadVideo(url, searchQuery) {
       '--merge-output-format', 'mp4',
       '--no-part',
       '--max-filesize', '55m',
+      '--extractor-retries', '0',   // IP blocks fail instantly — no point retrying
+      '--fragment-retries', '2',
       '--extractor-args', `youtube:player_client=${client}`,
-    ], 'mp4');
+    ], 'mp4', 35000); // 35s per client: block detected in ~2s, gives 33s for real download
     if (buf) { console.log(`[ytVideo] ${client} succeeded`); return buf; }
   }
   console.log('[ytVideo] all yt-dlp clients failed — trying external API fallbacks');
