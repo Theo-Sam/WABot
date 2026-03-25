@@ -252,60 +252,66 @@ async function ytAudioExternalFallback(url, searchQuery) {
     } catch (e) { console.error('[ytAudio] SoundCloud error:', e.message?.slice(0, 100)); }
   }
 
-  // ── 1. Invidious — ALL instances fired in PARALLEL ────────────────────────
-  // /latest_version proxies the raw stream through Invidious servers (no YouTube IP needed).
-  // itag 140 = m4a audio. Promise.any = first success wins; all fail together if none work.
-  console.log('[ytAudio] trying Invidious /latest_version in parallel...');
-  const invAudioBuf = await Promise.any(
-    INVIDIOUS_INSTANCES.map(async (instance) => {
-      const buf = await fetchBuffer(`${instance}/latest_version?id=${vid}&itag=140&local=true`, { timeout: 8000 });
-      if (buf?.length > 10000) return buf;
-      throw new Error('too small');
-    })
-  ).catch(() => null);
-  if (invAudioBuf) { console.log('[ytAudio] Invidious parallel OK'); return invAudioBuf; }
+  // ── 1a. Invidious /latest_version proxy (simpler than JSON API, often works when API fails) ──
+  // This endpoint streams the raw YouTube content through the Invidious server.
+  // itag 140 = m4a audio ~128kbps (pre-built, no merge needed).
+  // Timeout: 20s — if an instance is unreachable it should fail fast, not hang for 2 minutes.
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const proxyUrl = `${instance}/latest_version?id=${vid}&itag=140&local=true`;
+      console.log(`[ytAudio] trying Invidious /latest_version: ${instance}`);
+      const buf = await fetchBuffer(proxyUrl, { timeout: 20000 });
+      if (buf?.length > 10000) { console.log(`[ytAudio] Invidious /latest_version ${instance} OK`); return buf; }
+    } catch (e) { console.error(`[ytAudio] Invidious /latest_version ${instance} error:`, e.message?.slice(0, 80)); }
+  }
 
-  // Invidious JSON API — all instances in parallel (fallback if /latest_version unsupported)
-  console.log('[ytAudio] trying Invidious JSON API in parallel...');
-  const invApiBuf = await Promise.any(
-    INVIDIOUS_INSTANCES.map(async (instance) => {
-      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 8000 });
+  // ── 1b. Invidious JSON API (full format list) ──────────────────────────────
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[ytAudio] trying Invidious API: ${instance}`);
+      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 10000 });
       const audioFormats = (data?.adaptiveFormats || [])
         .filter(f => f.type?.startsWith('audio/') && f.url)
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if (!audioFormats.length) throw new Error('no audio formats');
-      const buf = await fetchBuffer(audioFormats[0].url, { timeout: 12000 });
-      if (buf?.length > 10000) return buf;
-      throw new Error('too small');
-    })
-  ).catch(() => null);
-  if (invApiBuf) { console.log('[ytAudio] Invidious API parallel OK'); return invApiBuf; }
+      if (audioFormats.length) {
+        const audioUrl = audioFormats[0].url;
+        console.log('[ytAudio] Invidious API got audio URL, downloading...');
+        const buf = await fetchBuffer(audioUrl, { timeout: 25000 });
+        if (buf?.length > 10000) { console.log(`[ytAudio] Invidious API ${instance} OK`); return buf; }
+      }
+    } catch (e) { console.error(`[ytAudio] Invidious API ${instance} error:`, e.message?.slice(0, 100)); }
+  }
 
-  // ── 2. cobalt.tools — ALL instances in PARALLEL ───────────────────────────
-  console.log('[ytAudio] trying cobalt in parallel...');
-  const cobaltAudioBuf = await Promise.any(
-    ['https://co.wuk.sh', 'https://cobalt.tools', 'https://api.cobalt.tools'].map(async (base) => {
+  // ── 2. cobalt.tools (public instance — no auth, audio mode) ───────────────
+  // Some cobalt self-hosted instances don't require JWT. Try a few known ones.
+  const cobaltInstances = [
+    'https://co.wuk.sh',
+    'https://cobalt.tools',
+    'https://api.cobalt.tools',
+  ];
+  for (const cobaltBase of cobaltInstances) {
+    try {
+      console.log(`[ytAudio] trying cobalt: ${cobaltBase}`);
       const d = await postJson(
-        `${base}/api/json`,
+        `${cobaltBase}/api/json`,
         { url, isAudioOnly: true, aFormat: 'mp3' },
-        { timeout: 8000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+        { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
       );
       const dlUrl = d?.url;
-      if (!dlUrl || !['redirect', 'stream', 'tunnel'].includes(d?.status)) throw new Error('no url');
-      const buf = await fetchBuffer(dlUrl, { timeout: 15000 });
-      if (buf?.length > 10000) return buf;
-      throw new Error('too small');
-    })
-  ).catch(() => null);
-  if (cobaltAudioBuf) { console.log('[ytAudio] cobalt parallel OK'); return cobaltAudioBuf; }
+      if (dlUrl && (d?.status === 'redirect' || d?.status === 'stream' || d?.status === 'tunnel')) {
+        const buf = await fetchBuffer(dlUrl, { timeout: 90000 });
+        if (buf?.length > 10000) { console.log(`[ytAudio] cobalt ${cobaltBase} OK`); return buf; }
+      }
+    } catch (e) { console.error(`[ytAudio] cobalt ${cobaltBase} error:`, e.message?.slice(0, 100)); }
+  }
 
   // ── 3. yt-download.org public API ─────────────────────────────────────────
   try {
     console.log('[ytAudio] trying yt-download.org...');
-    const data = await fetchJson(`https://yt-download.org/api/button/mp3/${vid}`, { timeout: 8000 });
+    const data = await fetchJson(`https://yt-download.org/api/button/mp3/${vid}`, { timeout: 20000 });
     const link = data?.link || data?.url || data?.dl_url;
     if (link) {
-      const buf = await fetchBuffer(link, { timeout: 15000 });
+      const buf = await fetchBuffer(link, { timeout: 90000 });
       if (buf?.length > 10000) { console.log('[ytAudio] yt-download.org OK'); return buf; }
     }
   } catch (e) { console.error('[ytAudio] yt-download.org error:', e.message?.slice(0, 100)); }
@@ -385,87 +391,103 @@ async function ytVideoExternalFallback(url, searchQuery) {
   const vid = ytVideoId(url);
   if (!vid) return null;
 
-  // ── 1. Invidious /latest_version — ALL instances × both itags in PARALLEL ──
-  // itag 22 = 720p MP4, itag 18 = 360p MP4. Promise.any = first success wins.
-  // All instances + both itags run simultaneously — max wait = 8s (not 12×8=96s).
-  console.log('[ytVideo] trying Invidious /latest_version in parallel...');
-  const invVideoBuf = await Promise.any(
-    INVIDIOUS_INSTANCES.flatMap(instance =>
-      [22, 18].map(async (itag) => {
-        const buf = await fetchBuffer(`${instance}/latest_version?id=${vid}&itag=${itag}&local=true`, { timeout: 8000 });
-        if (buf?.length > 50000) return buf;
-        throw new Error('too small');
-      })
-    )
-  ).catch(() => null);
-  if (invVideoBuf) { console.log('[ytVideo] Invidious parallel OK'); return invVideoBuf; }
+  // ── 1a. Invidious /latest_version proxy (bypass JSON API — streams raw content through server) ─
+  // itag 22 = 720p progressive MP4 (video+audio, pre-merged)
+  // itag 18 = 360p progressive MP4 (video+audio, pre-merged, smaller)
+  // Timeout: 25s — unreachable instances should bail fast, not hang for 2 min each.
+  for (const itag of [22, 18]) {
+    for (const instance of INVIDIOUS_INSTANCES) {
+      try {
+        const proxyUrl = `${instance}/latest_version?id=${vid}&itag=${itag}&local=true`;
+        console.log(`[ytVideo] trying Invidious /latest_version itag=${itag}: ${instance}`);
+        const buf = await fetchBuffer(proxyUrl, { timeout: 25000 });
+        if (buf?.length > 50000) { console.log(`[ytVideo] Invidious /latest_version ${instance} itag=${itag} OK`); return buf; }
+      } catch (e) { console.error(`[ytVideo] Invidious /latest_version ${instance} error:`, e.message?.slice(0, 80)); }
+    }
+  }
 
-  // Invidious JSON API — all instances in PARALLEL (formatStreams = pre-muxed mp4)
-  console.log('[ytVideo] trying Invidious JSON API in parallel...');
-  const invApiVideoBuf = await Promise.any(
-    INVIDIOUS_INSTANCES.map(async (instance) => {
-      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 8000 });
+  // ── 1b. Invidious JSON API (full formatStreams list) ──────────────────────
+  // formatStreams contains pre-muxed video+audio — no DASH, no ffmpeg merge needed.
+  // We prefer 720p → 480p → 360p to stay within the 60 MB WhatsApp limit.
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[ytVideo] trying Invidious formatStreams API: ${instance}`);
+      const data = await fetchJson(`${instance}/api/v1/videos/${vid}?local=true`, { timeout: 10000 });
+
+      // formatStreams: pre-merged progressive formats (360p, 720p)
       const streams = (data?.formatStreams || []).filter(f => f.url && f.container === 'mp4');
-      if (!streams.length) throw new Error('no mp4 streams');
       const preferred = ['hd720', '720p60', '720p', '480p', '360p'];
       const sorted = [...streams].sort((a, b) => {
-        const ai = preferred.indexOf(a.qualityLabel), bi = preferred.indexOf(b.qualityLabel);
+        const ai = preferred.indexOf(a.qualityLabel);
+        const bi = preferred.indexOf(b.qualityLabel);
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
-      const buf = await fetchBuffer(sorted[0].url, { timeout: 15000 });
-      if (buf?.length > 50000) return buf;
-      throw new Error('too small');
-    })
-  ).catch(() => null);
-  if (invApiVideoBuf) { console.log('[ytVideo] Invidious API parallel OK'); return invApiVideoBuf; }
 
-  // ── 2. cobalt.tools — ALL instances in PARALLEL ───────────────────────────
-  console.log('[ytVideo] trying cobalt in parallel...');
-  const cobaltVideoBuf = await Promise.any(
-    ['https://co.wuk.sh', 'https://cobalt.tools', 'https://api.cobalt.tools'].map(async (base) => {
+      if (sorted.length) {
+        const chosen = sorted[0];
+        console.log(`[ytVideo] Invidious API ${instance} — downloading ${chosen.qualityLabel}...`);
+        const buf = await fetchBuffer(chosen.url, { timeout: 30000 });
+        if (buf?.length > 50000) { console.log(`[ytVideo] Invidious API ${instance} OK`); return buf; }
+      }
+    } catch (e) { console.error(`[ytVideo] Invidious API ${instance} error:`, e.message?.slice(0, 100)); }
+  }
+
+  // ── 2. cobalt.tools instances ─────────────────────────────────────────────
+  const cobaltInstances = ['https://co.wuk.sh', 'https://cobalt.tools', 'https://api.cobalt.tools'];
+  for (const cobaltBase of cobaltInstances) {
+    try {
+      console.log(`[ytVideo] trying cobalt: ${cobaltBase}`);
       const d = await postJson(
-        `${base}/api/json`,
+        `${cobaltBase}/api/json`,
         { url, vQuality: '720', isAudioMuted: false },
-        { timeout: 8000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
+        { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json' } }
       );
       const dlUrl = d?.url;
-      if (!dlUrl || !['redirect', 'stream', 'tunnel'].includes(d?.status)) throw new Error('no url');
-      const buf = await fetchBuffer(dlUrl, { timeout: 20000 });
-      if (buf?.length > 50000) return buf;
-      throw new Error('too small');
-    })
-  ).catch(() => null);
-  if (cobaltVideoBuf) { console.log('[ytVideo] cobalt parallel OK'); return cobaltVideoBuf; }
-
-  // ── 3. SaveFrom.net + yt-download.org — PARALLEL ─────────────────────────
-  console.log('[ytVideo] trying SaveFrom.net + yt-download.org in parallel...');
-  const lastResortBuf = await Promise.any([
-    // SaveFrom
-    (async () => {
-      const sfRes = await fetchJson(`https://sfrom.me/api/button?url=${encodeURIComponent(url)}`, { timeout: 8000 });
-      const candidates = [
-        sfRes?.url, sfRes?.data?.url,
-        ...(sfRes?.links || sfRes?.data?.links || []).map(l => l?.url),
-      ].filter(u => typeof u === 'string' && u.startsWith('http'));
-      for (const u of candidates) {
-        const buf = await fetchBuffer(u, { timeout: 20000 });
-        if (buf?.length > 50000) return buf;
+      if (dlUrl && (d?.status === 'redirect' || d?.status === 'stream' || d?.status === 'tunnel')) {
+        const buf = await fetchBuffer(dlUrl, { timeout: 120000 });
+        if (buf?.length > 50000) { console.log(`[ytVideo] cobalt ${cobaltBase} OK`); return buf; }
       }
-      throw new Error('no usable url');
-    })(),
-    // yt-download.org
-    (async () => {
-      const data = await fetchJson(`https://yt-download.org/api/button/videos/${vid}`, { timeout: 8000 });
-      const links = data?.links || [];
-      const preferred = links.find(l => /360|480|720/.test(l.quality || '')) || links[0];
-      const dlUrl = preferred?.link || data?.link;
-      if (!dlUrl) throw new Error('no link');
-      const buf = await fetchBuffer(dlUrl, { timeout: 20000 });
-      if (buf?.length > 50000) return buf;
-      throw new Error('too small');
-    })(),
-  ]).catch(() => null);
-  if (lastResortBuf) { console.log('[ytVideo] last-resort scraper OK'); return lastResortBuf; }
+    } catch (e) { console.error(`[ytVideo] cobalt ${cobaltBase} error:`, e.message?.slice(0, 100)); }
+  }
+
+  // ── 3. SaveFrom.net scraper ────────────────────────────────────────────────
+  // savefrom.net routes downloads through their own servers — bypasses VPS IP restrictions.
+  try {
+    console.log('[ytVideo] trying SaveFrom.net...');
+    const sfRes = await fetchJson(
+      `https://sfrom.me/api/button?url=${encodeURIComponent(url)}`,
+      { timeout: 20000 }
+    );
+    const sfUrl = sfRes?.url || sfRes?.data?.url;
+    if (sfUrl && typeof sfUrl === 'string' && sfUrl.startsWith('http')) {
+      const buf = await fetchBuffer(sfUrl, { timeout: 120000 });
+      if (buf?.length > 50000) { console.log('[ytVideo] SaveFrom.net OK'); return buf; }
+    }
+    // Sometimes returns an array of formats
+    const sfLinks = sfRes?.links || sfRes?.data?.links;
+    if (Array.isArray(sfLinks) && sfLinks.length) {
+      const mp4Link = sfLinks.find(l => l.ext === 'mp4' || /mp4/i.test(l.type || '')) || sfLinks[0];
+      const linkUrl = mp4Link?.url;
+      if (linkUrl && linkUrl.startsWith('http')) {
+        const buf = await fetchBuffer(linkUrl, { timeout: 120000 });
+        if (buf?.length > 50000) { console.log('[ytVideo] SaveFrom.net (links) OK'); return buf; }
+      }
+    }
+  } catch (e) { console.error('[ytVideo] SaveFrom.net error:', e.message?.slice(0, 100)); }
+
+  // ── 4. yt-download.org video API ─────────────────────────────────────────
+  try {
+    console.log('[ytVideo] trying yt-download.org...');
+    const data = await fetchJson(`https://yt-download.org/api/button/videos/${vid}`, { timeout: 20000 });
+    // Returns { link: "...", links: [{quality, link}] }
+    const links = data?.links || [];
+    const preferred = links.find(l => /360|480|720/.test(l.quality || '')) || links[0];
+    const dlUrl = preferred?.link || data?.link;
+    if (dlUrl) {
+      const buf = await fetchBuffer(dlUrl, { timeout: 120000 });
+      if (buf?.length > 50000) { console.log('[ytVideo] yt-download.org OK'); return buf; }
+    }
+  } catch (e) { console.error('[ytVideo] yt-download.org error:', e.message?.slice(0, 100)); }
 
   return null;
 }
