@@ -21,7 +21,16 @@ async function pollinate(prompt, persona = "openai") {
   if (systemMsg) messages.push({ role: "system", content: systemMsg });
   messages.push({
     role: "system",
-    content: "Reply in clean WhatsApp chat style. Use short paragraphs. Avoid markdown tables and avoid decorative formatting.",
+    content: [
+      "You are a WhatsApp chat assistant. Follow these rules strictly:",
+      "1. Keep answers SHORT and direct — 1 to 4 sentences for simple questions. Never write essays.",
+      "2. NEVER use numbered paragraphs, bullet points, or headings like 'Paragraph 1' or '1.' or '•'.",
+      "3. NEVER mention the user's name, phone number, or address them as 'user'.",
+      "4. NEVER start with 'Certainly!', 'Sure!', 'Of course!', 'Great question!' or similar filler phrases.",
+      "5. NEVER use markdown formatting like **bold**, *italic*, or backticks.",
+      "6. Write like a knowledgeable friend texting — casual, direct, conversational.",
+      "7. If asked a factual question, give the fact. Don't explain what you're about to do.",
+    ].join(" "),
   });
   messages.push({ role: "user", content: prompt });
 
@@ -52,13 +61,32 @@ async function pollinate(prompt, persona = "openai") {
     return false;
   }
 
+  // ── Tier 0: pollinations.ai — very fast, no key needed ───────────────────────
+  try {
+    const res = await axios.post("https://text.pollinations.ai/openai", {
+      model: "openai",
+      messages,
+      max_tokens: 300,
+      temperature: 0.7,
+    }, {
+      timeout: 15000,
+      headers: { "Content-Type": "application/json" },
+      validateStatus: s => s < 500,
+    });
+    const raw = res.data?.choices?.[0]?.message?.content?.trim() || res.data?.trim?.();
+    if (raw && raw.length >= 5) {
+      return normalizeAiText(raw, { keepLightFormatting: true });
+    }
+  } catch {}
+
   // ── Tier 1: api.airforce — gemini-2.0-flash (best free quality, no key) ──────
   try {
     const res = await axios.post("https://api.airforce/v1/chat/completions", {
       model: "gemini-2.0-flash",
       messages,
+      max_tokens: 300,
     }, {
-      timeout: 35000,
+      timeout: 20000,
       headers: { "Content-Type": "application/json" },
       validateStatus: s => s < 500,
     });
@@ -73,12 +101,13 @@ async function pollinate(prompt, persona = "openai") {
   const airforceFallbacks = ["llama-4-scout", "gpt-4o-mini", "deepseek-v3-0324"];
   for (const model of airforceFallbacks) {
     try {
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 500));
       const res = await axios.post("https://api.airforce/v1/chat/completions", {
         model,
         messages,
+        max_tokens: 300,
       }, {
-        timeout: 35000,
+        timeout: 20000,
         headers: { "Content-Type": "application/json" },
         validateStatus: s => s < 500,
       });
@@ -371,15 +400,39 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
       m.react("🌐");
       try {
         let translated = "";
+
+        // 1. Google Translate unofficial free endpoint — most reliable, supports auto-detect
         try {
-          const data = await fetchJson(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=auto|${lang}`);
-          if (data?.responseData?.translatedText) translated = data.responseData.translatedText;
+          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(lang)}&dt=t&q=${encodeURIComponent(query)}`;
+          const data = await fetchJson(url, { timeout: 10000 });
+          // Response: [ [ ["translated", "original", ...], ... ], ..., "detected_lang" ]
+          if (Array.isArray(data) && Array.isArray(data[0])) {
+            translated = data[0].map(seg => (Array.isArray(seg) ? seg[0] : "")).filter(Boolean).join("").trim();
+          }
         } catch {}
+
+        // 2. MyMemory fallback — works with explicit language pairs
         if (!translated) {
-          translated = await pollinate(`Translate the following text to ${lang}. Only output the translation, nothing else:\n\n${query}`, "openai").catch(() => "");
+          try {
+            const data = await fetchJson(
+              `https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=en|${lang}`,
+              { timeout: 10000 }
+            );
+            const result = data?.responseData?.translatedText;
+            if (result && !/INVALID LANGUAGE PAIR/i.test(result)) translated = result.trim();
+          } catch {}
         }
+
+        // 3. AI fallback — only output the translation, nothing else
+        if (!translated) {
+          translated = await pollinate(
+            `Translate the following text to the language with code "${lang}". Output ONLY the translated text with no explanation:\n\n${query}`,
+            "openai"
+          ).catch(() => "");
+        }
+
         if (!translated) return m.apiErrorReply("Translation");
-        await m.reply(`🌐 *Translation* (→ ${lang})\n\n${normalizeAiText(translated, { keepLightFormatting: true })}`);
+        await m.reply(`🌐 *Translation* (→ ${lang})\n\n${translated.trim()}`);
         m.react("✅");
       } catch {
         m.react("❌");
