@@ -31,93 +31,55 @@ function findFfmpeg() {
   return "ffmpeg";
 }
 
-function createExif(packName, authorName) {
+/**
+ * Build a TIFF-format EXIF buffer containing WhatsApp sticker pack metadata.
+ * Tag 0x5741 ("WA") holds the JSON payload — this is the format WhatsApp reads.
+ */
+function buildStickerExif(packName, authorName) {
   const json = JSON.stringify({
     "sticker-pack-id": "com.desamtech.bot",
     "sticker-pack-name": packName,
     "sticker-pack-publisher": authorName,
     emojis: ["🤖"],
   });
-
-  return Buffer.concat([
-    Buffer.from([0x49, 0x49, 0x2a, 0x00]),
-    Buffer.from([0x08, 0x00, 0x00, 0x00]),
-    Buffer.from([0x01, 0x00]),
-    Buffer.from([0x41, 0x57]),
-    Buffer.from([0x07, 0x00]),
-    Buffer.from(new Uint32Array([json.length]).buffer),
-    Buffer.from([0x1a, 0x00, 0x00, 0x00]),
-    Buffer.from([0x00, 0x00, 0x00, 0x00]),
-    Buffer.from(json, "utf-8"),
-  ]);
+  const jsonBuf = Buffer.from(json, "utf-8");
+  // TIFF little-endian header + single IFD entry for tag 0x5741
+  // IFD layout: count(2) + [tag(2)+type(2)+count(4)+valueOffset(4)] + nextIFD(4)
+  // Value starts at offset 26 (8 header + 2 count + 12 entry + 4 nextIFD)
+  const VALUE_OFFSET = 26;
+  const exif = Buffer.alloc(VALUE_OFFSET);
+  exif.write("II", 0);                          // little-endian marker
+  exif.writeUInt16LE(0x002a, 2);                // TIFF magic
+  exif.writeUInt32LE(8, 4);                     // IFD offset = 8
+  exif.writeUInt16LE(1, 8);                     // 1 IFD entry
+  exif.writeUInt16LE(0x5741, 10);               // tag = WA
+  exif.writeUInt16LE(7, 12);                    // type = UNDEFINED
+  exif.writeUInt32LE(jsonBuf.length, 14);       // count = json byte length
+  exif.writeUInt32LE(VALUE_OFFSET, 18);         // value offset
+  exif.writeUInt32LE(0, 22);                    // next IFD = 0 (end)
+  return Buffer.concat([exif, jsonBuf]);
 }
 
-function addExifToWebp(webpBuffer, exifData) {
-  if (!webpBuffer || webpBuffer.slice(0, 4).toString() !== "RIFF") {
+/**
+ * Inject EXIF metadata into a WebP buffer using node-webpmux.
+ * node-webpmux correctly handles VP8X extension creation and chunk ordering.
+ */
+async function addExifToWebp(webpBuffer, exifData) {
+  try {
+    const webpmux = require("node-webpmux");
+    const img = new webpmux.Image();
+    await img.load(webpBuffer);
+    // node-webpmux requires an "extended" WebP to hold EXIF; convert if needed
+    if (img.type !== webpmux.TYPE_EXTENDED) {
+      img._convertToExtended();
+    }
+    img.exif = exifData;
+    return await img.save(null);
+  } catch (err) {
+    console.error("[STICKER] node-webpmux EXIF inject failed:", err.message?.slice(0, 100));
+    // Fall back to raw buffer without EXIF rather than crashing
     return webpBuffer;
   }
-
-  const chunks = [];
-  let offset = 12; // skip RIFF(4) + size(4) + WEBP(4)
-  let hasVP8X = false;
-
-  while (offset + 8 <= webpBuffer.length) {
-    const chunkId = webpBuffer.slice(offset, offset + 4).toString();
-    const chunkSize = webpBuffer.readUInt32LE(offset + 4);
-    // WebP chunks are padded to even size but the stored size is the actual size
-    const paddedSize = chunkSize + (chunkSize % 2);
-    const chunkEnd = offset + 8 + paddedSize;
-
-    if (chunkId === "VP8X") {
-      hasVP8X = true;
-      // Copy the VP8X chunk and set the EXIF metadata flag (bit 2 = 0x04)
-      // VP8X chunk data layout: flags(1) + reserved(3) + canvasW-1(3) + canvasH-1(3)
-      // The flags byte is at position 8 (right after the 8-byte RIFF chunk header)
-      const vp8xCopy = Buffer.from(webpBuffer.slice(offset, chunkEnd));
-      vp8xCopy[8] = vp8xCopy[8] | 0x04; // set EXIF present flag
-      chunks.push(vp8xCopy);
-    } else if (chunkId !== "EXIF") {
-      chunks.push(webpBuffer.slice(offset, chunkEnd));
-    }
-
-    offset = chunkEnd;
-  }
-
-  // If no VP8X chunk exists (plain VP8/VP8L), we must create one before adding EXIF.
-  // Sharp with transparent background always emits VP8X, but handle the fallback anyway.
-  if (!hasVP8X) {
-    // Read canvas dimensions from VP8 bitstream header if possible
-    let canvasW = 0;
-    let canvasH = 0;
-    const firstChunkId = webpBuffer.slice(12, 16).toString();
-    if (firstChunkId === "VP8 " && webpBuffer.length >= 34) {
-      canvasW = (webpBuffer.readUInt16LE(26) & 0x3fff);
-      canvasH = (webpBuffer.readUInt16LE(28) & 0x3fff);
-    }
-    const vp8xData = Buffer.alloc(10, 0);
-    vp8xData[0] = 0x04; // EXIF flag
-    vp8xData.writeUIntLE(Math.max(0, canvasW - 1), 4, 3);
-    vp8xData.writeUIntLE(Math.max(0, canvasH - 1), 7, 3);
-    const vp8xSizeBuf = Buffer.allocUnsafe(4);
-    vp8xSizeBuf.writeUInt32LE(10, 0);
-    const vp8xChunk = Buffer.concat([Buffer.from("VP8X"), vp8xSizeBuf, vp8xData]);
-    // VP8X must be first — prepend it before all other chunks
-    chunks.unshift(vp8xChunk);
-  }
-
-  // Build EXIF chunk (pad to even size)
-  const exifPayload = exifData.length % 2
-    ? Buffer.concat([exifData, Buffer.from([0])])
-    : exifData;
-  const exifSizeBuf = Buffer.allocUnsafe(4);
-  exifSizeBuf.writeUInt32LE(exifData.length, 0);
-  const exifChunk = Buffer.concat([Buffer.from("EXIF"), exifSizeBuf, exifPayload]);
-  chunks.push(exifChunk);
-
-  const body = Buffer.concat(chunks);
-  const totalSizeBuf = Buffer.allocUnsafe(4);
-  totalSizeBuf.writeUInt32LE(4 + body.length, 0); // 4 = "WEBP"
-  return Buffer.concat([Buffer.from("RIFF"), totalSizeBuf, Buffer.from("WEBP"), body]);
 }
 
 async function createSticker(buffer, opts = {}) {
@@ -142,8 +104,8 @@ async function createSticker(buffer, opts = {}) {
       .toBuffer();
   }
 
-  const exifData = createExif(packName, authorName);
-  return addExifToWebp(webpBuffer, exifData);
+  const exifData = buildStickerExif(packName, authorName);
+  return await addExifToWebp(webpBuffer, exifData);
 }
 
 async function createAnimatedStickerFromVideo(videoBuffer, opts = {}, ext = "mp4") {
@@ -170,8 +132,8 @@ async function createAnimatedStickerFromVideo(videoBuffer, opts = {}, ext = "mp4
     ], { timeout: 60000 });
 
     const webpBuffer = fs.readFileSync(outputPath);
-    const exifData = createExif(packName, authorName);
-    return addExifToWebp(webpBuffer, exifData);
+    const exifData = buildStickerExif(packName, authorName);
+    return await addExifToWebp(webpBuffer, exifData);
   } finally {
     try { fs.unlinkSync(inputPath); } catch {}
     try { fs.unlinkSync(outputPath); } catch {}
