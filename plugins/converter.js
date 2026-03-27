@@ -2,6 +2,17 @@ const config = require("../config");
 const { tempFile } = require("../lib/helpers");
 const fs = require("fs");
 const path = require("path");
+const { execSync } = require("child_process");
+
+// Resolve the best available ffmpeg binary (prefer system PATH over bundled 2018 binary)
+const FFMPEG_BIN = (() => {
+  try { return execSync("which ffmpeg", { encoding: "utf8" }).trim(); } catch {}
+  try {
+    const p = require("@ffmpeg-installer/ffmpeg").path;
+    if (p && fs.existsSync(p)) return p;
+  } catch {}
+  return "ffmpeg";
+})();
 
 function cleanupFiles(...files) {
   for (const file of files) {
@@ -14,10 +25,32 @@ function cleanupFiles(...files) {
 function ffmpegConvert(inputPath, outputPath, buildFn) {
   return new Promise((resolve, reject) => {
     const ffmpeg = require("fluent-ffmpeg");
+    ffmpeg.setFfmpegPath(FFMPEG_BIN);
     const cmd = ffmpeg(inputPath);
     buildFn(cmd);
-    cmd.on("end", resolve).on("error", reject).save(outputPath);
+    cmd
+      .on("end", resolve)
+      .on("error", (err) => { console.error("[ffmpegConvert] error:", err.message?.slice(0, 300)); reject(err); })
+      .save(outputPath);
   });
+}
+
+/**
+ * Guess a safe file extension for downloaded media based on its MIME type.
+ * Using the right extension helps ffmpeg auto-detect the format.
+ */
+function mimeToExt(mimetype) {
+  if (!mimetype) return "bin";
+  if (mimetype.includes("ogg")) return "ogg";
+  if (mimetype.includes("opus")) return "ogg";
+  if (mimetype.includes("mp4")) return "mp4";
+  if (mimetype.includes("webm")) return "webm";
+  if (mimetype.includes("mpeg") || mimetype.includes("mp3")) return "mp3";
+  if (mimetype.includes("aac")) return "aac";
+  if (mimetype.includes("3gpp")) return "3gp";
+  if (mimetype.includes("wav")) return "wav";
+  if (mimetype.includes("flac")) return "flac";
+  return "bin";
 }
 
 const commands = [
@@ -32,14 +65,15 @@ const commands = [
         : null;
       if (!media) return m.reply(`Reply to a video or audio message with ${config.PREFIX}toaudio`);
       m.react("⏳");
-      const input = tempFile("bin");
+      const inputExt = mimeToExt(media.mimetype);
+      const input = tempFile(inputExt);
       const output = tempFile("mp3");
       try {
         const buffer = await media.download();
         if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
         fs.writeFileSync(input, buffer);
         await ffmpegConvert(input, output, cmd =>
-          cmd.toFormat("mp3").audioBitrate(128)
+          cmd.noVideo().audioCodec("libmp3lame").audioBitrate(128).toFormat("mp3")
         );
         const audioBuffer = fs.readFileSync(output);
         if (audioBuffer.length < 100) throw new Error("ffmpeg produced empty output");
@@ -69,32 +103,33 @@ const commands = [
         : null;
       if (!media) return m.reply(`Reply to an audio or voice note with ${config.PREFIX}tovideo`);
       m.react("⏳");
-      const input = tempFile("bin");
+      const inputExt = mimeToExt(media.mimetype);
+      const input = tempFile(inputExt);
       const output = tempFile("mp4");
       try {
         const buffer = await media.download();
         if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
         fs.writeFileSync(input, buffer);
+        // Use execFile directly for the two-input lavfi command — fluent-ffmpeg input ordering
+        // can be tricky with lavfi; this gives full control over argument order.
         await new Promise((resolve, reject) => {
-          const ffmpeg = require("fluent-ffmpeg");
-          // Input 0: audio/video source; Input 1: lavfi black screen
-          // Map video (1:v) first, then audio (0:a) — mp4 expects video stream first
-          ffmpeg(input)
-            .input("color=black:s=1280x720:r=1")
-            .inputFormat("lavfi")
-            .outputOptions([
-              "-map", "1:v",
-              "-map", "0:a",
-              "-shortest",
-              "-pix_fmt", "yuv420p",
-              "-c:v", "libx264",
-              "-c:a", "aac",
-              "-b:a", "128k",
-            ])
-            .toFormat("mp4")
-            .on("end", resolve)
-            .on("error", (err) => { console.error("[tovideo] ffmpeg error:", err.message); reject(err); })
-            .save(output);
+          const { execFile } = require("child_process");
+          execFile(FFMPEG_BIN, [
+            "-y",
+            "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=1",
+            "-i", input,
+            "-map", "0:v",
+            "-map", "1:a",
+            "-shortest",
+            "-pix_fmt", "yuv420p",
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            output,
+          ], { timeout: 120000 }, (err, stdout, stderr) => {
+            if (err) { console.error("[tovideo] ffmpeg error:", stderr?.slice(-300)); return reject(err); }
+            resolve();
+          });
         });
         const videoBuffer = fs.readFileSync(output);
         if (videoBuffer.length < 100) throw new Error("ffmpeg produced empty output");
@@ -123,14 +158,15 @@ const commands = [
         : null;
       if (!media) return m.reply(`Reply to an audio or video with ${config.PREFIX}toptt`);
       m.react("⏳");
-      const input = tempFile("bin");
+      const inputExt = mimeToExt(media.mimetype);
+      const input = tempFile(inputExt);
       const output = tempFile("ogg");
       try {
         const buffer = await media.download();
         if (!buffer || buffer.length < 100) throw new Error("Downloaded media is empty or too small");
         fs.writeFileSync(input, buffer);
         await ffmpegConvert(input, output, cmd =>
-          cmd.toFormat("ogg").audioCodec("libopus").audioBitrate(64)
+          cmd.noVideo().audioCodec("libopus").audioBitrate(64).toFormat("ogg")
         );
         const pttBuffer = fs.readFileSync(output);
         if (pttBuffer.length < 100) throw new Error("ffmpeg produced empty output");

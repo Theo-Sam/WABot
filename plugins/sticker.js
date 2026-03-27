@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFile } = require("child_process");
+const { execFile, execSync } = require("child_process");
 const { promisify } = require("util");
 const { tempFile } = require("../lib/helpers");
 const config = require("../config");
@@ -9,6 +9,12 @@ const config = require("../config");
 const execFileAsync = promisify(execFile);
 
 function findFfmpeg() {
+  // 1. Try system PATH first (Replit provides ffmpeg 6.x there)
+  try {
+    const p = execSync("which ffmpeg", { encoding: "utf8" }).trim();
+    if (p) return p;
+  } catch {}
+  // 2. Hardcoded NixOS locations
   const candidates = [
     "/run/current-system/sw/bin/ffmpeg",
     "/usr/bin/ffmpeg",
@@ -17,6 +23,11 @@ function findFfmpeg() {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
+  // 3. Bundled installer binary as last resort
+  try {
+    const p = require("@ffmpeg-installer/ffmpeg").path;
+    if (p && fs.existsSync(p)) return p;
+  } catch {}
   return "ffmpeg";
 }
 
