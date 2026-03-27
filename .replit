@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "web"]
 [agent]
 expertMode = true
 
@@ -22,12 +22,34 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node index.js"
-
-[workflows.workflow.metadata]
-outputType = "console"
+waitForPort = 5000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+BOT_NAME = "Desam WABot"
+PREFIX = "."
+MODE = "public"
+TIMEZONE = "Africa/Accra"
+AUTO_READ = "off"
+AUTO_STATUS_VIEW = "off"
+AUTO_STATUS_SAVE = "off"
+ANTI_CALL = "off"
+ANTI_CALL_MSG = "Calls are not allowed. This bot rejects all calls."
+AUTO_BIO = "off"
+AUTO_BIO_MSG = "🤖 Desam WABot | {time} | {date}"
+CHATBOT = "off"
+DEVICE_MODE = "Android"
+LOG_LEVEL = "info"
+DEBUG_LOGS = "off"
+SQLITE_PATH = "./data/bot.db"
+YOUTUBE_DL_SKIP_PYTHON_CHECK = "1"
