@@ -3,10 +3,13 @@ const { fetchJson, fetchBuffer, postJson, isUrl, extractUrls, tempFile, pickNonR
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFile } = require("child_process");
+const { execFile, execFile: execFileRaw } = require("child_process");
+const { promisify } = require("util");
+const execFileAsync = promisify(execFileRaw);
 const axios = require("axios");
 const play = require("play-dl");
 const { endpoints } = require("../lib/endpoints");
+const FileType = require("file-type");
 
 const INVIDIOUS_INSTANCES = endpoints.youtube.invidiousInstances;
 
@@ -507,20 +510,86 @@ function extractIgShortcode(url) {
 }
 
 /**
- * Guess media type from a URL string.
+ * Guess media type from a URL string (fallback only).
  */
 function igGuessType(u) {
   return (u.includes('.mp4') || u.includes('video') || u.includes('reel')) ? 'video' : 'image';
 }
 
+const VIDEO_MIMES = new Set(['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska', 'video/avi', 'video/x-msvideo', 'video/3gpp', 'video/3gpp2', 'video/mpeg']);
+const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']);
+
 /**
- * Fetch one media URL into a buffer, returning { buffer, type } or null.
+ * Locate the ffmpeg binary for video conversion.
+ */
+function findFfmpegBin() {
+  const candidates = ['/run/current-system/sw/bin/ffmpeg', '/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', 'ffmpeg'];
+  for (const p of candidates) {
+    try { if (p === 'ffmpeg' || fs.existsSync(p)) return p; } catch {}
+  }
+  return 'ffmpeg';
+}
+
+/**
+ * Convert any video buffer to MP4 (H.264 + AAC) using ffmpeg.
+ * Returns a new buffer on success, or the original buffer if conversion fails.
+ */
+async function convertBufferToMp4(buf) {
+  const inputPath = tempFile('input');
+  const outputPath = tempFile('mp4');
+  try {
+    fs.writeFileSync(inputPath, buf);
+    const ffmpegBin = findFfmpegBin();
+    await execFileAsync(ffmpegBin, [
+      '-y', '-i', inputPath,
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      '-f', 'mp4', outputPath
+    ], { timeout: 60000 });
+    if (fs.existsSync(outputPath)) {
+      const converted = fs.readFileSync(outputPath);
+      if (converted.length > 1000) return converted;
+    }
+  } catch (e) {
+    console.error('[igConvert] ffmpeg conversion failed:', e.message?.slice(0, 200));
+  } finally {
+    try { fs.unlinkSync(inputPath); } catch {}
+    try { fs.unlinkSync(outputPath); } catch {}
+  }
+  return buf;
+}
+
+/**
+ * Fetch one media URL into a buffer, returning { buffer, type, mimetype } or null.
+ * Uses file-type for accurate MIME detection instead of URL guessing.
  */
 async function igFetchItem(mediaUrl) {
   if (!mediaUrl || typeof mediaUrl !== 'string') return null;
   try {
     const buf = await fetchBuffer(mediaUrl, { timeout: 60000 });
-    return buf?.length > 1000 ? { buffer: buf, type: igGuessType(mediaUrl) } : null;
+    if (!buf || buf.length < 1000) return null;
+
+    const ft = await FileType.fromBuffer(buf);
+    const mimetype = ft?.mime || null;
+
+    let type;
+    if (mimetype && VIDEO_MIMES.has(mimetype)) {
+      type = 'video';
+    } else if (mimetype && IMAGE_MIMES.has(mimetype)) {
+      type = 'image';
+    } else {
+      type = igGuessType(mediaUrl);
+    }
+
+    // If it's a video but not MP4, convert it so WhatsApp can play it
+    if (type === 'video' && mimetype && mimetype !== 'video/mp4') {
+      console.log(`[igFetchItem] Converting ${mimetype} → mp4`);
+      const converted = await convertBufferToMp4(buf);
+      return { buffer: converted, type: 'video', mimetype: 'video/mp4' };
+    }
+
+    return { buffer: buf, type, mimetype: mimetype || (type === 'video' ? 'video/mp4' : 'image/jpeg') };
   } catch { return null; }
 }
 
@@ -1168,13 +1237,13 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
           : baseCaption;
 
         for (let i = 0; i < results.length; i++) {
-          const { buffer, type } = results[i];
+          const { buffer, type, mimetype } = results[i];
           const msgCaption = i === 0 ? caption : undefined;
           const opts = i === 0 ? quotedMsg : {};
           if (type === "image") {
-            await sock.sendMessage(m.chat, { image: buffer, caption: msgCaption }, opts);
+            await sock.sendMessage(m.chat, { image: buffer, mimetype: mimetype || 'image/jpeg', caption: msgCaption }, opts);
           } else {
-            await sock.sendMessage(m.chat, { video: buffer, caption: msgCaption }, opts);
+            await sock.sendMessage(m.chat, { video: buffer, mimetype: mimetype || 'video/mp4', caption: msgCaption }, opts);
           }
         }
         m.react("✅");
