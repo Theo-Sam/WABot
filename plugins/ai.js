@@ -542,7 +542,7 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
       try {
         const inputBuffer = await media.download();
 
-        // ── 1. remove.bg paid API (if key is configured) ──────────────────────
+        // ── 1. remove.bg paid API (if key is configured — highest quality) ────
         if (process.env.REMOVE_BG_API_KEY && !resultBuffer) {
           try {
             const FormData = require("form-data");
@@ -554,73 +554,50 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
               responseType: "arraybuffer",
               timeout: 30000,
             });
-            if (res.data && res.data.length > 1000) resultBuffer = Buffer.from(res.data);
+            if (res.data && res.data.length > 500) resultBuffer = Buffer.from(res.data);
           } catch (e) {
             console.error("[removebg] remove.bg API failed:", e.message?.slice(0, 100));
           }
         }
 
-        // ── 2. HuggingFace RMBG-1.4 (free, anonymous access) ─────────────────
+        // ── 2. Local AI model via @imgly/background-removal-node (no API key needed) ──
         if (!resultBuffer) {
           try {
-            const hfToken = process.env.HF_TOKEN || "";
-            const headers = {
-              "Content-Type": "application/octet-stream",
-              ...(hfToken ? { Authorization: `Bearer ${hfToken}` } : {}),
-            };
+            const { removeBackground } = require("@imgly/background-removal-node");
+            const blob = new Blob([inputBuffer], { type: "image/png" });
+            const resultBlob = await removeBackground(blob);
+            const arrayBuf = await resultBlob.arrayBuffer();
+            const buf = Buffer.from(arrayBuf);
+            if (buf.length > 500) resultBuffer = buf;
+          } catch (e) {
+            console.error("[removebg] local model failed:", e.message?.slice(0, 150));
+          }
+        }
+
+        // ── 3. HuggingFace inference API (requires HF_TOKEN — free account works) ──
+        if (!resultBuffer && process.env.HF_TOKEN) {
+          try {
             const res = await axios.post(
-              "https://api-inference.huggingface.co/models/briaai/RMBG-1.4",
+              "https://api-inference.huggingface.co/models/briaai/RMBG-2.0",
               inputBuffer,
-              { headers, responseType: "arraybuffer", timeout: 40000 }
+              {
+                headers: {
+                  "Content-Type": "application/octet-stream",
+                  Authorization: `Bearer ${process.env.HF_TOKEN}`,
+                },
+                responseType: "arraybuffer",
+                timeout: 45000,
+              }
             );
-            if (res.data && res.data.length > 1000) resultBuffer = Buffer.from(res.data);
+            if (res.data && res.data.length > 500) resultBuffer = Buffer.from(res.data);
           } catch (e) {
             console.error("[removebg] HuggingFace RMBG failed:", e.message?.slice(0, 100));
           }
         }
 
-        // ── 3. PhotoRoom free segment endpoint ────────────────────────────────
-        if (!resultBuffer) {
-          try {
-            const FormData = require("form-data");
-            const form = new FormData();
-            form.append("image_file", inputBuffer, { filename: "image.png", contentType: "image/png" });
-            const res = await axios.post("https://sdk.photoroom.com/v1/segment", form, {
-              headers: { ...form.getHeaders() },
-              responseType: "arraybuffer",
-              timeout: 25000,
-            });
-            if (res.data && res.data.length > 1000) resultBuffer = Buffer.from(res.data);
-          } catch (e) {
-            console.error("[removebg] PhotoRoom failed:", e.message?.slice(0, 100));
-          }
-        }
-
-        // ── 4. erase.bg free tier ─────────────────────────────────────────────
-        if (!resultBuffer) {
-          try {
-            const FormData = require("form-data");
-            const form = new FormData();
-            form.append("image_file", inputBuffer, { filename: "image.png", contentType: "image/png" });
-            form.append("output_type", "cutout");
-            const res = await axios.post("https://api.erase.bg/api/v1/background-removal", form, {
-              headers: { ...form.getHeaders(), Accept: "application/json" },
-              responseType: "arraybuffer",
-              timeout: 25000,
-            });
-            if (res.data && res.data.length > 1000) resultBuffer = Buffer.from(res.data);
-          } catch (e) {
-            console.error("[removebg] erase.bg failed:", e.message?.slice(0, 100));
-          }
-        }
-
         if (!resultBuffer) {
           m.react("❌");
-          return m.reply(
-            "❌ Background removal failed.\n\n" +
-            "All free services are currently busy or unavailable. " +
-            "For reliable results, set *REMOVE_BG_API_KEY* (free tier at remove.bg gives 50 credits/month)."
-          );
+          return m.reply("❌ Background removal failed. Please try again in a moment.");
         }
 
         await sock.sendMessage(
