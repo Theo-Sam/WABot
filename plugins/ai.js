@@ -560,17 +560,55 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
           }
         }
 
-        // ── 2. Local AI model via @imgly/background-removal-node (no API key needed) ──
+        // ── 2. Sharp-based color-flood removal (no API key — works for solid/simple backgrounds) ──
         if (!resultBuffer) {
           try {
-            const { removeBackground } = require("@imgly/background-removal-node");
-            const blob = new Blob([inputBuffer], { type: "image/png" });
-            const resultBlob = await removeBackground(blob);
-            const arrayBuf = await resultBlob.arrayBuffer();
-            const buf = Buffer.from(arrayBuf);
-            if (buf.length > 500) resultBuffer = buf;
+            const sharp = require("sharp");
+            // Decode to raw RGBA pixels
+            const { data, info } = await sharp(inputBuffer)
+              .ensureAlpha()
+              .raw()
+              .toBuffer({ resolveWithObject: true });
+            const { width, height, channels } = info; // channels === 4
+
+            // Sample border pixels to find the dominant background color
+            const borderSamples = [];
+            for (let x = 0; x < width; x++) {
+              // top row + bottom row
+              for (const y of [0, height - 1]) {
+                const i = (y * width + x) * 4;
+                borderSamples.push([data[i], data[i + 1], data[i + 2]]);
+              }
+            }
+            for (let y = 1; y < height - 1; y++) {
+              // left col + right col
+              for (const x of [0, width - 1]) {
+                const i = (y * width + x) * 4;
+                borderSamples.push([data[i], data[i + 1], data[i + 2]]);
+              }
+            }
+            // Median of each channel as the background color
+            const ch = (c) => borderSamples.map(s => s[c]).sort((a, b) => a - b);
+            const mid = (arr) => arr[Math.floor(arr.length / 2)];
+            const bgR = mid(ch(0)), bgG = mid(ch(1)), bgB = mid(ch(2));
+
+            // Remove pixels within tolerance of background color (with smooth falloff)
+            const TOLERANCE = 40; // color distance threshold
+            const out = Buffer.from(data); // copy
+            for (let i = 0; i < out.length; i += 4) {
+              const dr = out[i] - bgR, dg = out[i + 1] - bgG, db = out[i + 2] - bgB;
+              const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+              if (dist < TOLERANCE) {
+                // Smooth fade: pixels close to BG color become more transparent
+                out[i + 3] = Math.round(Math.min(255, (dist / TOLERANCE) * 255));
+              }
+            }
+            resultBuffer = await sharp(out, { raw: { width, height, channels: 4 } })
+              .png()
+              .toBuffer();
+            console.log("[removebg] sharp color-flood result size:", resultBuffer.length);
           } catch (e) {
-            console.error("[removebg] local model failed:", e.message?.slice(0, 150));
+            console.error("[removebg] sharp fallback failed:", e.message?.slice(0, 150));
           }
         }
 
@@ -602,7 +640,7 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
 
         await sock.sendMessage(
           m.chat,
-          { image: resultBuffer, caption: `🖼️ Background removed!\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡` },
+          { image: resultBuffer, caption: `🖼️ Background removed!\n\n_Tip: For AI-quality results on complex backgrounds, set REMOVE_BG_API_KEY or HF_TOKEN._\n\n────────────────────────────────\n_${config.BOT_NAME} · Desam Tech_ ⚡` },
           { quoted: { key: m.key, message: m.message } }
         );
         m.react("✅");
