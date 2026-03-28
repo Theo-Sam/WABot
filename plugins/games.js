@@ -138,7 +138,7 @@ const riddles = [
   { q: "What can fill a room but takes up no space?", a: "Light" },
 ];
 
-const commands = [
+const baseCommands = [
   {
     name: ["tictactoe", "ttt"],
     category: "fun",
@@ -392,4 +392,346 @@ const commands = [
   },
 ];
 
-module.exports = { commands };
+// ═══════════════════════════════════════════════════════════════════════════
+// SPELLING CHALLENGE GAME
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── General English: commonly misspelled words ─────────────────────────────
+const SPELL_GENERAL = [
+  { word:"accommodate",   wrong:"accomodate",    hint:"To provide space or lodgings for someone" },
+  { word:"acquaintance",  wrong:"acquaintence",  hint:"A person one knows but not closely" },
+  { word:"address",       wrong:"adress",        hint:"Where you live; or to speak to someone" },
+  { word:"amateur",       wrong:"amiture",       hint:"Someone who does something without pay" },
+  { word:"apparent",      wrong:"aparent",       hint:"Clearly visible or obvious" },
+  { word:"argument",      wrong:"arguement",     hint:"A disagreement or a reason given in debate" },
+  { word:"beginning",     wrong:"begining",      hint:"The start of something" },
+  { word:"believe",       wrong:"beleive",       hint:"To accept something as true" },
+  { word:"bizarre",       wrong:"bizzare",       hint:"Very strange or unusual" },
+  { word:"calendar",      wrong:"calander",      hint:"A chart showing days, weeks and months" },
+  { word:"category",      wrong:"catagory",      hint:"A class or division of things" },
+  { word:"cemetery",      wrong:"cemetary",      hint:"A place where the dead are buried" },
+  { word:"colleague",     wrong:"collegue",      hint:"A person you work with" },
+  { word:"commitment",    wrong:"committment",   hint:"Dedication to a cause or activity" },
+  { word:"conceive",      wrong:"concieve",      hint:"To form an idea or become pregnant" },
+  { word:"conscience",    wrong:"consciense",    hint:"An inner sense of right and wrong" },
+  { word:"conscious",     wrong:"concious",      hint:"Aware of one's surroundings" },
+  { word:"consensus",     wrong:"concensus",     hint:"General agreement among a group" },
+  { word:"definitely",    wrong:"definately",    hint:"Without doubt; certainly" },
+  { word:"dilemma",       wrong:"dilema",        hint:"A difficult choice between two things" },
+  { word:"embarrass",     wrong:"embarass",      hint:"To make someone feel awkward or ashamed" },
+  { word:"environment",   wrong:"enviroment",    hint:"The natural world around us" },
+  { word:"existence",     wrong:"existance",     hint:"The fact of being alive or real" },
+  { word:"familiar",      wrong:"familier",      hint:"Well known; often seen or experienced" },
+  { word:"fascinate",     wrong:"fasinate",      hint:"To attract and hold attention strongly" },
+  { word:"February",      wrong:"Febuary",       hint:"The second month of the year" },
+  { word:"foreign",       wrong:"foriegn",       hint:"Relating to another country" },
+  { word:"gauge",         wrong:"guage",         hint:"A tool for measuring; also to estimate" },
+  { word:"government",    wrong:"goverment",     hint:"The group that rules a country" },
+  { word:"grammar",       wrong:"grammer",       hint:"Rules for how a language is used" },
+  { word:"guarantee",     wrong:"garantee",      hint:"A formal promise or assurance" },
+  { word:"height",        wrong:"hieght",        hint:"How tall someone or something is" },
+  { word:"immediately",   wrong:"imediatly",     hint:"Right now; without delay" },
+  { word:"independent",   wrong:"independant",   hint:"Not relying on others; free" },
+  { word:"intelligence",  wrong:"inteligence",   hint:"The ability to learn and understand" },
+  { word:"knowledge",     wrong:"knowlege",      hint:"Facts and information acquired through experience" },
+  { word:"lieutenant",    wrong:"leutenant",     hint:"A military officer rank" },
+  { word:"lightning",     wrong:"lightening",    hint:"Flash of light during a storm (not lightening)" },
+  { word:"maintenance",   wrong:"maintainance",  hint:"The process of keeping something in good condition" },
+  { word:"marriage",      wrong:"marrige",       hint:"The legal union of two people" },
+  { word:"millennium",    wrong:"millenium",     hint:"A period of one thousand years" },
+  { word:"miniature",     wrong:"miniture",      hint:"A very small version of something" },
+  { word:"misspell",      wrong:"mispell",       hint:"To spell a word incorrectly — ironic!" },
+  { word:"necessary",     wrong:"necesary",      hint:"Needed; required; essential" },
+  { word:"neighbor",      wrong:"nieghbor",      hint:"Someone who lives nearby" },
+  { word:"occurrence",    wrong:"occurence",     hint:"An event that happens; an incident" },
+  { word:"parliament",    wrong:"parliment",     hint:"A legislative body of a country" },
+  { word:"persevere",     wrong:"perservere",    hint:"To continue despite difficulty" },
+  { word:"phenomenon",    wrong:"phenominon",    hint:"An observable fact or event" },
+  { word:"piece",         wrong:"peice",         hint:"A part of something; a slice" },
+  { word:"possession",    wrong:"posession",     hint:"Something owned; the act of having" },
+  { word:"privilege",     wrong:"priviledge",    hint:"A special right or advantage" },
+  { word:"pronunciation", wrong:"pronounciation",hint:"The way a word is spoken" },
+  { word:"questionnaire", wrong:"questionaire",  hint:"A set of written questions for gathering information" },
+  { word:"receive",       wrong:"recieve",       hint:"To get or accept something given" },
+  { word:"recommend",     wrong:"recomend",      hint:"To suggest something as good" },
+  { word:"restaurant",    wrong:"resturant",     hint:"A place where you go to eat" },
+  { word:"rhythm",        wrong:"rythm",         hint:"A regular repeated pattern of sound or movement" },
+  { word:"schedule",      wrong:"shedule",       hint:"A plan for carrying out a process" },
+  { word:"scissors",      wrong:"sissors",       hint:"A cutting tool with two blades" },
+  { word:"separate",      wrong:"seperate",      hint:"To divide or keep apart" },
+  { word:"sergeant",      wrong:"sargeant",      hint:"A police or military rank" },
+  { word:"similar",       wrong:"similiar",      hint:"Nearly the same but not identical" },
+  { word:"sincerely",     wrong:"sincerly",      hint:"Genuinely; honestly" },
+  { word:"successful",    wrong:"succesful",     hint:"Achieving the desired result" },
+  { word:"surprise",      wrong:"suprise",       hint:"Something unexpected; to astonish" },
+  { word:"temperature",   wrong:"temperture",    hint:"How hot or cold something is" },
+  { word:"tomorrow",      wrong:"tommorrow",     hint:"The day after today" },
+  { word:"unnecessary",   wrong:"unnecesary",    hint:"Not needed; avoidable" },
+  { word:"vacuum",        wrong:"vaccum",        hint:"A space with no air; also a cleaning machine" },
+  { word:"Wednesday",     wrong:"Wensday",       hint:"The day between Tuesday and Thursday" },
+  { word:"weird",         wrong:"wierd",         hint:"Strange or unusual — 'i before e' exception!" },
+  { word:"whether",       wrong:"wether",        hint:"Used to introduce alternatives; not the weather!" },
+  { word:"conscience",    wrong:"consience",     hint:"Your moral sense of right and wrong" },
+  { word:"discipline",    wrong:"disipline",     hint:"Training to follow rules; a field of study" },
+  { word:"eligible",      wrong:"eligable",      hint:"Qualified or suitable to be chosen" },
+  { word:"exaggerate",    wrong:"exagerate",     hint:"To make something seem bigger than it is" },
+  { word:"excellent",     wrong:"excelent",      hint:"Extremely good; outstanding" },
+  { word:"exercise",      wrong:"exersise",      hint:"Physical activity; to practice" },
+  { word:"experience",    wrong:"experiance",    hint:"Practical contact with facts or events" },
+  { word:"February",      wrong:"Febuary",       hint:"Second month of the year" },
+  { word:"necessary",     wrong:"neccesary",     hint:"Something that cannot be done without" },
+  { word:"opportunity",   wrong:"oppurtunity",   hint:"A chance to do something beneficial" },
+  { word:"parliament",    wrong:"parliment",     hint:"A country's law-making body" },
+  { word:"particularly",  wrong:"particulary",   hint:"Especially; to a specific degree" },
+  { word:"relevant",      wrong:"relevent",      hint:"Closely connected to the matter at hand" },
+  { word:"resistance",    wrong:"resistence",    hint:"The refusal to accept something; opposing force" },
+  { word:"stomach",       wrong:"stomache",      hint:"The organ in your body that digests food" },
+  { word:"twelfth",       wrong:"twelth",        hint:"The number twelve in ordinal form" },
+  { word:"unfortunately", wrong:"unfortunatly",  hint:"Sadly; regrettably" },
+  { word:"vegetable",     wrong:"vegatable",     hint:"A plant-based food like carrots or broccoli" },
+  { word:"visible",       wrong:"visable",       hint:"Able to be seen" },
+  { word:"volunteer",     wrong:"volunter",      hint:"Someone who works without being paid" },
+];
+
+// ── Bible People: names that are commonly misspelled ──────────────────────
+const SPELL_BIBLE_PEOPLE = [
+  { word:"Nebuchadnezzar", wrong:"Nebucadnezzar",  hint:"King of Babylon who conquered Jerusalem",        ref:"Daniel 1:1" },
+  { word:"Methuselah",     wrong:"Methusaleh",      hint:"The oldest man in the Bible — lived 969 years",  ref:"Genesis 5:27" },
+  { word:"Bartholomew",    wrong:"Bartholomow",     hint:"One of the 12 apostles of Jesus",                ref:"Matthew 10:3" },
+  { word:"Nicodemus",      wrong:"Nicodemous",      hint:"The Pharisee who came to Jesus by night",        ref:"John 3:1" },
+  { word:"Zacchaeus",      wrong:"Zachaeus",        hint:"Short tax collector who climbed a sycamore tree", ref:"Luke 19:2" },
+  { word:"Jehoshaphat",    wrong:"Jehoshapat",      hint:"Righteous king of Judah",                        ref:"1 Kings 22:41" },
+  { word:"Habakkuk",       wrong:"Habakuk",         hint:"Minor prophet who questioned God about injustice", ref:"Habakkuk 1:1" },
+  { word:"Zechariah",      wrong:"Zachariah",       hint:"Prophet who saw eight visions in one night",     ref:"Zechariah 1:1" },
+  { word:"Zephaniah",      wrong:"Zefaniah",        hint:"Minor prophet who spoke of the Day of the LORD", ref:"Zephaniah 1:1" },
+  { word:"Obadiah",        wrong:"Obediah",         hint:"Prophet who wrote the shortest book in the OT",  ref:"Obadiah 1:1" },
+  { word:"Haggai",         wrong:"Haggi",           hint:"Prophet who urged rebuilding of the temple",     ref:"Haggai 1:1" },
+  { word:"Zerubbabel",     wrong:"Zerababel",       hint:"Led the first group of exiles back from Babylon", ref:"Ezra 2:2" },
+  { word:"Melchizedek",    wrong:"Melchisedek",     hint:"Priest of God Most High who blessed Abraham",    ref:"Genesis 14:18" },
+  { word:"Mephibosheth",   wrong:"Mephibsosheth",   hint:"Jonathan's son; David showed him kindness",      ref:"2 Samuel 9:6" },
+  { word:"Bathsheba",      wrong:"Bathsheeba",      hint:"Wife of Uriah; later queen mother of Solomon",   ref:"2 Samuel 11:3" },
+  { word:"Jephthah",       wrong:"Jephtha",         hint:"Judge of Israel who made a rash vow",            ref:"Judges 11:1" },
+  { word:"Jeremiah",       wrong:"Jerimiah",        hint:"The weeping prophet of the Old Testament",       ref:"Jeremiah 1:1" },
+  { word:"Nehemiah",       wrong:"Nehimiah",        hint:"Rebuilt the walls of Jerusalem in 52 days",      ref:"Nehemiah 1:1" },
+  { word:"Hezekiah",       wrong:"Hezikiah",        hint:"King of Judah; God healed him and added 15 years", ref:"2 Kings 20:1" },
+  { word:"Ezekiel",        wrong:"Ezeikiel",        hint:"Prophet who saw the valley of dry bones",        ref:"Ezekiel 37:1" },
+  { word:"Isaiah",         wrong:"Isiah",           hint:"The Messianic prophet; wrote 66 chapters",       ref:"Isaiah 1:1" },
+  { word:"Malachi",        wrong:"Malaki",          hint:"Last prophet of the Old Testament",              ref:"Malachi 1:1" },
+  { word:"Barnabas",       wrong:"Barnabus",        hint:"Companion of Paul on his first missionary journey", ref:"Acts 13:2" },
+  { word:"Cornelius",      wrong:"Corneilius",      hint:"First Gentile to receive the Holy Spirit",       ref:"Acts 10:1" },
+  { word:"Philemon",       wrong:"Philamon",        hint:"Slave owner who received a personal letter from Paul", ref:"Philemon 1:1" },
+  { word:"Onesimus",       wrong:"Onesemous",       hint:"Runaway slave Paul sent back with a letter",     ref:"Philemon 1:10" },
+  { word:"Tychicus",       wrong:"Tichicus",        hint:"Paul's messenger who delivered letters to the churches", ref:"Ephesians 6:21" },
+  { word:"Aquila",         wrong:"Aquilla",         hint:"Tentmaker who worked with Paul and Priscilla",   ref:"Acts 18:2" },
+  { word:"Priscilla",      wrong:"Prescilla",       hint:"Aquila's wife; taught Apollos the way of God",   ref:"Acts 18:26" },
+  { word:"Apollos",        wrong:"Appollos",        hint:"Eloquent Alexandrian who powerfully preached Christ", ref:"Acts 18:24" },
+  { word:"Barabbas",       wrong:"Barabas",         hint:"Criminal released instead of Jesus by Pilate",   ref:"Matthew 27:16" },
+  { word:"Gamaliel",       wrong:"Gamliel",         hint:"Respected Pharisee and teacher of Paul",         ref:"Acts 22:3" },
+  { word:"Abimelech",      wrong:"Abimilech",       hint:"King of Gerar who dealt with Abraham and Isaac", ref:"Genesis 20:2" },
+  { word:"Naomi",          wrong:"Naomy",           hint:"Ruth's mother-in-law who returned to Bethlehem", ref:"Ruth 1:2" },
+  { word:"Gideon",         wrong:"Gedeon",          hint:"Judge who defeated the Midianites with 300 men", ref:"Judges 7:7" },
+  { word:"Rahab",          wrong:"Rahab",           hint:"Innkeeper of Jericho who hid the Israelite spies", ref:"Joshua 2:1" },
+  { word:"Deborah",        wrong:"Debora",          hint:"Female judge and prophetess of Israel",           ref:"Judges 4:4" },
+  { word:"Abigail",        wrong:"Abigale",         hint:"Wise woman who prevented David from shedding blood", ref:"1 Samuel 25:3" },
+  { word:"Jehoshaphat",    wrong:"Jehoshapah",      hint:"King who sent Levites to teach God's law",       ref:"2 Chronicles 17:7" },
+  { word:"Epaphroditus",   wrong:"Epaphrodites",    hint:"Brought gifts from Philippi to Paul in prison",  ref:"Philippians 2:25" },
+];
+
+// ── Bible Books: book names that people misspell ───────────────────────────
+const SPELL_BIBLE_BOOKS = [
+  { word:"Ecclesiastes",   wrong:"Eclesiastes",   hint:"OT book containing 'Vanity of vanities, all is vanity'",     ref:"Old Testament" },
+  { word:"Thessalonians",  wrong:"Thesalonians",  hint:"Paul's letter to the church in Thessalonica",                ref:"New Testament" },
+  { word:"Corinthians",    wrong:"Corintheans",   hint:"Paul's letter to the church in Corinth",                     ref:"New Testament" },
+  { word:"Deuteronomy",    wrong:"Deutronomy",    hint:"Fifth book of the Bible; Moses' farewell speeches",          ref:"Old Testament" },
+  { word:"Philippians",    wrong:"Phillipians",   hint:"Paul's joyful letter written from prison",                   ref:"New Testament" },
+  { word:"Leviticus",      wrong:"Levitcus",      hint:"Third book of Moses; contains ceremonial laws",              ref:"Old Testament" },
+  { word:"Galatians",      wrong:"Galations",     hint:"Paul's letter defending justification by faith alone",       ref:"New Testament" },
+  { word:"Chronicles",     wrong:"Cronicles",     hint:"Two historical books of the OT",                            ref:"Old Testament" },
+  { word:"Lamentations",   wrong:"Lamentaions",   hint:"Jeremiah's lament over the fall of Jerusalem",              ref:"Old Testament" },
+  { word:"Colossians",     wrong:"Colosians",     hint:"Paul's letter warning against hollow philosophy",            ref:"New Testament" },
+  { word:"Ephesians",      wrong:"Epheseans",     hint:"Paul's letter about the church as the body of Christ",      ref:"New Testament" },
+  { word:"Habakkuk",       wrong:"Habakuk",       hint:"OT minor prophet who wrestled with God's justice",           ref:"Old Testament" },
+  { word:"Zephaniah",      wrong:"Zefaniah",      hint:"OT minor prophet who warned of the Day of the LORD",         ref:"Old Testament" },
+  { word:"Proverbs",       wrong:"Proverbes",     hint:"Wisdom book filled with sayings attributed to Solomon",      ref:"Old Testament" },
+  { word:"Nehemiah",       wrong:"Nehimiah",      hint:"OT book about rebuilding Jerusalem's walls",                 ref:"Old Testament" },
+  { word:"Revelation",     wrong:"Reveleation",   hint:"Last book of the Bible; John's vision of the end times",    ref:"New Testament" },
+  { word:"Zechariah",      wrong:"Zachariah",     hint:"OT book with 14 chapters of messianic prophecy",            ref:"Old Testament" },
+  { word:"Obadiah",        wrong:"Obediah",       hint:"Shortest book in the Old Testament",                        ref:"Old Testament" },
+  { word:"Malachi",        wrong:"Malaki",        hint:"Last book of the Old Testament",                            ref:"Old Testament" },
+  { word:"Ecclesiastes",   wrong:"Eclesiastes",   hint:"OT book that ends: 'Fear God and keep His commandments'",   ref:"Ecclesiastes 12:13" },
+];
+
+// ── Bible Places: locations commonly misspelled ────────────────────────────
+const SPELL_BIBLE_PLACES = [
+  { word:"Bethlehem",      wrong:"Bethlehim",     hint:"City of David; where Jesus was born",                       ref:"Luke 2:4" },
+  { word:"Gethsemane",     wrong:"Gethsemani",    hint:"Garden where Jesus prayed before his arrest",               ref:"Matthew 26:36" },
+  { word:"Golgotha",       wrong:"Golgatha",      hint:"The Place of the Skull; where Jesus was crucified",         ref:"John 19:17" },
+  { word:"Jerusalem",      wrong:"Jeruselem",     hint:"The Holy City; capital of the Israelite kingdom",           ref:"2 Samuel 5:7" },
+  { word:"Capernaum",      wrong:"Caperneum",     hint:"City where Jesus based his Galilean ministry",              ref:"Matthew 4:13" },
+  { word:"Jericho",        wrong:"Jirecho",       hint:"City whose walls fell when trumpets were blown",            ref:"Joshua 6:20" },
+  { word:"Babylon",        wrong:"Babelon",       hint:"Ancient empire where the Jews were taken captive",          ref:"Daniel 1:1" },
+  { word:"Canaan",         wrong:"Cannan",        hint:"The Promised Land given to Abraham's descendants",          ref:"Genesis 12:7" },
+  { word:"Nineveh",        wrong:"Niniveh",       hint:"Capital of Assyria; where Jonah was sent to preach",        ref:"Jonah 1:2" },
+  { word:"Ephesus",        wrong:"Epheseus",      hint:"Major city where Paul spent 3 years; home of Artemis",      ref:"Acts 19:1" },
+  { word:"Corinth",        wrong:"Cornith",       hint:"Greek port city where Paul planted a church",               ref:"Acts 18:1" },
+  { word:"Philippi",       wrong:"Phillippi",     hint:"First city in Europe where Paul preached the gospel",       ref:"Acts 16:12" },
+  { word:"Antioch",        wrong:"Anteoch",       hint:"City where followers of Jesus were first called Christians", ref:"Acts 11:26" },
+  { word:"Caesarea",       wrong:"Caesaria",      hint:"Roman city where Paul was imprisoned before going to Rome", ref:"Acts 23:33" },
+  { word:"Colossae",       wrong:"Collosae",      hint:"City in Asia Minor; Paul wrote a letter to its church",     ref:"Colossians 1:2" },
+  { word:"Thessalonica",   wrong:"Thesalonica",   hint:"Macedonian city where Paul preached for three weeks",       ref:"Acts 17:1" },
+  { word:"Galatia",        wrong:"Gallatia",      hint:"Roman province in Asia Minor; Paul planted churches here",  ref:"Acts 16:6" },
+  { word:"Samaria",        wrong:"Sameria",       hint:"Region between Judea and Galilee; Jesus spoke to a woman there", ref:"John 4:4" },
+  { word:"Nazareth",       wrong:"Nazreth",       hint:"Hometown of Jesus; where He grew up",                       ref:"Luke 4:16" },
+  { word:"Mesopotamia",    wrong:"Mesopotomia",   hint:"Land between the Tigris and Euphrates; Abraham's origin",   ref:"Acts 7:2" },
+];
+
+// Active sessions: chatId → { word, wrong, hint, ref, type, timeout }
+const spellingSessions = new Map();
+
+// ── Pick a fresh word from a pool (avoids repeats in the same chat) ─────────
+const spellingHistory = new Map(); // chatId:type → Set<word>
+function pickSpellingWord(pool, chatId, type) {
+  const key = `${chatId}:${type}`;
+  if (!spellingHistory.has(key)) spellingHistory.set(key, new Set());
+  const used = spellingHistory.get(key);
+  const fresh = pool.filter(w => !used.has(w.word));
+  const source = fresh.length > 0 ? fresh : pool; // reset when exhausted
+  if (fresh.length === 0) spellingHistory.set(key, new Set());
+  const pick = source[Math.floor(Math.random() * source.length)];
+  spellingHistory.get(key).add(pick.word);
+  return pick;
+}
+
+// ── Start a spelling challenge ───────────────────────────────────────────────
+async function startSpellingGame(sock, m, pool, label, emoji, type, revealSec = 30) {
+  if (spellingSessions.has(m.chat)) {
+    const cur = spellingSessions.get(m.chat);
+    return m.reply(
+      `⏳ A spelling game is already active!\n\n` +
+      `${emoji} *Correct this:* \`${cur.wrong}\`\n` +
+      `${cur.hint ? `💡 ${cur.hint}\n` : ""}` +
+      `\nType *${config.PREFIX}spellhint* for a hint or *${config.PREFIX}spellstop* to end it.`
+    );
+  }
+  const item = pickSpellingWord(pool, m.chat, type);
+  const revealTimeout = setTimeout(async () => {
+    spellingSessions.delete(m.chat);
+    await sock.sendMessage(m.chat, {
+      text:
+        `⏰ *Time's up! Nobody got it.*\n\n` +
+        `✅ The correct spelling was: *${item.word}*` +
+        (item.hint ? `\n💡 ${item.hint}` : "") +
+        (item.ref  ? `\n📖 ${item.ref}`  : ""),
+    }).catch(() => {});
+  }, revealSec * 1000);
+  spellingSessions.set(m.chat, { ...item, timeout: revealTimeout, type });
+  await m.reply(
+    `${emoji} *${label}*\n\n` +
+    `🔤 Correct this misspelling:\n*\`${item.wrong}\`*\n\n` +
+    (item.hint ? `💡 *Hint:* ${item.hint}\n\n` : "") +
+    `⏱️ You have *${revealSec} seconds!*\n` +
+    `_Type the correct spelling — first one right wins! 🏆_`
+  );
+}
+
+// ── Check a message body against the active game ────────────────────────────
+function checkSpellingAnswer(sock, m, body) {
+  const session = spellingSessions.get(m.chat);
+  if (!session) return;
+  const guess  = body.trim().toLowerCase();
+  const correct = session.word.toLowerCase();
+  if (guess !== correct) return;
+  clearTimeout(session.timeout);
+  spellingSessions.delete(m.chat);
+  sock.sendMessage(m.chat, {
+    text:
+      `🎉 *Correct!* @${m.sender.split("@")[0]} got it!\n\n` +
+      `✅ *${session.word}*` +
+      (session.hint ? `\n💡 ${session.hint}` : "") +
+      (session.ref  ? `\n📖 ${session.ref}`  : ""),
+    mentions: [m.sender],
+  }).catch(() => {});
+}
+
+const spellingCommands = [
+  {
+    name: ["spell", "spelling", "spellchallenge"],
+    category: "fun",
+    desc: "Spelling challenge — correct the misspelled English word",
+    handler: (sock, m) =>
+      startSpellingGame(sock, m, SPELL_GENERAL, "Spelling Challenge", "🔤", "general", 30),
+  },
+  {
+    name: ["bspell", "biblespell", "bibleword"],
+    category: "fun",
+    desc: "Bible spelling challenge — all Bible words (people, books & places)",
+    handler: (sock, m) =>
+      startSpellingGame(
+        sock, m,
+        [...SPELL_BIBLE_PEOPLE, ...SPELL_BIBLE_BOOKS, ...SPELL_BIBLE_PLACES],
+        "Bible Spelling Challenge", "📖", "bible", 35
+      ),
+  },
+  {
+    name: ["biblepeople", "bpeople", "biblenames"],
+    category: "fun",
+    desc: "Bible names spelling challenge",
+    handler: (sock, m) =>
+      startSpellingGame(sock, m, SPELL_BIBLE_PEOPLE, "Bible Names Challenge", "🙏", "bpeople", 35),
+  },
+  {
+    name: ["bibleplaces", "bplaces"],
+    category: "fun",
+    desc: "Bible places spelling challenge",
+    handler: (sock, m) =>
+      startSpellingGame(sock, m, SPELL_BIBLE_PLACES, "Bible Places Challenge", "🗺️", "bplaces", 35),
+  },
+  {
+    name: ["biblebooks", "bbooks"],
+    category: "fun",
+    desc: "Bible book names spelling challenge",
+    handler: (sock, m) =>
+      startSpellingGame(sock, m, SPELL_BIBLE_BOOKS, "Bible Books Challenge", "📚", "bbooks", 35),
+  },
+  {
+    name: ["spellstop", "sspell"],
+    category: "fun",
+    desc: "Stop the active spelling game and reveal the answer",
+    handler: async (sock, m) => {
+      const session = spellingSessions.get(m.chat);
+      if (!session) return m.reply("❌ No active spelling game. Start one with .spell or .bspell");
+      clearTimeout(session.timeout);
+      spellingSessions.delete(m.chat);
+      await m.reply(
+        `🛑 *Game stopped!*\n\n` +
+        `✅ The answer was: *${session.word}*` +
+        (session.hint ? `\n💡 ${session.hint}` : "") +
+        (session.ref  ? `\n📖 ${session.ref}`  : "")
+      );
+    },
+  },
+  {
+    name: ["spellhint", "shint"],
+    category: "fun",
+    desc: "Get an extra hint for the active spelling game",
+    handler: async (sock, m) => {
+      const session = spellingSessions.get(m.chat);
+      if (!session) return m.reply("❌ No active spelling game. Start one with .spell or .bspell");
+      const word = session.word;
+      // Show first letter, last letter and length (e.g. B _ _ _ _ _ h for Bethlehem)
+      const skeleton = word.length <= 3
+        ? word[0] + "_".repeat(word.length - 1)
+        : word[0] + " _ ".repeat(word.length - 2) + word[word.length - 1];
+      await m.reply(
+        `💡 *Spelling Hint*\n\n` +
+        `🔤 Word: \`${session.wrong}\`\n` +
+        `📏 Length: *${word.length} letters*\n` +
+        `🔡 Pattern: \`${skeleton}\`\n` +
+        (session.hint ? `📝 Clue: ${session.hint}` : "")
+      );
+    },
+  },
+];
+
+const commands = [...baseCommands, ...spellingCommands];
+module.exports = { commands, checkSpellingAnswer };
