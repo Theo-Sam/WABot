@@ -543,6 +543,8 @@ async function convertBufferToMp4(buf) {
     await execFileAsync(ffmpegBin, [
       '-y', '-i', inputPath,
       '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
+      '-pix_fmt', 'yuv420p',
+      '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-c:a', 'aac', '-b:a', '128k',
       '-movflags', '+faststart',
       '-f', 'mp4', outputPath
@@ -552,12 +554,71 @@ async function convertBufferToMp4(buf) {
       if (converted.length > 1000) return converted;
     }
   } catch (e) {
-    console.error('[igConvert] ffmpeg conversion failed:', e.message?.slice(0, 200));
+    console.error('[igConvert] ffmpeg re-encode failed:', e.message?.slice(0, 200));
   } finally {
     try { fs.unlinkSync(inputPath); } catch {}
     try { fs.unlinkSync(outputPath); } catch {}
   }
   return buf;
+}
+
+/**
+ * Remux an already-MP4 buffer for WhatsApp compatibility:
+ *   1. Fast lossless copy with -movflags +faststart (moves moov atom to front, no re-encode).
+ *   2. Falls back to full re-encode with yuv420p + even dimensions if copy fails.
+ * WhatsApp rejects MP4 files whose moov atom is at the end of the file, and also
+ * rejects 10-bit (yuv420p10le) or HDR colorspaces — both common in CDN-served videos.
+ */
+async function remuxForWhatsApp(buf) {
+  const inputPath = tempFile('input.mp4');
+  const outputPath = tempFile('out.mp4');
+  try {
+    fs.writeFileSync(inputPath, buf);
+    const ffmpegBin = findFfmpegBin();
+
+    // ── Pass 1: fast stream copy (no re-encode) + faststart ──────────────────
+    try {
+      await execFileAsync(ffmpegBin, [
+        '-y', '-i', inputPath,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        '-f', 'mp4', outputPath
+      ], { timeout: 30000 });
+      if (fs.existsSync(outputPath)) {
+        const remuxed = fs.readFileSync(outputPath);
+        if (remuxed.length > 1000) {
+          console.log('[remuxForWhatsApp] stream-copy OK, size:', remuxed.length);
+          return remuxed;
+        }
+      }
+    } catch (e) {
+      console.warn('[remuxForWhatsApp] stream-copy failed, falling back to re-encode:', e.message?.slice(0, 100));
+    }
+
+    // ── Pass 2: full re-encode (handles 10-bit, HDR, odd dimensions) ─────────
+    await execFileAsync(ffmpegBin, [
+      '-y', '-i', inputPath,
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '26',
+      '-pix_fmt', 'yuv420p',
+      '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      '-f', 'mp4', outputPath
+    ], { timeout: 90000 });
+    if (fs.existsSync(outputPath)) {
+      const reencoded = fs.readFileSync(outputPath);
+      if (reencoded.length > 1000) {
+        console.log('[remuxForWhatsApp] re-encode OK, size:', reencoded.length);
+        return reencoded;
+      }
+    }
+  } catch (e) {
+    console.error('[remuxForWhatsApp] all passes failed:', e.message?.slice(0, 200));
+  } finally {
+    try { fs.unlinkSync(inputPath); } catch {}
+    try { fs.unlinkSync(outputPath); } catch {}
+  }
+  return buf; // return original as last resort
 }
 
 /**
@@ -582,14 +643,21 @@ async function igFetchItem(mediaUrl) {
       type = igGuessType(mediaUrl);
     }
 
-    // If it's a video but not MP4, convert it so WhatsApp can play it
-    if (type === 'video' && mimetype && mimetype !== 'video/mp4') {
-      console.log(`[igFetchItem] Converting ${mimetype} → mp4`);
-      const converted = await convertBufferToMp4(buf);
-      return { buffer: converted, type: 'video', mimetype: 'video/mp4' };
+    if (type === 'video') {
+      if (mimetype && mimetype !== 'video/mp4') {
+        // Non-MP4 video (webm, mkv, etc.) → full re-encode to H.264/AAC MP4
+        console.log(`[igFetchItem] Converting ${mimetype} → mp4`);
+        const converted = await convertBufferToMp4(buf);
+        return { buffer: converted, type: 'video', mimetype: 'video/mp4' };
+      } else {
+        // Already MP4 — still remux with -movflags +faststart to fix moov atom position
+        // and ensure yuv420p / even dimensions for WhatsApp compatibility
+        const remuxed = await remuxForWhatsApp(buf);
+        return { buffer: remuxed, type: 'video', mimetype: 'video/mp4' };
+      }
     }
 
-    return { buffer: buf, type, mimetype: mimetype || (type === 'video' ? 'video/mp4' : 'image/jpeg') };
+    return { buffer: buf, type, mimetype: mimetype || 'image/jpeg' };
   } catch { return null; }
 }
 
