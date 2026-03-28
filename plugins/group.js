@@ -411,7 +411,21 @@ _${config.BOT_NAME} · Desam Tech_ ⚡`);
   {
     name: ["tagall", "everyone"],
     category: "group",
-    desc: "Tag all group members",
+    desc: "Tag all group members silently (no name list)",
+    group: true,
+    handler: async (sock, m, { text, groupMeta }) => {
+      if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
+      const members = groupMeta.participants.map((p) => p.id);
+      // Members go into mentions[] only — no @number in the text, so no name list floods the chat.
+      // Everyone still receives a notification ping.
+      const msg = text ? `📢 *${text}*` : `📢 _(${members.length} members tagged)_`;
+      await sock.sendMessage(m.chat, { text: msg, mentions: members });
+    },
+  },
+  {
+    name: ["taglist", "everyone-list"],
+    category: "group",
+    desc: "Tag all members with a visible name list",
     group: true,
     handler: async (sock, m, { text, groupMeta }) => {
       if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
@@ -425,12 +439,13 @@ _${config.BOT_NAME} · Desam Tech_ ⚡`);
   {
     name: ["hidetag"],
     category: "group",
-    desc: "Send hidden tag to all members",
+    desc: "Send hidden tag to all members (alias of tagall)",
     group: true,
     handler: async (sock, m, { text, groupMeta }) => {
       if (!groupMeta) return m.reply("❌ Could not fetch group info. Try again.");
       const members = groupMeta.participants.map((p) => p.id);
-      await sock.sendMessage(m.chat, { text: text || "📢", mentions: members });
+      const msg = text ? `📢 *${text}*` : `📢 _(${members.length} members tagged)_`;
+      await sock.sendMessage(m.chat, { text: msg, mentions: members });
     },
   },
   {
