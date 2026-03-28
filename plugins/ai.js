@@ -390,49 +390,312 @@ _${config.BOT_NAME} · Desam Tech_ ⚡` }, { quoted: { key: m.key, message: m.me
     },
   },
   {
-    name: ["translate", "tr"],
+    name: ["translate", "tr", "tl"],
     category: "ai",
-    desc: "Translate text to any language",
+    desc: "Translate text to any language — supports names, codes, multi-lang, detect & more",
     handler: async (sock, m, { args, text }) => {
-      const lang = args[0] || "en";
-      const query = args.slice(1).join(" ") || (m.quoted?.body) || "";
-      if (!query) return m.usageReply("translate <lang> <text>", "translate es Hello world\n\nLanguage codes: en, es, fr, de, ja, ko, zh, ar, hi, pt, ru, it, tr, etc.");
-      m.react("🌐");
-      try {
-        let translated = "";
+      // ── Language database ───────────────────────────────────────────────────
+      // Each entry: [code, englishName, nativeName, flagEmoji]
+      const LANGS = [
+        ["af","Afrikaans","Afrikaans","🇿🇦"],["ak","Akan","Akan","🇬🇭"],["sq","Albanian","Shqip","🇦🇱"],
+        ["am","Amharic","አማርኛ","🇪🇹"],["ar","Arabic","العربية","🇸🇦"],["hy","Armenian","Հայերեն","🇦🇲"],
+        ["az","Azerbaijani","Azərbaycan","🇦🇿"],["eu","Basque","Euskara","🇪🇸"],["be","Belarusian","Беларуская","🇧🇾"],
+        ["bn","Bengali","বাংলা","🇧🇩"],["bs","Bosnian","Bosanski","🇧🇦"],["bg","Bulgarian","Български","🇧🇬"],
+        ["ca","Catalan","Català","🇪🇸"],["ny","Chichewa","Chichewa","🇲🇼"],["zh-CN","Chinese","中文","🇨🇳"],
+        ["zh-TW","Chinese Traditional","繁體中文","🇹🇼"],["co","Corsican","Corsu","🇫🇷"],["hr","Croatian","Hrvatski","🇭🇷"],
+        ["cs","Czech","Čeština","🇨🇿"],["da","Danish","Dansk","🇩🇰"],["nl","Dutch","Nederlands","🇳🇱"],
+        ["en","English","English","🇬🇧"],["eo","Esperanto","Esperanto","🌍"],["et","Estonian","Eesti","🇪🇪"],
+        ["tl","Filipino","Filipino","🇵🇭"],["fi","Finnish","Suomi","🇫🇮"],["fr","French","Français","🇫🇷"],
+        ["fy","Frisian","Frysk","🇳🇱"],["gl","Galician","Galego","🇪🇸"],["ka","Georgian","ქართული","🇬🇪"],
+        ["de","German","Deutsch","🇩🇪"],["el","Greek","Ελληνικά","🇬🇷"],["gu","Gujarati","ગુજરાતી","🇮🇳"],
+        ["ht","Haitian Creole","Kreyòl Ayisyen","🇭🇹"],["ha","Hausa","Hausa","🇳🇬"],["haw","Hawaiian","ʻŌlelo Hawaiʻi","🌺"],
+        ["iw","Hebrew","עברית","🇮🇱"],["hi","Hindi","हिन्दी","🇮🇳"],["hmn","Hmong","Hmoob","🌏"],
+        ["hu","Hungarian","Magyar","🇭🇺"],["is","Icelandic","Íslenska","🇮🇸"],["ig","Igbo","Igbo","🇳🇬"],
+        ["id","Indonesian","Indonesia","🇮🇩"],["ga","Irish","Gaeilge","🇮🇪"],["it","Italian","Italiano","🇮🇹"],
+        ["ja","Japanese","日本語","🇯🇵"],["jw","Javanese","Javanese","🇮🇩"],["kn","Kannada","ಕನ್ನಡ","🇮🇳"],
+        ["kk","Kazakh","Қазақша","🇰🇿"],["km","Khmer","ខ្មែរ","🇰🇭"],["ko","Korean","한국어","🇰🇷"],
+        ["ku","Kurdish","Kurdî","🏳️"],["ky","Kyrgyz","Кыргызча","🇰🇬"],["lo","Lao","ລາວ","🇱🇦"],
+        ["la","Latin","Latina","🏛️"],["lv","Latvian","Latviešu","🇱🇻"],["lt","Lithuanian","Lietuvių","🇱🇹"],
+        ["lb","Luxembourgish","Lëtzebuergesch","🇱🇺"],["mk","Macedonian","Македонски","🇲🇰"],["mg","Malagasy","Malagasy","🇲🇬"],
+        ["ms","Malay","Melayu","🇲🇾"],["ml","Malayalam","മലയാളം","🇮🇳"],["mt","Maltese","Malti","🇲🇹"],
+        ["mi","Maori","Māori","🇳🇿"],["mr","Marathi","मराठी","🇮🇳"],["mn","Mongolian","Монгол","🇲🇳"],
+        ["my","Myanmar","မြန်မာဘာသာ","🇲🇲"],["ne","Nepali","नेपाली","🇳🇵"],["no","Norwegian","Norsk","🇳🇴"],
+        ["or","Odia","ଓଡ଼ିଆ","🇮🇳"],["ps","Pashto","پښتو","🇦🇫"],["fa","Persian","فارسی","🇮🇷"],
+        ["pl","Polish","Polski","🇵🇱"],["pt","Portuguese","Português","🇧🇷"],["pa","Punjabi","ਪੰਜਾਬੀ","🇮🇳"],
+        ["ro","Romanian","Română","🇷🇴"],["ru","Russian","Русский","🇷🇺"],["sm","Samoan","Samoan","🇼🇸"],
+        ["gd","Scots Gaelic","Gàidhlig","🏴󠁧󠁢󠁳󠁣󠁴󠁿"],["sr","Serbian","Srpski","🇷🇸"],["st","Sesotho","Sesotho","🇱🇸"],
+        ["sn","Shona","Shona","🇿🇼"],["sd","Sindhi","سنڌي","🇵🇰"],["si","Sinhala","සිංහල","🇱🇰"],
+        ["sk","Slovak","Slovenčina","🇸🇰"],["sl","Slovenian","Slovenščina","🇸🇮"],["so","Somali","Soomaali","🇸🇴"],
+        ["es","Spanish","Español","🇪🇸"],["su","Sundanese","Basa Sunda","🇮🇩"],["sw","Swahili","Kiswahili","🇹🇿"],
+        ["sv","Swedish","Svenska","🇸🇪"],["tg","Tajik","Тоҷикӣ","🇹🇯"],["ta","Tamil","தமிழ்","🇮🇳"],
+        ["te","Telugu","తెలుగు","🇮🇳"],["th","Thai","ภาษาไทย","🇹🇭"],["tr","Turkish","Türkçe","🇹🇷"],
+        ["uk","Ukrainian","Українська","🇺🇦"],["ur","Urdu","اردو","🇵🇰"],["ug","Uyghur","ئۇيغۇرچە","🇨🇳"],
+        ["uz","Uzbek","Oʻzbek","🇺🇿"],["vi","Vietnamese","Tiếng Việt","🇻🇳"],["cy","Welsh","Cymraeg","🏴󠁧󠁢󠁷󠁬󠁳󠁿"],
+        ["xh","Xhosa","isiXhosa","🇿🇦"],["yi","Yiddish","ייִדיש","🏳️"],["yo","Yoruba","Yorùbá","🇳🇬"],
+        ["zu","Zulu","isiZulu","🇿🇦"],["tw","Twi","Twi","🇬🇭"],
+      ];
 
-        // 1. Google Translate unofficial free endpoint — most reliable, supports auto-detect
+      // Build lookups
+      const byCode = new Map(LANGS.map(l => [l[0].toLowerCase(), l]));
+      const byName = new Map(LANGS.map(l => [l[1].toLowerCase(), l]));
+      // Also index common aliases / alternate names
+      const ALIASES = {
+        "chinese simplified":"zh-CN","mandarin":"zh-CN","cantonese":"zh-TW",
+        "chinese traditional":"zh-TW","hebrew":"iw","tagalog":"tl","pilipino":"tl",
+        "farsi":"fa","persian":"fa","burmese":"my","myanmar":"my","khmer":"km",
+        "cambodian":"km","punjabi":"pa","urdu":"ur","twi":"tw","akan":"ak",
+        "fante":"ak","ghanaian":"tw","haitian":"ht","haitian creole":"ht",
+      };
+
+      // Resolve a raw string (name or code) → language entry [code, name, native, flag] or null
+      function resolveLang(raw) {
+        const s = String(raw || "").trim().toLowerCase();
+        if (!s) return null;
+        // 1. Exact code
+        if (byCode.has(s)) return byCode.get(s);
+        // 2. Alias
+        if (ALIASES[s]) return byCode.get(ALIASES[s].toLowerCase()) || null;
+        // 3. Exact name
+        if (byName.has(s)) return byName.get(s);
+        // 4. Partial name match (e.g. "span" → Spanish, "portu" → Portuguese)
+        for (const [key, entry] of byName) {
+          if (key.startsWith(s) || s.startsWith(key.slice(0, 4))) return entry;
+        }
+        // 5. Contains match
+        for (const [key, entry] of byName) {
+          if (key.includes(s) || s.includes(key)) return entry;
+        }
+        return null;
+      }
+
+      // Languages that produce romanization (transliteration) in Google's response
+      const TRANSLIT_LANGS = new Set([
+        "ar","iw","hi","bn","ta","te","kn","ml","gu","pa","mr","or","ne","si",
+        "th","lo","my","km","ka","hy","am","el","ru","uk","be","bg","mk","sr","mn",
+        "ja","ko","zh-CN","zh-TW","zh",
+      ]);
+
+      // ── Call Google Translate, returns { translated, translit, detectedCode } ─
+      async function googleTranslate(q, targetCode) {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetCode)}&dt=t&dt=rm&q=${encodeURIComponent(q)}`;
+        const data = await fetchJson(url, { timeout: 12000 });
+        if (!Array.isArray(data) || !Array.isArray(data[0])) return null;
+        const segments = data[0];
+        const translated = segments.map(s => (Array.isArray(s) ? s[0] || "" : "")).join("").trim();
+        const translit   = segments.map(s => (Array.isArray(s) ? s[2] || "" : "")).join("").trim();
+        const detectedCode = typeof data[2] === "string" ? data[2] : null;
+        return { translated, translit: translit || null, detectedCode };
+      }
+
+      // ── MyMemory fallback ────────────────────────────────────────────────────
+      async function myMemoryTranslate(q, srcCode, targetCode) {
+        const pair = `${srcCode || "en"}|${targetCode}`;
+        const data = await fetchJson(
+          `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=${pair}`,
+          { timeout: 10000 }
+        );
+        const result = data?.responseData?.translatedText;
+        if (!result || /INVALID LANGUAGE PAIR/i.test(result)) return null;
+        return result.trim();
+      }
+
+      // ── Translate a single query to a single target, with fallbacks ──────────
+      async function translateOne(q, targetLang) {
+        let result = null;
+        try { result = await googleTranslate(q, targetLang[0]); } catch {}
+        if (result?.translated) return result;
+
+        // MyMemory fallback
         try {
-          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(lang)}&dt=t&q=${encodeURIComponent(query)}`;
-          const data = await fetchJson(url, { timeout: 10000 });
-          // Response: [ [ ["translated", "original", ...], ... ], ..., "detected_lang" ]
-          if (Array.isArray(data) && Array.isArray(data[0])) {
-            translated = data[0].map(seg => (Array.isArray(seg) ? seg[0] : "")).filter(Boolean).join("").trim();
-          }
+          const mm = await myMemoryTranslate(q, "auto", targetLang[0]);
+          if (mm) return { translated: mm, translit: null, detectedCode: null };
         } catch {}
 
-        // 2. MyMemory fallback — works with explicit language pairs
-        if (!translated) {
-          try {
-            const data = await fetchJson(
-              `https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=en|${lang}`,
-              { timeout: 10000 }
-            );
-            const result = data?.responseData?.translatedText;
-            if (result && !/INVALID LANGUAGE PAIR/i.test(result)) translated = result.trim();
-          } catch {}
-        }
-
-        // 3. AI fallback — only output the translation, nothing else
-        if (!translated) {
-          translated = await pollinate(
-            `Translate the following text to the language with code "${lang}". Output ONLY the translated text with no explanation:\n\n${query}`,
+        // AI fallback
+        try {
+          const ai = await pollinate(
+            `Translate the following text to ${targetLang[1]}. Output ONLY the translated text, nothing else:\n\n${q}`,
             "openai"
-          ).catch(() => "");
+          );
+          if (ai) return { translated: ai.trim(), translit: null, detectedCode: null };
+        } catch {}
+
+        return null;
+      }
+
+      // ────────────────────────────────────────────────────────────────────────
+      // Parse command
+      // ────────────────────────────────────────────────────────────────────────
+      const firstArg = (args[0] || "").toLowerCase().trim();
+
+      // ── .translate help ──────────────────────────────────────────────────────
+      if (firstArg === "help") {
+        return m.reply(
+          `🌐 *Translate — Usage Guide*\n\n` +
+          `*Basic translation:*\n` +
+          `▸ .translate French Hello world\n` +
+          `▸ .translate Spanish Good morning\n` +
+          `▸ .translate Arabic Thank you\n\n` +
+          `*Using language codes:*\n` +
+          `▸ .translate fr Bonjour\n` +
+          `▸ .translate es Hello\n` +
+          `▸ .translate zh-CN Hello\n\n` +
+          `*Reply to any message:*\n` +
+          `▸ Reply to a message → .translate German\n` +
+          `▸ Reply to a message → .translate ja\n\n` +
+          `*Translate to multiple languages at once:*\n` +
+          `▸ .translate fr,es,de Hello world\n` +
+          `▸ .translate Arabic,French,Swahili Good night\n\n` +
+          `*Detect language:*\n` +
+          `▸ .translate detect Bonjour le monde\n` +
+          `▸ .translate detect こんにちは\n\n` +
+          `*Browse languages:*\n` +
+          `▸ .translate list\n\n` +
+          `────────────────────────────────\n` +
+          `_${config.BOT_NAME} · Desam Tech_ ⚡`
+        );
+      }
+
+      // ── .translate list ──────────────────────────────────────────────────────
+      if (firstArg === "list" || firstArg === "langs" || firstArg === "languages") {
+        const rows = LANGS.map(([code, name, native, flag]) =>
+          `${flag} ${name} (${code}) — _${native}_`
+        );
+        const half = Math.ceil(rows.length / 2);
+        return m.reply(
+          `🌍 *Supported Languages (${LANGS.length})*\n\n` +
+          rows.slice(0, half).join("\n") + "\n\n" +
+          rows.slice(half).join("\n") + "\n\n" +
+          `────────────────────────────────\n` +
+          `_Use .translate help for usage examples_`
+        );
+      }
+
+      // ── .translate detect <text> ─────────────────────────────────────────────
+      if (firstArg === "detect" || firstArg === "id" || firstArg === "identify") {
+        const query = args.slice(1).join(" ").trim() || m.quoted?.body || "";
+        if (!query) return m.reply("❓ Provide text to detect: .translate detect <text>");
+        m.react("🔍");
+        try {
+          const result = await googleTranslate(query, "en");
+          if (!result) return m.apiErrorReply("Language detection");
+          const detLang = result.detectedCode ? (byCode.get(result.detectedCode.toLowerCase()) || null) : null;
+          const displayName = detLang ? `${detLang[3]} *${detLang[1]}* (${detLang[0]}) — _${detLang[2]}_` : `code: \`${result.detectedCode || "unknown"}\``;
+          const preview = query.length > 80 ? query.slice(0, 80) + "…" : query;
+          await m.reply(
+            `🔍 *Language Detection*\n\n` +
+            `*Text:* ${preview}\n\n` +
+            `*Detected:* ${displayName}\n\n` +
+            `────────────────────────────────\n` +
+            `_${config.BOT_NAME} · Desam Tech_ ⚡`
+          );
+          m.react("✅");
+        } catch {
+          m.react("❌");
+          return m.apiErrorReply("Language detection");
+        }
+        return;
+      }
+
+      // ── Multi-language: detect commas in first arg ───────────────────────────
+      const isMulti = firstArg.includes(",");
+      if (isMulti) {
+        const targets = firstArg.split(",").map(s => s.trim()).filter(Boolean)
+          .map(s => resolveLang(s)).filter(Boolean);
+        if (!targets.length) return m.reply("❌ No valid languages found. Use .translate list to see all languages.");
+        const query = args.slice(1).join(" ").trim() || m.quoted?.body || "";
+        if (!query) return m.reply(`❌ Provide text after the languages.\n_Example: .translate fr,es,de Hello world_`);
+        if (query.length > 500) return m.reply("❌ Text too long. Keep it under 500 characters for multi-language translation.");
+        m.react("🌐");
+        try {
+          const results = await Promise.all(targets.map(async lang => {
+            const res = await translateOne(query, lang);
+            return { lang, res };
+          }));
+          const lines = results.map(({ lang, res }) => {
+            if (!res?.translated) return `${lang[3]} *${lang[1]}:* ❌ Failed`;
+            return `${lang[3]} *${lang[1]}:* ${res.translated}`;
+          });
+          // Detected source language from first successful result
+          const firstDetected = results.find(r => r.res?.detectedCode)?.res?.detectedCode;
+          const srcLang = firstDetected ? byCode.get(firstDetected.toLowerCase()) : null;
+          const srcLine = srcLang
+            ? `*From:* ${srcLang[3]} ${srcLang[1]}\n`
+            : "";
+          const preview = query.length > 100 ? query.slice(0, 100) + "…" : query;
+          await m.reply(
+            `🌐 *Translation (${targets.length} languages)*\n\n` +
+            `*Text:* ${preview}\n` +
+            srcLine + `\n` +
+            lines.join("\n") + `\n\n` +
+            `────────────────────────────────\n` +
+            `_${config.BOT_NAME} · Desam Tech_ ⚡`
+          );
+          m.react("✅");
+        } catch {
+          m.react("❌");
+          return m.apiErrorReply("Translation");
+        }
+        return;
+      }
+
+      // ── Single-language translation ──────────────────────────────────────────
+      const targetLang = resolveLang(firstArg);
+      if (!targetLang && firstArg) {
+        return m.reply(
+          `❌ Unknown language: *${args[0]}*\n\n` +
+          `Use a name like _French_, _Spanish_, _Arabic_ or a code like _fr_, _es_, _ar_.\n` +
+          `Type *.translate list* to see all supported languages.`
+        );
+      }
+
+      const finalLang = targetLang || byCode.get("en");
+      const query = args.slice(1).join(" ").trim() || m.quoted?.body || "";
+
+      if (!query) {
+        return m.usageReply(
+          "translate <language> <text>",
+          "translate French Hello, how are you?\n" +
+          "translate Arabic Good morning\n" +
+          "translate es,fr,de Hello world\n" +
+          "translate detect Bonjour le monde\n" +
+          "translate list — see all languages\n" +
+          "translate help — full guide"
+        );
+      }
+
+      m.react("🌐");
+      try {
+        const result = await translateOne(query, finalLang);
+        if (!result?.translated) {
+          m.react("❌");
+          return m.apiErrorReply("Translation");
         }
 
-        if (!translated) return m.apiErrorReply("Translation");
-        await m.reply(`🌐 *Translation* (→ ${lang})\n\n${translated.trim()}`);
+        const { translated, translit, detectedCode } = result;
+
+        // Source language
+        const srcLang = detectedCode ? byCode.get(detectedCode.toLowerCase()) : null;
+        const fromLine = srcLang
+          ? `*From:* ${srcLang[3]} ${srcLang[1]} (_${srcLang[2]}_)\n`
+          : "";
+
+        // Transliteration (only for non-Latin target scripts)
+        const showTranslit = translit && TRANSLIT_LANGS.has(finalLang[0]) && translit !== translated;
+        const translitLine = showTranslit ? `\n*Pronunciation:* _${translit}_` : "";
+
+        const preview = query.length > 120 ? query.slice(0, 120) + "…" : query;
+
+        await m.reply(
+          `🌐 *Translation*\n\n` +
+          `*Text:* ${preview}\n` +
+          fromLine +
+          `*To:* ${finalLang[3]} ${finalLang[1]} (_${finalLang[2]}_)\n\n` +
+          `*Result:*\n${translated}` +
+          translitLine + `\n\n` +
+          `────────────────────────────────\n` +
+          `_${config.BOT_NAME} · Desam Tech_ ⚡`
+        );
         m.react("✅");
       } catch {
         m.react("❌");
