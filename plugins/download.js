@@ -563,11 +563,20 @@ async function convertBufferToMp4(buf) {
 }
 
 /**
- * Remux an already-MP4 buffer for WhatsApp compatibility:
- *   1. Fast lossless copy with -movflags +faststart (moves moov atom to front, no re-encode).
- *   2. Falls back to full re-encode with yuv420p + even dimensions if copy fails.
- * WhatsApp rejects MP4 files whose moov atom is at the end of the file, and also
- * rejects 10-bit (yuv420p10le) or HDR colorspaces — both common in CDN-served videos.
+ * Re-encode any video buffer to a WhatsApp-compatible MP4.
+ *
+ * Stream-copy is NOT used because Instagram Reels increasingly serve H.265/HEVC
+ * and AV1 video. A stream-copy would preserve the original (incompatible) codec
+ * and WhatsApp on most Android devices would reject playback with "something is
+ * wrong with the video file".
+ *
+ * Instead we always transcode to H.264 + AAC-LC, which is universally supported:
+ *   - Video: libx264, ultrafast preset (encodes ~5x realtime — fast enough for a bot)
+ *   - Pixel format: yuv420p  (8-bit, required by WhatsApp)
+ *   - Dimensions: padded to even width × height  (H.264 requirement)
+ *   - Resolution: scaled down to ≤1280px on longest side  (avoids huge files)
+ *   - Audio: AAC-LC 128 kbps  (WhatsApp does not support HE-AAC v2)
+ *   - moov atom: moved to the front with +faststart  (required for streaming)
  */
 async function remuxForWhatsApp(buf) {
   const inputPath = tempFile('input.mp4');
@@ -575,50 +584,35 @@ async function remuxForWhatsApp(buf) {
   try {
     fs.writeFileSync(inputPath, buf);
     const ffmpegBin = findFfmpegBin();
-
-    // ── Pass 1: fast stream copy (no re-encode) + faststart ──────────────────
-    try {
-      await execFileAsync(ffmpegBin, [
-        '-y', '-i', inputPath,
-        '-c', 'copy',
-        '-movflags', '+faststart',
-        '-f', 'mp4', outputPath
-      ], { timeout: 30000 });
-      if (fs.existsSync(outputPath)) {
-        const remuxed = fs.readFileSync(outputPath);
-        if (remuxed.length > 1000) {
-          console.log('[remuxForWhatsApp] stream-copy OK, size:', remuxed.length);
-          return remuxed;
-        }
-      }
-    } catch (e) {
-      console.warn('[remuxForWhatsApp] stream-copy failed, falling back to re-encode:', e.message?.slice(0, 100));
-    }
-
-    // ── Pass 2: full re-encode (handles 10-bit, HDR, odd dimensions) ─────────
+    // Scale down if width or height > 1280, preserve aspect ratio, then ensure even dimensions.
+    const scaleFilter = 'scale=\'if(gt(iw,ih),min(iw,1280),-2)\':\'if(gt(iw,ih),-2,min(ih,1280))\',scale=trunc(iw/2)*2:trunc(ih/2)*2';
     await execFileAsync(ffmpegBin, [
       '-y', '-i', inputPath,
-      '-c:v', 'libx264', '-preset', 'fast', '-crf', '26',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',   // ~5× realtime; trades file size for speed
+      '-crf', '26',
       '-pix_fmt', 'yuv420p',
-      '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-c:a', 'aac', '-b:a', '128k',
+      '-vf', scaleFilter,
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ac', '2',               // stereo; WhatsApp handles mono/stereo
       '-movflags', '+faststart',
-      '-f', 'mp4', outputPath
-    ], { timeout: 90000 });
+      '-f', 'mp4', outputPath,
+    ], { timeout: 180000 });    // 3 min — plenty for a 3-min reel at ultrafast
     if (fs.existsSync(outputPath)) {
-      const reencoded = fs.readFileSync(outputPath);
-      if (reencoded.length > 1000) {
-        console.log('[remuxForWhatsApp] re-encode OK, size:', reencoded.length);
-        return reencoded;
+      const result = fs.readFileSync(outputPath);
+      if (result.length > 1000) {
+        console.log('[remuxForWhatsApp] H.264 re-encode OK, size:', result.length);
+        return result;
       }
     }
   } catch (e) {
-    console.error('[remuxForWhatsApp] all passes failed:', e.message?.slice(0, 200));
+    console.error('[remuxForWhatsApp] re-encode failed:', e.message?.slice(0, 200));
   } finally {
     try { fs.unlinkSync(inputPath); } catch {}
     try { fs.unlinkSync(outputPath); } catch {}
   }
-  return buf; // return original as last resort
+  return buf; // last resort — return original (will likely still fail, but we tried)
 }
 
 /**
