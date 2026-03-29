@@ -126,7 +126,7 @@ async function handleBoost(sock, m, { text }, type) {
 }
 
 // ── Commands ───────────────────────────────────────────────────────────────
-module.exports = [
+const commands = [
   // ── Menu ────────────────────────────────────────────────────────────────
   {
     name: ["tiktokboost", "tikboost", "ttboost", "tiktok"],
@@ -220,3 +220,5 @@ module.exports = [
     },
   },
 ];
+
+module.exports = { commands };
