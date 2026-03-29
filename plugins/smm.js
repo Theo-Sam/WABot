@@ -130,7 +130,7 @@ module.exports = [
   // ── Menu ────────────────────────────────────────────────────────────────
   {
     name: ["tiktokboost", "tikboost", "ttboost", "tiktok"],
-    category: "tiktok",
+    category: "boosting",
     desc: "Free TikTok boosting menu",
     handler: async (sock, m) => {
       const viewCd  = fmtCooldown(BOOST.views.cooldown);
@@ -160,7 +160,7 @@ module.exports = [
   // ── TikTok Views ────────────────────────────────────────────────────────
   {
     name: ["ttviews", "tiktokviews", "tikviews"],
-    category: "tiktok",
+    category: "boosting",
     desc: `Get ${BOOST.views.qty} free TikTok views (once every ${BOOST.views.cooldown / 60000} mins)`,
     usage: "<tiktok_link>",
     handler: (sock, m, args) => handleBoost(sock, m, args, "views"),
@@ -169,7 +169,7 @@ module.exports = [
   // ── TikTok Likes ────────────────────────────────────────────────────────
   {
     name: ["ttlikes", "tiktoklikes", "tiklikes"],
-    category: "tiktok",
+    category: "boosting",
     desc: `Get ${BOOST.likes.qty} free TikTok likes (once every ${BOOST.likes.cooldown / 60000} mins)`,
     usage: "<tiktok_link>",
     handler: (sock, m, args) => handleBoost(sock, m, args, "likes"),
@@ -178,7 +178,7 @@ module.exports = [
   // ── Order Status ────────────────────────────────────────────────────────
   {
     name: ["ttcheck", "tikcheck", "tiktokcheck"],
-    category: "tiktok",
+    category: "boosting",
     desc: "Check a TikTok boost order status by ID",
     usage: "<order_id>",
     handler: async (sock, m, { text }) => {

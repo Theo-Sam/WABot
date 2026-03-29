@@ -157,7 +157,7 @@ ${CHANNEL_FOOTER}`;
 ];
 
 const CAT_EMOJIS = {
-  main: "🏠", ai: "🤖", download: "📥", media: "🎵", sticker: "🎨",
+  main: "🏠", ai: "🤖", boosting: "🎵", download: "📥", media: "🎶", sticker: "🎨",
   fun: "🎮", tools: "🔧", lifestyle: "🌿", education: "📚", sports: "⚽",
   search: "🔍", group: "👥", settings: "⚙️", notes: "📝", religious: "🙏",
   utility: "🔨", status: "📡", reactions: "💫", privacy: "🔒",
@@ -165,14 +165,14 @@ const CAT_EMOJIS = {
 };
 
 const CAT_LABELS = {
-  main: "General", ai: "AI & Chat", download: "Downloads",
-  media: "Media & Audio", sticker: "Stickers", fun: "Fun & Games",
-  tools: "Tools & Calculators", lifestyle: "Lifestyle", education: "Education",
-  sports: "Sports", search: "Search & Info", group: "Group Admin",
-  settings: "Settings", notes: "Notes & Reminders", religious: "Religious",
-  utility: "Utility", status: "Status", reactions: "Reactions",
-  privacy: "Privacy", converter: "Converter", anime: "Anime",
-  games: "Games", misc: "Miscellaneous", owner: "Owner Only",
+  main: "General", ai: "AI & Chat", boosting: "TikTok Boosting",
+  download: "Downloads", media: "Media & Audio", sticker: "Stickers",
+  fun: "Fun & Games", tools: "Tools & Calculators", lifestyle: "Lifestyle",
+  education: "Education", sports: "Sports", search: "Search & Info",
+  group: "Group Admin", settings: "Settings", notes: "Notes & Reminders",
+  religious: "Religious", utility: "Utility", status: "Status",
+  reactions: "Reactions", privacy: "Privacy", converter: "Converter",
+  anime: "Anime", games: "Games", misc: "Miscellaneous", owner: "Owner Only",
 };
 
 const CAT_ORDER = [
