@@ -31,7 +31,6 @@
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@hapi/boom": "^10.0.1",
-    "@imgly/background-removal-node": "^1.4.5",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "api-dylux": "^1.8.6",
     "axios": "^1.7.9",
