@@ -584,8 +584,10 @@ async function remuxForWhatsApp(buf) {
   try {
     fs.writeFileSync(inputPath, buf);
     const ffmpegBin = findFfmpegBin();
-    // Scale down if width or height > 1280, preserve aspect ratio, then ensure even dimensions.
-    const scaleFilter = 'scale=\'if(gt(iw,ih),min(iw,1280),-2)\':\'if(gt(iw,ih),-2,min(ih,1280))\',scale=trunc(iw/2)*2:trunc(ih/2)*2';
+    // Ensure even width & height (H.264 requirement). Keep original resolution —
+    // WhatsApp supports up to 1080p fine, and the complex if() scale expressions
+    // can confuse some ffmpeg builds causing a silent failure.
+    const scaleFilter = 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
     await execFileAsync(ffmpegBin, [
       '-y', '-i', inputPath,
       '-c:v', 'libx264',
@@ -900,10 +902,18 @@ async function igDownload(url) {
     try {
       const result = await tryApis[i]();
 
-      // Last entry (yt-dlp) returns { buffer, type } objects directly
+      // Last entry (yt-dlp) returns { buffer, type } objects directly.
+      // Still run videos through remuxForWhatsApp so they get H.264/faststart.
       if (i === tryApis.length - 1) {
-        if (result?.length) return result;
-        continue;
+        if (!result?.length) continue;
+        const ytdlpProcessed = await Promise.all(result.map(async item => {
+          if (item.type === 'video') {
+            const remuxed = await remuxForWhatsApp(item.buffer);
+            return { ...item, buffer: remuxed, mimetype: 'video/mp4' };
+          }
+          return item;
+        }));
+        return ytdlpProcessed;
       }
 
       // All others return URL arrays — fetch each to a buffer
@@ -914,8 +924,13 @@ async function igDownload(url) {
       );
       const valid = items.filter(Boolean);
       if (valid.length) {
-        console.log(`[igDownload] service #${i + 1} succeeded (${valid.length} items)`);
-        return valid;
+        // Many APIs return the video + its thumbnail image as separate items.
+        // If there are any videos, drop all images — they're just cover thumbnails.
+        // Only keep all images when there are NO videos (genuine photo carousel).
+        const hasVideo = valid.some(item => item.type === 'video');
+        const deduped = hasVideo ? valid.filter(item => item.type === 'video') : valid;
+        console.log(`[igDownload] service #${i + 1} succeeded (${deduped.length} items, hasVideo=${hasVideo})`);
+        return deduped;
       }
     } catch (e) {
       // Silently skip failed services
