@@ -129,27 +129,27 @@ async function handleBoost(sock, m, { text }, type) {
 module.exports = [
   // ── Menu ────────────────────────────────────────────────────────────────
   {
-    name: ["boosting", "boost", "socialboosting", "boostmenu"],
-    category: "boosting",
-    desc: "Free social boosting menu",
+    name: ["tiktokboost", "tikboost", "ttboost", "tiktok"],
+    category: "tiktok",
+    desc: "Free TikTok boosting menu",
     handler: async (sock, m) => {
       const viewCd  = fmtCooldown(BOOST.views.cooldown);
       const likesCd = fmtCooldown(BOOST.likes.cooldown);
       await m.reply(
         `╔══════════════════════════════╗\n` +
-        `║  🚀  *Social Boosting*  🚀  ║\n` +
+        `║  🎵  *TikTok Boosting*  🎵  ║\n` +
         `╚══════════════════════════════╝\n\n` +
         `Boost your TikTok videos for *free!*\n\n` +
-        `👁️ *TikTok Views*\n` +
+        `👁️ *Views*\n` +
         `  \`${config.PREFIX}ttviews <link>\`\n` +
         `  📦 ${BOOST.views.qty} views per boost\n` +
         `  ⏱ Once every ${viewCd}\n\n` +
-        `❤️ *TikTok Likes*\n` +
+        `❤️ *Likes*\n` +
         `  \`${config.PREFIX}ttlikes <link>\`\n` +
         `  📦 ${BOOST.likes.qty} likes per boost\n` +
         `  ⏱ Once every ${likesCd}\n\n` +
-        `📦 *Check Order Status*\n` +
-        `  \`${config.PREFIX}boostcheck <order_id>\`\n\n` +
+        `📦 *Check Order*\n` +
+        `  \`${config.PREFIX}ttcheck <order_id>\`\n\n` +
         `────────────────────────────────\n` +
         `_Just paste your TikTok video link — no quantity needed!_\n` +
         `_${config.BOT_NAME} · Desam Tech_ ⚡`
@@ -159,8 +159,8 @@ module.exports = [
 
   // ── TikTok Views ────────────────────────────────────────────────────────
   {
-    name: ["ttviews", "tiktokviews", "tikviews", "boostviews"],
-    category: "boosting",
+    name: ["ttviews", "tiktokviews", "tikviews"],
+    category: "tiktok",
     desc: `Get ${BOOST.views.qty} free TikTok views (once every ${BOOST.views.cooldown / 60000} mins)`,
     usage: "<tiktok_link>",
     handler: (sock, m, args) => handleBoost(sock, m, args, "views"),
@@ -168,8 +168,8 @@ module.exports = [
 
   // ── TikTok Likes ────────────────────────────────────────────────────────
   {
-    name: ["ttlikes", "tiktoklikes", "tiklikes", "boostlikes"],
-    category: "boosting",
+    name: ["ttlikes", "tiktoklikes", "tiklikes"],
+    category: "tiktok",
     desc: `Get ${BOOST.likes.qty} free TikTok likes (once every ${BOOST.likes.cooldown / 60000} mins)`,
     usage: "<tiktok_link>",
     handler: (sock, m, args) => handleBoost(sock, m, args, "likes"),
@@ -177,13 +177,13 @@ module.exports = [
 
   // ── Order Status ────────────────────────────────────────────────────────
   {
-    name: ["boostcheck", "boostorder", "booststatus"],
-    category: "boosting",
-    desc: "Check a boost order status by ID",
+    name: ["ttcheck", "tikcheck", "tiktokcheck"],
+    category: "tiktok",
+    desc: "Check a TikTok boost order status by ID",
     usage: "<order_id>",
     handler: async (sock, m, { text }) => {
       if (!text || !text.trim()) {
-        return m.reply(`Usage: \`${config.PREFIX}boostcheck <order_id>\`\nExample: \`${config.PREFIX}boostcheck 12345678\``);
+        return m.reply(`Usage: \`${config.PREFIX}ttcheck <order_id>\`\nExample: \`${config.PREFIX}ttcheck 12345678\``);
       }
       const orderId = text.trim();
       m.react("🔍");
