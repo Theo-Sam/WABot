@@ -2,7 +2,6 @@ const config = require("../config");
 const axios = require("axios");
 
 const SMM_API = "https://smmraja.com/api/v2";
-const SMM_KEY = process.env.SMMRAJA_API_KEY || "";
 
 // ── TikTok free boost config ───────────────────────────────────────────────
 const BOOST = {
@@ -35,7 +34,8 @@ setInterval(() => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 async function smmRequest(params) {
-  if (!SMM_KEY) throw new Error("SMM API key not configured");
+  const SMM_KEY = process.env.SMMRAJA_API_KEY || "";
+  if (!SMM_KEY) throw new Error("SMMRAJA_API_KEY is not set in .env — add it and restart the bot");
   const body = new URLSearchParams({ key: SMM_KEY, ...params });
   const res = await axios.post(SMM_API, body.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
