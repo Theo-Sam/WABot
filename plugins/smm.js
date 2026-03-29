@@ -129,9 +129,9 @@ async function handleBoost(sock, m, { text }, type) {
 const commands = [
   // ── Menu ────────────────────────────────────────────────────────────────
   {
-    name: ["tiktokboost", "tikboost", "ttboost", "tiktok"],
+    name: ["boosting", "tiktokboost"],
     category: "boosting",
-    desc: "Free TikTok boosting menu",
+    desc: "Social Media Boosting menu",
     handler: async (sock, m) => {
       const viewCd  = fmtCooldown(BOOST.views.cooldown);
       const likesCd = fmtCooldown(BOOST.likes.cooldown);
@@ -159,27 +159,27 @@ const commands = [
 
   // ── TikTok Views ────────────────────────────────────────────────────────
   {
-    name: ["ttviews", "tiktokviews", "tikviews"],
+    name: ["ttviews", "tiktokviews"],
     category: "boosting",
-    desc: `Get ${BOOST.views.qty} free TikTok views (once every ${BOOST.views.cooldown / 60000} mins)`,
+    desc: `🎵 TikTok · ${BOOST.views.qty} free views · every ${BOOST.views.cooldown / 60000} mins`,
     usage: "<tiktok_link>",
     handler: (sock, m, args) => handleBoost(sock, m, args, "views"),
   },
 
   // ── TikTok Likes ────────────────────────────────────────────────────────
   {
-    name: ["ttlikes", "tiktoklikes", "tiklikes"],
+    name: ["ttlikes", "tiktoklikes"],
     category: "boosting",
-    desc: `Get ${BOOST.likes.qty} free TikTok likes (once every ${BOOST.likes.cooldown / 60000} mins)`,
+    desc: `🎵 TikTok · ${BOOST.likes.qty} free likes · every ${BOOST.likes.cooldown / 60000} mins`,
     usage: "<tiktok_link>",
     handler: (sock, m, args) => handleBoost(sock, m, args, "likes"),
   },
 
   // ── Order Status ────────────────────────────────────────────────────────
   {
-    name: ["ttcheck", "tikcheck", "tiktokcheck"],
+    name: ["ttcheck", "boostcheck"],
     category: "boosting",
-    desc: "Check a TikTok boost order status by ID",
+    desc: "Check a boost order status by ID",
     usage: "<order_id>",
     handler: async (sock, m, { text }) => {
       if (!text || !text.trim()) {

@@ -165,7 +165,7 @@ const CAT_EMOJIS = {
 };
 
 const CAT_LABELS = {
-  main: "General", ai: "AI & Chat", boosting: "TikTok Boosting",
+  main: "General", ai: "AI & Chat", boosting: "Social Media Boosting",
   download: "Downloads", media: "Media & Audio", sticker: "Stickers",
   fun: "Fun & Games", tools: "Tools & Calculators", lifestyle: "Lifestyle",
   education: "Education", sports: "Sports", search: "Search & Info",
@@ -182,6 +182,65 @@ const CAT_ORDER = [
   "status", "reactions", "privacy", "converter", "anime",
   "games", "misc", "owner",
 ];
+
+// Platform groups for the boosting category.
+// Add a new entry here when a new platform is integrated.
+const BOOSTING_PLATFORM_GROUPS = [
+  {
+    label: "TikTok",
+    emoji: "🎵",
+    commands: ["ttviews", "ttlikes"],
+  },
+  // { label: "Instagram", emoji: "📸", commands: ["igviews", "iglikes", "igfollowers"] },
+  // { label: "YouTube",   emoji: "▶️",  commands: ["ytviews", "ytlikes", "ytsubs"] },
+  // { label: "Facebook",  emoji: "👥",  commands: ["fbviews", "fblikes"] },
+];
+const BOOSTING_MGMT_COMMANDS = ["ttcheck", "boostcheck", "boosting"];
+
+function buildBoostingMenu(catCmds) {
+  const byPrimary = new Map(catCmds.map(c => [c.primary, c]));
+
+  let msg = `╔══════════════════════════════╗\n`;
+  msg += `║  🚀  *SOCIAL MEDIA BOOSTING*  ║\n`;
+  msg += `║   Free engagement services   ║\n`;
+  msg += `╚══════════════════════════════╝\n\n`;
+  msg += `Boost your social media *for free!*\n`;
+  msg += `Just paste the link — no quantity needed.\n\n`;
+
+  // Platform sections
+  for (const platform of BOOSTING_PLATFORM_GROUPS) {
+    const platformCmds = platform.commands
+      .map(name => byPrimary.get(name))
+      .filter(Boolean);
+    if (!platformCmds.length) continue;
+
+    msg += `${platform.emoji} *— ${platform.label} —*\n`;
+    for (const cmd of platformCmds) {
+      msg += `  ▸ \`${config.PREFIX}${cmd.primary}\` _${cmd.desc}_\n`;
+      if (cmd.usage) msg += `    Usage: ${config.PREFIX}${cmd.primary} ${cmd.usage}\n`;
+    }
+    msg += "\n";
+  }
+
+  // Management section — any command not in a platform group
+  const mgmtCmds = catCmds.filter(c =>
+    !BOOSTING_PLATFORM_GROUPS.some(p => p.commands.includes(c.primary)) &&
+    c.primary !== "boosting"
+  );
+  if (mgmtCmds.length) {
+    msg += `📦 *— Order Management —*\n`;
+    for (const cmd of mgmtCmds) {
+      msg += `  ▸ \`${config.PREFIX}${cmd.primary}\` _${cmd.desc}_\n`;
+      if (cmd.usage) msg += `    Usage: ${config.PREFIX}${cmd.primary} ${cmd.usage}\n`;
+    }
+    msg += "\n";
+  }
+
+  msg += `────────────────────────────────\n`;
+  msg += `💡 *${config.PREFIX}menu* — back to all categories\n`;
+  msg += `_${config.BOT_NAME} · Desam Tech_ ⚡`;
+  return msg;
+}
 
 function getCategoryMenu(cat, cmds) {
   const seen = new Set();
@@ -207,6 +266,9 @@ function getCategoryMenu(cat, cmds) {
   }
 
   if (catCmds.length === 0) return null;
+
+  // Custom grouped layout for the boosting category
+  if (cat === "boosting") return buildBoostingMenu(catCmds);
 
   catCmds.sort((a, b) => a.primary.localeCompare(b.primary));
 
