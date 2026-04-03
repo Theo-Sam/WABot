@@ -181,7 +181,7 @@ function scheduleYtDlpUpdate() {
     verifyStartupRequirements();
     startServer();
     startHealthWatchdog();
-    scheduleYtDlpUpdate(); // non-blocking background update
+    // yt-dlp auto-update disabled
     console.log('🚀 Starting bot...\n');
     await startBot();
     console.log('\n✅ Bot is ready!');
