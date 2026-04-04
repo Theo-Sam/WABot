@@ -1,8 +1,231 @@
 const config = require("../config");
 const { fetchJson, pickNonRepeating } = require("../lib/helpers");
 
-const DEFAULT_BIBLE_VERSIONS = ["kjv", "web", "bbe"];
+// ── Translation sets ──────────────────────────────────────────────────────────
+// Versions served directly by bible-api.com (public domain)
+const BIBLE_API_VERSIONS = new Set(["kjv", "web", "bbe", "asv", "darby", "youngs"]);
+// NIV and NET (served by labs.bible.org — NET is the closest free modern equiv.)
+const NIV_VERSIONS = new Set(["niv", "net"]);
+// Ghanaian language bibles (loaded from GitHub CDN, cached in memory)
+const GHANAIAN_VERSIONS = new Set(["twi", "ewe"]);
 
+// KJV is first (primary), NIV second, WEB third
+const DEFAULT_BIBLE_VERSIONS = ["kjv", "niv", "web"];
+
+const VERSION_LABELS = {
+  kjv: "King James Version (KJV)",
+  niv: "New International Version (NIV) — NET Bible",
+  net: "New English Translation (NET Bible)",
+  web: "World English Bible (WEB)",
+  bbe: "Bible in Basic English (BBE)",
+  asv: "American Standard Version (ASV)",
+  darby: "Darby Translation",
+  youngs: "Young's Literal Translation (YLT)",
+  twi: "Twi Bible 🇬🇭 (Akuapem Twi)",
+  ewe: "Ewe Bible 🇬🇭",
+};
+
+const GHANAIAN_BIBLE_URLS = {
+  twi: "https://raw.githubusercontent.com/codeDeSyntax/multi-language-bible-json-twi-json/main/twiBible.json",
+  ewe: "https://raw.githubusercontent.com/codeDeSyntax/multi-language-bible-json-twi-json/main/eweBible.json",
+};
+
+// In-memory cache for Ghanaian bibles (persists across requests in same process)
+const _ghanaianCache = new Map();
+const _ghanaianLoading = new Map();
+
+// ── Book name mapping ─────────────────────────────────────────────────────────
+// Maps user abbreviations/aliases → canonical book name (as used in Ghanaian JSON files)
+const BOOK_NAME_MAP = {
+  genesis: "Genesis", gen: "Genesis", ge: "Genesis", gn: "Genesis",
+  exodus: "Exodus", exod: "Exodus", ex: "Exodus", exo: "Exodus",
+  leviticus: "Leviticus", lev: "Leviticus", le: "Leviticus", lv: "Leviticus",
+  numbers: "Numbers", num: "Numbers", nu: "Numbers", nm: "Numbers",
+  deuteronomy: "Deuteronomy", deut: "Deuteronomy", dt: "Deuteronomy", de: "Deuteronomy",
+  joshua: "Joshua", josh: "Joshua", jos: "Joshua",
+  judges: "Judges", judg: "Judges", jdg: "Judges", jg: "Judges",
+  ruth: "Ruth", rut: "Ruth", ru: "Ruth",
+  "1 samuel": "I Samuel", "1samuel": "I Samuel", "1 sam": "I Samuel", "1sam": "I Samuel", "1sa": "I Samuel", "i samuel": "I Samuel", "i sam": "I Samuel",
+  "2 samuel": "II Samuel", "2samuel": "II Samuel", "2 sam": "II Samuel", "2sam": "II Samuel", "2sa": "II Samuel", "ii samuel": "II Samuel", "ii sam": "II Samuel",
+  "1 kings": "I Kings", "1kings": "I Kings", "1 kgs": "I Kings", "1kgs": "I Kings", "1ki": "I Kings", "i kings": "I Kings",
+  "2 kings": "II Kings", "2kings": "II Kings", "2 kgs": "II Kings", "2kgs": "II Kings", "2ki": "II Kings", "ii kings": "II Kings",
+  "1 chronicles": "I Chronicles", "1chronicles": "I Chronicles", "1 chr": "I Chronicles", "1chr": "I Chronicles", "1ch": "I Chronicles", "i chronicles": "I Chronicles", "i chr": "I Chronicles",
+  "2 chronicles": "II Chronicles", "2chronicles": "II Chronicles", "2 chr": "II Chronicles", "2chr": "II Chronicles", "2ch": "II Chronicles", "ii chronicles": "II Chronicles", "ii chr": "II Chronicles",
+  ezra: "Ezra", ezr: "Ezra",
+  nehemiah: "Nehemiah", neh: "Nehemiah", ne: "Nehemiah",
+  esther: "Esther", esth: "Esther", est: "Esther", es: "Esther",
+  job: "Job", jb: "Job",
+  psalms: "Psalms", psalm: "Psalms", ps: "Psalms", psa: "Psalms", psm: "Psalms",
+  proverbs: "Proverbs", prov: "Proverbs", pro: "Proverbs", prv: "Proverbs", pr: "Proverbs",
+  ecclesiastes: "Ecclesiastes", eccl: "Ecclesiastes", ecc: "Ecclesiastes", ec: "Ecclesiastes", qoh: "Ecclesiastes",
+  "song of solomon": "Song of Solomon", "song of songs": "Song of Solomon", song: "Song of Solomon", sos: "Song of Solomon", sg: "Song of Solomon", ss: "Song of Solomon", canticles: "Song of Solomon",
+  isaiah: "Isaiah", isa: "Isaiah", is: "Isaiah",
+  jeremiah: "Jeremiah", jer: "Jeremiah", je: "Jeremiah", jr: "Jeremiah",
+  lamentations: "Lamentations", lam: "Lamentations", la: "Lamentations",
+  ezekiel: "Ezekiel", ezek: "Ezekiel", eze: "Ezekiel", ezk: "Ezekiel",
+  daniel: "Daniel", dan: "Daniel", da: "Daniel", dn: "Daniel",
+  hosea: "Hosea", hos: "Hosea", ho: "Hosea",
+  joel: "Joel", joe: "Joel", jl: "Joel",
+  amos: "Amos",
+  obadiah: "Obadiah", obad: "Obadiah", ob: "Obadiah",
+  jonah: "Jonah", jon: "Jonah", jnh: "Jonah",
+  micah: "Micah", mic: "Micah", mi: "Micah",
+  nahum: "Nahum", nah: "Nahum", na: "Nahum",
+  habakkuk: "Habakkuk", hab: "Habakkuk",
+  zephaniah: "Zephaniah", zeph: "Zephaniah", zep: "Zephaniah",
+  haggai: "Haggai", hag: "Haggai", hg: "Haggai",
+  zechariah: "Zechariah", zech: "Zechariah", zec: "Zechariah",
+  malachi: "Malachi", mal: "Malachi", ml: "Malachi",
+  matthew: "Matthew", matt: "Matthew", mt: "Matthew",
+  mark: "Mark", mar: "Mark", mrk: "Mark", mk: "Mark", mr: "Mark",
+  luke: "Luke", luk: "Luke", lk: "Luke",
+  john: "John", joh: "John", jn: "John", jhn: "John",
+  acts: "Acts", act: "Acts", ac: "Acts",
+  romans: "Romans", rom: "Romans", ro: "Romans", rm: "Romans",
+  "1 corinthians": "I Corinthians", "1corinthians": "I Corinthians", "1 cor": "I Corinthians", "1cor": "I Corinthians", "1co": "I Corinthians", "i corinthians": "I Corinthians", "i cor": "I Corinthians",
+  "2 corinthians": "II Corinthians", "2corinthians": "II Corinthians", "2 cor": "II Corinthians", "2cor": "II Corinthians", "2co": "II Corinthians", "ii corinthians": "II Corinthians", "ii cor": "II Corinthians",
+  galatians: "Galatians", gal: "Galatians",
+  ephesians: "Ephesians", eph: "Ephesians",
+  philippians: "Philippians", phil: "Philippians", php: "Philippians", pp: "Philippians",
+  colossians: "Colossians", col: "Colossians",
+  "1 thessalonians": "I Thessalonians", "1thessalonians": "I Thessalonians", "1 thess": "I Thessalonians", "1thess": "I Thessalonians", "1th": "I Thessalonians", "i thessalonians": "I Thessalonians", "i thess": "I Thessalonians",
+  "2 thessalonians": "II Thessalonians", "2thessalonians": "II Thessalonians", "2 thess": "II Thessalonians", "2thess": "II Thessalonians", "2th": "II Thessalonians", "ii thessalonians": "II Thessalonians", "ii thess": "II Thessalonians",
+  "1 timothy": "I Timothy", "1timothy": "I Timothy", "1 tim": "I Timothy", "1tim": "I Timothy", "1ti": "I Timothy", "i timothy": "I Timothy", "i tim": "I Timothy",
+  "2 timothy": "II Timothy", "2timothy": "II Timothy", "2 tim": "II Timothy", "2tim": "II Timothy", "2ti": "II Timothy", "ii timothy": "II Timothy", "ii tim": "II Timothy",
+  titus: "Titus", tit: "Titus",
+  philemon: "Philemon", phlm: "Philemon", phm: "Philemon", pm: "Philemon",
+  hebrews: "Hebrews", heb: "Hebrews",
+  james: "James", jas: "James", jm: "James",
+  "1 peter": "I Peter", "1peter": "I Peter", "1 pet": "I Peter", "1pet": "I Peter", "1pe": "I Peter", "1pt": "I Peter", "i peter": "I Peter", "i pet": "I Peter",
+  "2 peter": "II Peter", "2peter": "II Peter", "2 pet": "II Peter", "2pet": "II Peter", "2pe": "II Peter", "2pt": "II Peter", "ii peter": "II Peter", "ii pet": "II Peter",
+  "1 john": "I John", "1john": "I John", "1 joh": "I John", "1joh": "I John", "1jn": "I John", "1jo": "I John", "i john": "I John",
+  "2 john": "II John", "2john": "II John", "2 joh": "II John", "2joh": "II John", "2jn": "II John", "2jo": "II John", "ii john": "II John",
+  "3 john": "III John", "3john": "III John", "3 joh": "III John", "3joh": "III John", "3jn": "III John", "3jo": "III John", "iii john": "III John",
+  jude: "Jude", jud: "Jude",
+  revelation: "Revelation", rev: "Revelation", re: "Revelation", rv: "Revelation", apoc: "Revelation",
+};
+
+function normalizeBookName(input) {
+  const lower = String(input).trim().toLowerCase().replace(/\s+/g, " ");
+  return BOOK_NAME_MAP[lower] || null;
+}
+
+/**
+ * Parse a verse reference like "John 3:16", "1 Cor 13:4-7", "Psalm 23:1-6"
+ * Returns { bookName, chapter, verseStart, verseEnd, label } or null.
+ */
+function parseVerseRef(text) {
+  const clean = String(text).trim();
+  const m = clean.match(/^((?:[123]|I{1,3}|II?I?)\.?\s+)?([a-zA-Z][a-zA-Z\s.]*?)\s+(\d+):(\d+)(?:-(\d+))?$/i);
+  if (!m) return null;
+  const prefix = (m[1] || "").trim().replace(/\.$/, "");
+  const bookRaw = ((prefix ? prefix + " " : "") + m[2].trim()).replace(/\s+/g, " ");
+  const bookName = normalizeBookName(bookRaw);
+  if (!bookName) return null;
+  const chapter = parseInt(m[3], 10);
+  const verseStart = parseInt(m[4], 10);
+  const verseEnd = m[5] ? parseInt(m[5], 10) : null;
+  return {
+    bookName,
+    chapter,
+    verseStart,
+    verseEnd,
+    label: `${bookName} ${chapter}:${verseStart}${verseEnd ? "-" + verseEnd : ""}`,
+  };
+}
+
+// ── Ghanaian Bible loader with in-memory caching ──────────────────────────────
+async function loadGhanaianBible(lang) {
+  if (_ghanaianCache.has(lang)) return _ghanaianCache.get(lang);
+  if (_ghanaianLoading.has(lang)) return _ghanaianLoading.get(lang);
+
+  const promise = (async () => {
+    const url = GHANAIAN_BIBLE_URLS[lang];
+    if (!url) return null;
+    const data = await fetchJson(url).catch(() => null);
+    if (!data?.books || !Array.isArray(data.books)) return null;
+
+    const index = new Map();
+    for (const book of data.books) {
+      const bookName = book.name;
+      for (const ch of book.chapters || []) {
+        for (const v of ch.verses || []) {
+          index.set(`${bookName}|${ch.chapter}|${v.verse}`, v.text || "");
+        }
+      }
+    }
+    const result = { index, langName: VERSION_LABELS[lang] || lang.toUpperCase() };
+    _ghanaianCache.set(lang, result);
+    _ghanaianLoading.delete(lang);
+    return result;
+  })();
+
+  _ghanaianLoading.set(lang, promise);
+  return promise;
+}
+
+async function lookupGhanaianVerse(lang, parsed) {
+  const bible = await loadGhanaianBible(lang);
+  if (!bible) return null;
+  const { bookName, chapter, verseStart, verseEnd } = parsed;
+
+  if (verseEnd && verseEnd > verseStart) {
+    const parts = [];
+    for (let v = verseStart; v <= verseEnd; v++) {
+      const text = bible.index.get(`${bookName}|${String(chapter)}|${String(v)}`);
+      if (text) parts.push(`${v}. ${text.trim()}`);
+    }
+    if (!parts.length) return null;
+    return { text: parts.join(" "), reference: `${bookName} ${chapter}:${verseStart}-${verseEnd}`, translation_name: bible.langName };
+  } else {
+    const text = bible.index.get(`${bookName}|${String(chapter)}|${String(verseStart)}`);
+    if (!text) return null;
+    return { text: text.trim(), reference: `${bookName} ${chapter}:${verseStart}`, translation_name: bible.langName };
+  }
+}
+
+// ── Unified verse fetcher ─────────────────────────────────────────────────────
+async function fetchBibleVerse(version, reference, parsed) {
+  try {
+    if (BIBLE_API_VERSIONS.has(version)) {
+      const data = await fetchJson(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${version}`).catch(() => null);
+      if (!data?.text) return null;
+      return {
+        version,
+        text: String(data.text).trim(),
+        reference: data.reference || reference,
+        translation_name: VERSION_LABELS[version] || version.toUpperCase(),
+      };
+    }
+
+    if (NIV_VERSIONS.has(version)) {
+      const data = await fetchJson(`https://labs.bible.org/api/?passage=${encodeURIComponent(reference)}&type=json`).catch(() => null);
+      if (!Array.isArray(data) || !data.length) return null;
+      const first = data[0];
+      const last = data[data.length - 1];
+      const refLabel = data.length === 1
+        ? `${first.bookname} ${first.chapter}:${first.verse}`
+        : `${first.bookname} ${first.chapter}:${first.verse}-${last.verse}`;
+      const text = data.length === 1
+        ? first.text.trim()
+        : data.map(v => `${v.verse}. ${v.text.trim()}`).join(" ");
+      return { version, text, reference: refLabel, translation_name: VERSION_LABELS[version] || "NIV / NET Bible" };
+    }
+
+    if (GHANAIAN_VERSIONS.has(version)) {
+      if (!parsed) return null;
+      const result = await lookupGhanaianVerse(version, parsed);
+      if (!result) return null;
+      return { version, text: result.text, reference: result.reference, translation_name: result.translation_name };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Static data ───────────────────────────────────────────────────────────────
 const fallbackHadiths = [
   { text: "The best among you are those who have the best manners and character.", source: "Sahih Bukhari 6029" },
   { text: "None of you truly believes until he loves for his brother what he loves for himself.", source: "Sahih Bukhari 13" },
@@ -27,53 +250,87 @@ const prayers = [
   { title: "Night Prayer", text: "Lord, thank You for carrying me through today. As I rest, grant me peace, restore my strength, and watch over my home.", source: "Psalm 4:8" },
 ];
 
+// ── Commands ──────────────────────────────────────────────────────────────────
 const commands = [
   {
     name: ["bible", "verse"],
     category: "religious",
-    desc: "Get a Bible verse",
+    desc: "Get a Bible verse (KJV · NIV · WEB + Ghanaian: twi, ewe)",
     handler: async (sock, m, { text }) => {
-      if (!text) return m.usageReply("bible <reference> [| <versions>]", "bible John 3:16\n${config.PREFIX}bible Psalm 23:1 | kjv, web, bbe");
+      if (!text) {
+        return m.usageReply(
+          "bible <reference> [| <versions>]",
+          `bible John 3:16\n${config.PREFIX}bible Psalm 23:1-6 | kjv, niv\n${config.PREFIX}bible John 3:16 | twi\n${config.PREFIX}bible John 3:16 | kjv, niv, twi, ewe`
+        );
+      }
       m.react("📖");
       try {
-        let reference = text;
+        let reference = text.trim();
         let versions = [...DEFAULT_BIBLE_VERSIONS];
+
         if (text.includes("|")) {
           const parts = text.split("|");
           reference = parts[0].trim();
-          const requested = parts[1].split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+          const requested = parts[1].split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
           if (requested.length) versions = requested.slice(0, 5);
         }
 
-        // Use open Bible API (bible-api.com)
-        const responses = await Promise.allSettled(
-          versions.map((version) =>
-            fetchJson(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${version}`).then((data) => ({ version, data }))
-          )
+        const parsed = parseVerseRef(reference);
+        const needsParsed = versions.some(v => GHANAIAN_VERSIONS.has(v));
+        if (needsParsed && !parsed) {
+          const ghanaianVersions = versions.filter(v => GHANAIAN_VERSIONS.has(v));
+          const otherVersions = versions.filter(v => !GHANAIAN_VERSIONS.has(v));
+          if (!otherVersions.length) {
+            return m.reply(
+              `⚠️ Could not parse *"${reference}"* as a verse reference for Ghanaian Bible lookup.\n` +
+              `Please use the format: *Book Chapter:Verse* (e.g., John 3:16)\n` +
+              `Ghanaian versions: ${ghanaianVersions.join(", ")}`
+            );
+          }
+          versions = otherVersions;
+        }
+
+        if (needsParsed && parsed) {
+          await m.reply(`⏳ Loading Ghanaian Bible data for the first time — this may take a moment...`).catch(() => {});
+        }
+
+        const results = await Promise.allSettled(
+          versions.map(v => fetchBibleVerse(v, reference, parsed))
         );
 
-        const ok = responses
-          .filter((r) => r.status === "fulfilled" && r.value?.data?.text)
-          .map((r) => r.value);
+        const ok = results
+          .filter(r => r.status === "fulfilled" && r.value?.text)
+          .map(r => r.value);
 
         if (!ok.length) {
-          return m.reply(`⏳ Verse not found or API is busy. Try valid reference like 'John 3:16'.\nSupported version codes include: kjv, web, bbe, asv.`);
+          return m.reply(
+            `❌ Verse not found or API is unavailable.\n` +
+            `Try: *${config.PREFIX}bible John 3:16*\n` +
+            `Supported versions: kjv, niv, web, bbe, asv | 🇬🇭 twi, ewe`
+          );
         }
 
         let msg = `📖 *Holy Bible*\n\n`;
-        msg += `📌 *${ok[0].data.reference || reference}*\n\n`;
-        ok.forEach(({ version, data }, index) => {
-          const versionName = data.translation_name || version.toUpperCase();
-          msg += `*${index + 1}. ${versionName} (${version.toUpperCase()})*\n`;
-          msg += `"${String(data.text || "").trim()}"\n\n`;
-        });
+        msg += `📌 *${ok[0].reference || reference}*\n\n`;
 
-        const failed = responses.length - ok.length;
-        if (failed > 0) {
-          msg += `⚠️ ${failed} requested version(s) could not be fetched.\n`;
+        for (let i = 0; i < ok.length; i++) {
+          const { version, translation_name, text: verseText } = ok[i];
+          msg += `*${i + 1}. ${translation_name}*\n`;
+          if (version === "niv") {
+            msg += `_[New International Version — served via NET Bible, the closest freely available modern translation]_\n`;
+          }
+          msg += `"${verseText}"\n\n`;
         }
 
-        msg += `💡 Tip: ${config.PREFIX}bible John 3:16 | kjv,web,bbe`;
+        const failed = results.length - ok.length;
+        if (failed > 0) {
+          msg += `⚠️ ${failed} version(s) could not be fetched.\n`;
+        }
+
+        msg += `💡 *Versions:* kjv · niv · web · bbe · asv\n`;
+        msg += `🇬🇭 *Ghanaian:* twi (Akuapem Twi) · ewe\n`;
+        msg += `_Usage: ${config.PREFIX}bible John 3:16 | kjv, niv, twi_`;
+
         await m.reply(msg);
         m.react("✅");
       } catch {
@@ -85,7 +342,7 @@ const commands = [
   {
     name: ["dailyverse", "votd"],
     category: "religious",
-    desc: "Get verse of the day",
+    desc: "Get verse of the day (KJV + NIV)",
     handler: async (sock, m) => {
       m.react("📖");
       try {
@@ -101,11 +358,35 @@ const commands = [
         ];
         const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
         const ref = dailyVerses[dayOfYear % dailyVerses.length];
-        const data = await fetchJson(`https://bible-api.com/${encodeURIComponent(ref)}`);
-        if (!data?.text) return m.reply("❌ Could not fetch verse of the day.");
+
+        const [kjvResult, nivResult] = await Promise.allSettled([
+          fetchJson(`https://bible-api.com/${encodeURIComponent(ref)}?translation=kjv`),
+          fetchJson(`https://labs.bible.org/api/?passage=${encodeURIComponent(ref)}&type=json`),
+        ]);
+
+        const kjv = kjvResult.status === "fulfilled" && kjvResult.value?.text ? kjvResult.value : null;
+        const nivRaw = nivResult.status === "fulfilled" && Array.isArray(nivResult.value) && nivResult.value.length ? nivResult.value : null;
+
+        if (!kjv && !nivRaw) return m.reply("❌ Could not fetch verse of the day. Please try again shortly.");
+
         let msg = `🌅 *Verse of the Day*\n\n`;
-        msg += `📌 *${data.reference}*\n\n`;
-        msg += `"${data.text.trim()}"\n\n`;
+
+        if (kjv) {
+          msg += `📌 *${kjv.reference || ref}*\n\n`;
+          msg += `*King James Version (KJV)*\n"${kjv.text.trim()}"\n\n`;
+        }
+
+        if (nivRaw) {
+          const refLabel = nivRaw.length === 1
+            ? `${nivRaw[0].bookname} ${nivRaw[0].chapter}:${nivRaw[0].verse}`
+            : `${nivRaw[0].bookname} ${nivRaw[0].chapter}:${nivRaw[0].verse}-${nivRaw[nivRaw.length - 1].verse}`;
+          if (!kjv) msg += `📌 *${refLabel}*\n\n`;
+          const text = nivRaw.length === 1
+            ? nivRaw[0].text.trim()
+            : nivRaw.map(v => `${v.verse}. ${v.text.trim()}`).join(" ");
+          msg += `*New International Version (NIV)*\n"${text}"\n\n`;
+        }
+
         msg += `_Have a blessed day!_ 🙏`;
         await m.reply(msg);
         m.react("✅");
@@ -150,8 +431,7 @@ const commands = [
           english = enRes?.data || null;
         }
 
-        // Fallback: try a second Quran API if primary failed partially or entirely
-        if (!arabic || !english) {
+        if (!arabic && !english) {
           const fb = await fetchJson(`https://quranapi.pages.dev/api/${surah}/${ayah}.json`).catch(() => null);
           if (fb?.arabic1 && !arabic) {
             arabic = { text: fb.arabic1, surah: { englishName: fb.surahName || `Surah ${surah}`, name: fb.surahNameArabic || "" }, numberInSurah: ayah };
@@ -185,9 +465,7 @@ const commands = [
     handler: async (sock, m, { text }) => {
       m.react("📖");
 
-      // Strip HTML tags from sunnah.com responses
       const stripHtml = (str) => String(str || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-
       const gadingBooks = ["bukhari", "muslim", "abudawud", "nasai", "tirmidzi", "ibnmajah"];
 
       try {
@@ -196,8 +474,6 @@ const commands = [
         const requested = Number(numberRaw || bookRaw || 0);
         const num = Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), 7000) : Math.floor(Math.random() * 300) + 1;
 
-        // --- Primary (random only): api.sunnah.com (English + Arabic) ---
-        // sunnah.com public key only supports /hadiths/random, not specific lookups
         if (!requested || requested <= 0) {
           const sunnahData = await fetchJson("https://api.sunnah.com/v1/hadiths/random", {
             headers: { "X-API-Key": "SqD712P3E82xnwOAEOkGd5JZH8s9wRR24TqNFzjk" },
@@ -226,7 +502,6 @@ const commands = [
           }
         }
 
-        // --- Fallback: api.hadith.gading.dev (Arabic + Indonesian) ---
         const data = await fetchJson(`https://api.hadith.gading.dev/books/${book}/${num}`).catch(() => null);
         if (data?.data?.contents) {
           const h = data.data.contents;
@@ -242,7 +517,6 @@ const commands = [
           return;
         }
 
-        // --- Last resort: local fallback ---
         const hf = pickNonRepeating(fallbackHadiths, `${m.chat}:hadith`, { maxHistory: 5 });
         await m.reply(`📖 *Hadith*\n\n"${hf.text}"\n\n_${hf.source}_\n📡 Source: Local fallback`);
         m.react("✅");
